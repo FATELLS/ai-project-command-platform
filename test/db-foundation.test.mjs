@@ -13,7 +13,7 @@ test("fresh and repeated migrations are deterministic", () => {
   const directory = mkdtempSync(join(tmpdir(), "platform-db-"));
   const database = openDatabase(join(directory, "platform.sqlite"));
   try {
-    assert.deepEqual(applyMigrations(database), ["001_initial.sql"]);
+    assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql"]);
     assert.deepEqual(applyMigrations(database), []);
     assert.equal(database.prepare("PRAGMA foreign_keys").get().foreign_keys, 1);
     assert.equal(database.prepare("PRAGMA journal_mode").get().journal_mode, "wal");

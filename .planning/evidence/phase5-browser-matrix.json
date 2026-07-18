@@ -1,0 +1,181 @@
+{
+  "schemaVersion": "1.0.0",
+  "phase": "05-structured-change-proposals",
+  "capturedOn": "2026-07-18",
+  "runner": "Codex in-app browser against isolated enabled and no-key fixture servers, backed by Phase 5 schema, generation, API and security suites",
+  "reference": {
+    "path": "../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console",
+    "head": "97cb1ebfbbd4998cdb32d419a5670f1233b7cba8",
+    "statusShort": "",
+    "seedSha256": "b134f5493834d55f61aa47d9b9fac855c502ee67c0b59253e9498c214e4adcfa"
+  },
+  "evidence": {
+    "xuguDesktop": {
+      "file": ".planning/evidence/phase5-xugu-proposals-desktop-1440x900.jpg",
+      "width": 1440,
+      "height": 810,
+      "sha256": "bfbd6ed0f85f5587a387bb1d0c42668a029009edb94a01670817b744440be492"
+    },
+    "standardDesktop": {
+      "file": ".planning/evidence/phase5-standard-proposals-desktop-1440x900.jpg",
+      "width": 1440,
+      "height": 900,
+      "sha256": "211d2e1e9ded782e6c08c49d230411c50c81d5f288a8086a00b7ab044f564b55"
+    },
+    "tablet": {
+      "file": ".planning/evidence/phase5-proposal-tablet-1024x768.jpg",
+      "width": 1024,
+      "height": 768,
+      "sha256": "97fd3cd5febe25708615aa2623d3f161bfe599fd01662ad32f0982bda2a9dd6e"
+    },
+    "mobile": {
+      "file": ".planning/evidence/phase5-proposal-mobile-390x844.jpg",
+      "width": 390,
+      "height": 844,
+      "sha256": "05fdc174d7e9ebaa420ba597eedb14e5ee5856ecb7c350e537abba022083e6be"
+    },
+    "providerDisabled": {
+      "file": ".planning/evidence/phase5-provider-disabled-desktop-1440x900.jpg",
+      "width": 1280,
+      "height": 720,
+      "sha256": "7d73a3f9418e1872bf170542f85af0da93ac3a30e7e3a23f52792bb3e10bb97e"
+    }
+  },
+  "cases": [
+    {
+      "id": "xugu-proposal-workspace",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials?view=proposals",
+      "expected": "Xugu campaign shell shows project-scoped validated proposals and generation tasks",
+      "actual": "The Xugu shell retained v4.2 campaign language and displayed one validated proposal plus one succeeded locked generation task",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "standard-proposal-workspace",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/standard-project-sample/modules/materials?view=proposals",
+      "expected": "Standard project terms and an isolated empty proposal workspace",
+      "actual": "The standard project rendered 团队, 任务, 里程碑 and 项目更新提案 with zero Xugu proposal rows",
+      "evidence": "standardDesktop"
+    },
+    {
+      "id": "generation-prerequisites",
+      "status": "PASS",
+      "viewport": "1280x720",
+      "url": "/projects/xugu-agentic-group/modules/materials?view=proposals",
+      "expected": "Only ready, current, explicitly granted, same-template materials can be selected",
+      "actual": "The generation sheet exposed one granted ready meeting-note source, locked the published v4.2 base and showed the 8-material and 48-evidence bounds",
+      "evidence": "providerDisabled"
+    },
+    {
+      "id": "generation-success",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials?view=proposals",
+      "expected": "A valid provider result creates one durable task and one validated proposal without changing version pointers",
+      "actual": "The seeded provider task succeeded with one call and 150 tokens; API acceptance confirmed published and draft pointers were unchanged",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "proposal-structure",
+      "status": "PASS",
+      "viewport": "1024x768",
+      "url": "/projects/xugu-agentic-group/modules/materials/proposals/:proposalId",
+      "expected": "Proposal detail shows schema validation, bounded semantic deltas, confidence and warnings",
+      "actual": "The detail rendered all six server validation gates, one task-network create delta, field patch, 0.82 confidence and explicit warning state",
+      "evidence": "tablet"
+    },
+    {
+      "id": "evidence-navigation",
+      "status": "PASS",
+      "viewport": "390x844",
+      "url": "/projects/xugu-agentic-group/modules/materials/proposals/:proposalId",
+      "expected": "Each change links exact immutable evidence back to its source locator",
+      "actual": "The change cited one stable evidence ID labeled 人工材料 · 正文; following it opened the exact material block and source text",
+      "evidence": "mobile"
+    },
+    {
+      "id": "provider-disabled",
+      "status": "PASS",
+      "viewport": "1280x720",
+      "url": "/projects/xugu-agentic-group/modules/materials?view=proposals",
+      "expected": "Missing dedicated generation configuration disables submission while preserving materials and prior tasks",
+      "actual": "The sheet stated 更新生成当前未启用, left the granted material visible, disabled generation and preserved the retryable task record",
+      "evidence": "providerDisabled"
+    },
+    {
+      "id": "role-permissions",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials?view=proposals",
+      "expected": "Read, grant, create and retry capabilities follow project roles and CSRF protection",
+      "actual": "Platform admin controls matched server capabilities; API role tests denied viewer mutations, editor grants and non-member or cross-project object guesses",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "project-switch-clearing",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group -> /projects/standard-project-sample",
+      "expected": "Project switching clears proposal, task, material and terminology state",
+      "actual": "The switcher moved from the populated Xugu workspace to an empty standard workspace with standard-only copy and no Xugu proposal data",
+      "evidence": "standardDesktop"
+    },
+    {
+      "id": "no-phase6-actions",
+      "status": "PASS",
+      "viewport": "1024x768",
+      "url": "/projects/xugu-agentic-group/modules/materials/proposals/:proposalId",
+      "expected": "Phase 5 exposes no accept, reject, edit, draft merge, publish or rollback action",
+      "actual": "The proposal detail was read-only and explicitly said it had not changed draft or published data; route and UI suites found no Phase 6 mutation surface",
+      "evidence": "tablet"
+    },
+    {
+      "id": "tablet-responsive",
+      "status": "PASS",
+      "viewport": "1024x768",
+      "url": "/projects/xugu-agentic-group/modules/materials/proposals/:proposalId",
+      "expected": "Proposal validation and change detail remain readable at the tablet breakpoint",
+      "actual": "The header, local module tabs, proposal boundary notice and validation card reflowed without clipped controls or horizontal page overflow",
+      "evidence": "tablet"
+    },
+    {
+      "id": "mobile-responsive",
+      "status": "PASS",
+      "viewport": "390x844",
+      "url": "/projects/xugu-agentic-group/modules/materials/proposals/:proposalId",
+      "expected": "Mobile proposal detail preserves project identity, navigation, validation status and evidence access",
+      "actual": "The compact header, locally scrollable modules, wrapped proposal ID, validation badge and evidence content remained reachable and legible",
+      "evidence": "mobile"
+    },
+    {
+      "id": "security-payload",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials/proposals/:proposalId",
+      "expected": "Executable fields, oversized output, invalid evidence and cross-project IDs fail closed and render only as text",
+      "actual": "Schema, validator and API suites rejected executable-looking fields, extra keys, oversized output, fabricated evidence and cross-project IDs; the UI uses safe text nodes",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "browser-console",
+      "status": "PASS",
+      "viewport": "all",
+      "url": "all acceptance routes",
+      "expected": "No application browser warnings, errors or JavaScript dialogs",
+      "actual": "Application warning count 0; error count 0; dialog count 0 across enabled and no-key servers",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "reference-integrity",
+      "status": "PASS",
+      "viewport": "n/a",
+      "url": "n/a",
+      "expected": "Reference HEAD, clean status and seed hash remain unchanged",
+      "actual": "HEAD 97cb1ebfbbd4998cdb32d419a5670f1233b7cba8; clean status; seed SHA-256 b134f5493834d55f61aa47d9b9fac855c502ee67c0b59253e9498c214e4adcfa",
+      "evidence": "xuguDesktop"
+    }
+  ]
+}

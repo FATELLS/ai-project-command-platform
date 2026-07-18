@@ -19,6 +19,12 @@ const phase4RequiredCases = [
   "project-switch-clearing", "tablet-responsive", "mobile-responsive", "security-payload",
   "browser-console", "reference-integrity"
 ];
+const phase5RequiredCases = [
+  "xugu-proposal-workspace", "standard-proposal-workspace", "generation-prerequisites",
+  "generation-success", "proposal-structure", "evidence-navigation", "provider-disabled",
+  "role-permissions", "project-switch-clearing", "no-phase6-actions", "tablet-responsive",
+  "mobile-responsive", "security-payload", "browser-console", "reference-integrity"
+];
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -52,10 +58,18 @@ function git(args, cwd) {
 
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 assert.equal(manifest.schemaVersion, "1.0.0");
-assert.ok(["03-module-registry-project-templates", "04-project-materials-evidence"].includes(manifest.phase), "unsupported browser evidence phase");
+assert.ok([
+  "03-module-registry-project-templates",
+  "04-project-materials-evidence",
+  "05-structured-change-proposals"
+].includes(manifest.phase), "unsupported browser evidence phase");
 assert.ok(manifest.evidence && typeof manifest.evidence === "object");
-const phaseNumber = manifest.phase.startsWith("03-") ? "3" : "4";
-const requiredCases = phaseNumber === "3" ? phase3RequiredCases : phase4RequiredCases;
+const phaseNumber = manifest.phase.slice(1, 2);
+const requiredCases = phaseNumber === "3"
+  ? phase3RequiredCases
+  : phaseNumber === "4"
+    ? phase4RequiredCases
+    : phase5RequiredCases;
 
 for (const [key, item] of Object.entries(manifest.evidence)) {
   assert.match(item.file, new RegExp(`^\\.planning/evidence/phase${phaseNumber}-[a-z0-9-]+\\.jpg$`), `${key} has an unsafe evidence path`);

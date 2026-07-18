@@ -1,0 +1,1661 @@
+{
+  "published": {
+    "title": "虚谷 AI 转型促进作战地图",
+    "goal": "推动虚谷伟业整体 AI 转型落地",
+    "summary": "第一次作战汇报与九份材料归纳已经完成，当前以总作战计划统筹七个作战单元，进入首批场景、公司级知识系统、数据安全与效果台账的并行推进阶段。",
+    "projectStatus": "planning",
+    "statusLabel": "首批场景出征",
+    "version": "v4.2",
+    "updatedAt": "2026-07-17T09:26:59.155Z",
+    "overallProgress": null,
+    "currentStage": 2,
+    "committeeLead": "",
+    "memberCount": 14,
+    "members": "苏德财、李文彬、李帅、曾彬、冯治龙、魏粤川、吴生勇、王安迪、曹茜、马攀、魏定刚、陈文斌、谢莅",
+    "meeting": {
+      "label": "第一次作战汇报（已完成） · 2026.07.14",
+      "time": "14:00–17:20",
+      "topic": "第一次汇报形成 9 份总结材料，并据此拆解七个作战单元战况、公司级协同战线和下一阶段行动令。"
+    },
+    "groups": [
+      {
+        "id": "rd",
+        "name": "研发作战单元",
+        "short": "研",
+        "owner": "苏德财、李文彬",
+        "presenters": "苏德财、李文彬",
+        "departments": "研发相关部门",
+        "members": "苏德财、李文彬、李帅、曾彬",
+        "meetingTime": "14:00–14:20",
+        "objective": "并行推进旧系统可控改造与外围工具 AI 重构，把验证结果转化为可产品化、可测试、可发布的研发能力。",
+        "currentWork": "内核 AI 改造已完成改造评估与基准测试实施方案评估；数据库驱动和语言框架完成 AI 改造验证。",
+        "nextPlan": "月底形成旧系统工程化改造结论；推进驱动与语言框架产品化、自动化；选择运维平台等工具开展 AI 重构，并协同制定 Skill 工程与发布规范。",
+        "expectedOutput": "旧改结论与质量门槛、驱动框架产品化、工具重构试点、研发知识与 Skill 发布规范。",
+        "source": "644cd128d5de17a6.md；0ef818c5205bb47f.md"
+      },
+      {
+        "id": "tech",
+        "name": "技术服务作战单元",
+        "short": "技",
+        "owner": "冯治龙、魏粤川",
+        "presenters": "冯治龙、魏粤川",
+        "departments": "技术服务部",
+        "members": "冯治龙、魏粤川",
+        "meetingTime": "14:30–14:50",
+        "objective": "建设覆盖安装部署、运维、疑难问题和 SQL 优化的技术知识能力，并牵头形成公司统一知识系统治理与发布机制。",
+        "currentWork": "已明确虚谷数据库技术知识库和 BINLOG 同步工具 AI 化两项首轮任务；公司级知识系统进入方案统筹阶段。",
+        "nextPlan": "前期投入两人，用半个月落地知识库与 BINLOG 辅助工具；完善部门 Skill；牵头产品、研发制定公司级知识系统、Wiki 和 Skill 编写发布规范。",
+        "expectedOutput": "XuguDB 技术知识库、BINLOG AI 工具、技术服务 Skills、公司级知识系统蓝图与治理规范。",
+        "source": "1a309afc9ba4b933.md；0ef818c5205bb47f.md"
+      },
+      {
+        "id": "product",
+        "name": "产品作战单元",
+        "short": "产",
+        "owner": "吴生勇、王安迪",
+        "presenters": "吴生勇、王安迪",
+        "departments": "产品管理团队",
+        "members": "吴生勇、王安迪",
+        "meetingTime": "15:00–15:20",
+        "objective": "以事实源、任务状态、质量门禁和人工验收构建可控、可验、可复用的产品级 AI 项目体系。",
+        "currentWork": "已记录 9 项实践产出、2 项代表性 Office 成品和 7 个统一演示入口，标准化文档 Skill、Dev Skills 与项目 Harness 方法开始形成。",
+        "nextPlan": "聚焦文档、培训、POC 与内务高价值试点；建立效果台账和成果状态分级；协同技术部制定知识分类、事实源、Wiki 写作和版本追溯规范。",
+        "expectedOutput": "高价值试点、效果台账、项目 Harness、成果状态分级、Wiki 内容与事实口径规范。",
+        "source": "90f3d8aefed6b44e.md；0ef818c5205bb47f.md"
+      },
+      {
+        "id": "platform",
+        "name": "平台作战单元",
+        "short": "平",
+        "owner": "曹茜",
+        "presenters": "曹茜",
+        "departments": "待会议确认",
+        "members": "曹茜",
+        "meetingTime": "15:30–15:50",
+        "objective": "待补充平台作战单元正式行动计划。",
+        "currentWork": "当前附件中未发现平台作战单元规划材料。",
+        "nextPlan": "会议前补充工作进度、已有成效和下一步计划。",
+        "expectedOutput": "待平台作战单元确认。",
+        "source": "待补充"
+      },
+      {
+        "id": "market",
+        "name": "市场与生态作战单元",
+        "short": "市",
+        "owner": "马攀、魏定刚",
+        "presenters": "马攀、魏定刚",
+        "departments": "市场、销售支撑与生态运营",
+        "members": "马攀、魏定刚",
+        "meetingTime": "16:00–16:20",
+        "objective": "把生态、销售、项目支持和内容生产沉淀为有事实源、有质量门禁、可重复使用的系统与交付资产。",
+        "currentWork": "已形成 isv-analyzer、方案引擎 V3.1、ISV 回访/拜访系统、PPT 流水线、XuguDB MCP、AskDB 双端 App，以及 QAX、港航和迁移交付证据链。",
+        "nextPlan": "90 天内固化事实源与模板、接入认证预警、沉淀 PPT 组件、编目项目交付包，建立 AskDB 官方口径与 50–100 条评测集，并开展 2–3 个真实招投标试点。",
+        "expectedOutput": "ISV 业务系统、方案弹药、项目工具包、AskDB 口径与评测集、招投标试点、PPT 组件库和效果台账。",
+        "source": "4e6d7ea3e7e6ba85.md；ebab2fdcd7b1fc35.md"
+      },
+      {
+        "id": "finance",
+        "name": "财务作战单元",
+        "short": "财",
+        "owner": "陈文斌",
+        "presenters": "陈文斌",
+        "departments": "财务部",
+        "members": "陈文斌",
+        "meetingTime": "16:30–16:50",
+        "objective": "按照试点验证、推广覆盖、深化应用三阶段推进财务 AI，同时以数据质量和信息安全作为前置门槛。",
+        "currentWork": "已形成基础核算、报销、对账、税务、合同和报表分析的 6 个月三阶段路线，尚未形成业务验收结果。",
+        "nextPlan": "先完成财务数据分类与安全边界，再用 1–2 个月开展 OCR 基础核算试点；3–4 个月扩展报销、对账和税务；5–6 个月建设分析与预测。",
+        "expectedOutput": "数据分类方案、OCR 试点评估、报销与对账能力、财务分析平台和可复制运营机制。",
+        "source": "c9dd0004d364a214.md；0ef818c5205bb47f.md"
+      },
+      {
+        "id": "admin",
+        "name": "行政作战单元",
+        "short": "行",
+        "owner": "谢莅",
+        "presenters": "谢莅",
+        "departments": "行政与办公室",
+        "members": "谢莅",
+        "meetingTime": "17:00–17:20",
+        "objective": "在数据分级和可持续算力保障下，把六类办公场景从技能安装推进到可量化、可验收的业务使用。",
+        "currentWork": "办公室已完成全员 AI 客户端和技能框架部署，安装 56 个技能模块；当前免费算力耗尽，部分高耗能任务受阻。",
+        "nextPlan": "8 月 15 日前推进首版次软件认定申报；补充可持续算力；梳理敏感数据边界；分阶段推进高频办公、企业知识和流程智能体。",
+        "expectedOutput": "申报材料、算力与调度方案、数据分类、办公效果台账、企业知识能力和流程智能体。",
+        "source": "aeb7784f10e1bf8d.md；3e9a83448d66a3ee.md；0ef818c5205bb47f.md"
+      }
+    ],
+    "stages": [
+      {
+        "id": "founded",
+        "state": "已完成",
+        "title": "联合指挥部成立",
+        "date": "2026.07.02",
+        "description": "虚谷 AI 转型联合指挥部正式成立，明确联合指挥协同机制，并组建研发、技术服务、产品、平台、市场与生态、财务、行政七个作战单元。",
+        "expectedOutput": "联合指挥机制与七个作战单元正式就位",
+        "previewTitle": "联合指挥部成立与协同机制",
+        "previewCaption": "暂无成立会议截图，采用联合指挥部品牌视觉作为战果预览。",
+        "previewImages": [
+          "./assets/transformation-group-transparent-v2.png"
+        ]
+      },
+      {
+        "id": "report-1",
+        "state": "已完成",
+        "title": "第一次作战汇报",
+        "date": "2026.07.14",
+        "description": "七个作战单元完成第一次正式汇报，形成 9 份总结材料；材料已统一结构化并用于更新公司作战网络、单元战况与下一阶段行动令。",
+        "expectedOutput": "第一次作战汇报总结、9 份成果材料与公司级行动令",
+        "previewTitle": "第一次作战汇报 · 九份成果输出",
+        "previewCaption": "九份材料属于 2026.07.14 第一次作战汇报总结输出，后续结构化处理不改变其业务归属日期。",
+        "previewImages": [
+          "./assets/report-product-plan-v2.png",
+          "./assets/report-finance-plan.png",
+          "./assets/report-market-plan-v2.png"
+        ]
+      },
+      {
+        "id": "launch",
+        "state": "当前战役",
+        "title": "首批场景出征",
+        "date": "2026.07.15–08.31",
+        "description": "第一次作战汇报完成后启动：并行推进高价值业务场景、公司级知识系统规范、敏感数据分类和效果台账；技术部牵头产品、研发形成统一 Wiki 与 Skill 治理。",
+        "expectedOutput": "首批场景闭环、知识系统蓝图与规范、数据分类方案、效果台账基线",
+        "previewTitle": "首批场景行动展开示意",
+        "previewCaption": "依据 07/14 第一次作战汇报形成的计划绘制，表达七个作战单元向高价值业务场景、公司级知识系统、数据安全和效果台账并行推进；这是行动规划示意，不代表战果已经完成。",
+        "previewImages": [
+          "./assets/first-scenario-deployment-v1.png"
+        ]
+      },
+      {
+        "id": "pilot",
+        "state": "计划战役",
+        "title": "试点验证攻坚",
+        "date": "2026.09 起 · 待确认",
+        "description": "首批场景计划窗口结束后进入试点验证；具体启动日以后续正式汇报和实际战果确认为准。",
+        "expectedOutput": "试点结果、价值指标、问题清单与闭环证据",
+        "previewTitle": "试点闭环架构示意",
+        "previewCaption": "复用现有平台架构材料，后续以试点成果截图替换。",
+        "previewImages": [
+          "./assets/agentic-platform.png"
+        ]
+      },
+      {
+        "id": "scale",
+        "state": "计划战役",
+        "title": "跨单元扩展作战",
+        "date": "2026 Q4",
+        "description": "把验证有效的能力扩展至产品资质、招投标、合同往来、财务分析和更多业务流程。",
+        "expectedOutput": "跨部门复制清单、推广方案和协同机制",
+        "previewTitle": "跨场景扩展示意",
+        "previewCaption": "以现有多模态能力视觉表达扩展方向，待正式成果替换。",
+        "previewImages": [
+          "./assets/multimodal.png"
+        ]
+      },
+      {
+        "id": "institutionalize",
+        "state": "计划战役",
+        "title": "机制与能力固化",
+        "date": "2027 H1",
+        "description": "沉淀制度、知识库、工具链、Gate、数据、培训和安全治理，形成持续运转的 AI 转型能力。",
+        "expectedOutput": "组织机制、能力平台、知识资产与审计体系",
+        "previewTitle": "治理与安全能力示意",
+        "previewCaption": "复用现有安全治理视觉，待阶段成果材料替换。",
+        "previewImages": [
+          "./assets/high-security.png"
+        ]
+      }
+    ],
+    "closures": [
+      {
+        "id": "bp-complete",
+        "title": "BP 战果闭环",
+        "date": "2026.07.10",
+        "state": "已闭环",
+        "between": [
+          "founded",
+          "report-1"
+        ],
+        "description": "联合指挥部成立后的首项共同任务已完成，为第一次作战汇报建立统一的转型叙事与视觉材料基础。",
+        "result": "虚谷伟业 AI 转型 BP 材料",
+        "source": "市场与生态作战单元 · 虚谷伟业商业企划书：Agentic Reborn.pdf",
+        "sourceFile": "./assets/agentic-reborn-bp.pdf",
+        "previewImages": [
+          "./assets/bp-agentic-reborn-cover.png",
+          "./assets/bp-agentic-reborn-overview.png"
+        ]
+      },
+      {
+        "id": "report-0714-materials",
+        "title": "第一次作战汇报成果闭环",
+        "date": "2026.07.14",
+        "state": "已闭环",
+        "between": [
+          "report-1",
+          "launch"
+        ],
+        "description": "第一次作战汇报形成 9 份总结材料，覆盖整体汇报、研发、技术服务、产品、市场与生态、财务和行政等战况；材料后续已完成结构化与统一规划。",
+        "result": "第一次作战汇报总结与 9 份可追溯成果材料",
+        "source": "2026.07.14 第一次作战汇报 · 后台 9 份材料",
+        "previewImages": [
+          "./assets/report-product-plan-v2.png",
+          "./assets/report-finance-plan.png",
+          "./assets/report-market-plan-v2.png"
+        ]
+      }
+    ],
+    "tasks": [
+      {
+        "id": "platform-plan",
+        "groupId": "platform",
+        "title": "平台作战单元正式规划",
+        "owner": "曹茜",
+        "schedule": "待补充",
+        "startDate": "",
+        "endDate": "",
+        "expectedOutput": "战况、效果和下一步行动计划",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1
+      },
+      {
+        "id": "market-isv",
+        "groupId": "market",
+        "title": "生态适配与 ISV 互认证",
+        "owner": "马攀、魏定刚",
+        "schedule": "90 天持续推进",
+        "startDate": "2026-07-15",
+        "endDate": "2026-10-14",
+        "expectedOutput": "analyzer/方案引擎标准模板、ISV 系统、认证有效期与预警",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "market-sales",
+        "groupId": "market",
+        "title": "销售知识库与智能问答",
+        "owner": "市场与生态作战单元",
+        "schedule": "90 天首批",
+        "startDate": "2026-07-15",
+        "endDate": "2026-10-14",
+        "expectedOutput": "AskDB 同源官方口径、白名单和 50–100 条问答评测集",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "market-bid",
+        "groupId": "market",
+        "title": "招投标全流程智能化",
+        "owner": "市场与生态作战单元",
+        "schedule": "90 天真实试点",
+        "startDate": "2026-08-01",
+        "endDate": "2026-10-14",
+        "expectedOutput": "2–3 个真实标的解析、应答、审核与缺项召回记录",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "market-sales"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "market-content",
+        "groupId": "market",
+        "title": "联合宣传与内容运营",
+        "owner": "市场与生态作战单元",
+        "schedule": "持续推进",
+        "startDate": "2026-07-15",
+        "endDate": "2026-10-14",
+        "expectedOutput": "选题库、品牌规范、案例与内容资产复用流程",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "market-isv"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "market-ppt",
+        "groupId": "market",
+        "title": "营销材料与 PPT 工具链",
+        "owner": "马攀、魏定刚",
+        "schedule": "90 天组件化",
+        "startDate": "2026-07-15",
+        "endDate": "2026-10-14",
+        "expectedOutput": "至少 10 个高频可编辑组件与复用统计",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "market-bid",
+          "market-content"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "rd-core-assessment",
+        "groupId": "rd",
+        "title": "内核旧改评估与质量基线",
+        "owner": "苏德财、李文彬",
+        "schedule": "评估方案已形成 · 月底结论",
+        "startDate": "2026-07-02",
+        "endDate": "2026-07-14",
+        "expectedOutput": "旧改可行性、改造程度、人员门槛与测试质量基线",
+        "progress": 100,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "rd-driver-productize",
+        "groupId": "rd",
+        "title": "驱动与语言框架产品化",
+        "owner": "研发作战单元",
+        "schedule": "验证后持续推进",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-31",
+        "expectedOutput": "九类接口产品化、自动化测试和发布要求",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "rd-tool-rebuild",
+        "groupId": "rd",
+        "title": "外围工具 AI 重构试点",
+        "owner": "研发作战单元",
+        "schedule": "待选首个试点",
+        "startDate": "2026-08-01",
+        "endDate": "2026-09-30",
+        "expectedOutput": "运维平台等外围工具的重构方案与验收证据",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "rd-core-assessment"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "rd-skill-standard",
+        "groupId": "rd",
+        "title": "Skill 工程与发布规范协同",
+        "owner": "研发作战单元",
+        "schedule": "立即协同",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-15",
+        "expectedOutput": "Skill 目录、测试、审核、发布、兼容、版本和废止规范",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "rd-driver-productize"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "tech-kb-foundation",
+        "groupId": "tech",
+        "title": "XuguDB 技术知识库首轮",
+        "owner": "冯治龙、魏粤川",
+        "schedule": "半个月首轮",
+        "startDate": "2026-07-15",
+        "endDate": "2026-07-31",
+        "expectedOutput": "安装部署、运维、疑难问题和 SQL 优化知识库",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "tech-binlog-ai",
+        "groupId": "tech",
+        "title": "BINLOG 同步工具 AI 化",
+        "owner": "技术服务作战单元",
+        "schedule": "半个月首轮",
+        "startDate": "2026-07-15",
+        "endDate": "2026-07-31",
+        "expectedOutput": "BINLOG 辅助工具与可验证使用流程",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "tech-skill-refine",
+        "groupId": "tech",
+        "title": "技术服务 Skill 完善",
+        "owner": "技术服务作战单元",
+        "schedule": "首轮工具后",
+        "startDate": "2026-08-01",
+        "endDate": "2026-08-15",
+        "expectedOutput": "部门 Skills、使用说明与维护规则",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "tech-kb-foundation",
+          "tech-binlog-ai"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "tech-company-knowledge",
+        "groupId": "tech",
+        "title": "公司级知识系统方案与治理规范",
+        "owner": "技术部牵头 · 产品、研发协同",
+        "schedule": "立即牵头",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-15",
+        "expectedOutput": "总体蓝图、事实源、权限、Wiki、Skill、评测与发布治理",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "tech-company-knowledge-pilot",
+        "groupId": "tech",
+        "title": "公司级知识系统最小试点",
+        "owner": "技术部牵头 · 产品、研发协同",
+        "schedule": "规范后启动",
+        "startDate": "2026-08-16",
+        "endDate": "2026-09-30",
+        "expectedOutput": "最小知识域、发布流程、评测集和试点验收报告",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "tech-company-knowledge",
+          "tech-skill-refine"
+        ],
+        "taskType": "milestone",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "product-high-value-pilot",
+        "groupId": "product",
+        "title": "文档、培训、POC 与内务高价值试点",
+        "owner": "吴生勇、王安迪",
+        "schedule": "下一阶段",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-31",
+        "expectedOutput": "每个试点的输入、产出、人工复核、业务状态与退出条件",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "product-effect-ledger",
+        "groupId": "product",
+        "title": "AI 效果台账",
+        "owner": "产品作战单元",
+        "schedule": "与试点同步",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-31",
+        "expectedOutput": "传统基线、AI 耗时、修改轮次、复核结论和实际使用记录",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "product-harness",
+        "groupId": "product",
+        "title": "项目 Harness 治理",
+        "owner": "产品作战单元",
+        "schedule": "持续沉淀",
+        "startDate": "2026-07-15",
+        "endDate": "2026-09-30",
+        "expectedOutput": "目标、资料栈、任务状态、最小权限、检查、验收与经验回写",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "product-high-value-pilot",
+          "product-effect-ledger"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "product-wiki-standard",
+        "groupId": "product",
+        "title": "Wiki 写作与事实口径规范",
+        "owner": "产品作战单元",
+        "schedule": "公司知识系统协同",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-15",
+        "expectedOutput": "知识分类、Wiki 模板、事实源、审核和版本追溯规则",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "product-status-grading",
+        "groupId": "product",
+        "title": "成果状态分级",
+        "owner": "产品作战单元",
+        "schedule": "下一阶段",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-15",
+        "expectedOutput": "技术可用、业务验收、生产可用的统一状态口径",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "product-effect-ledger"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "finance-data-security",
+        "groupId": "finance",
+        "title": "财务数据治理与安全分类",
+        "owner": "陈文斌",
+        "schedule": "试点前置",
+        "startDate": "2026-07-15",
+        "endDate": "2026-07-31",
+        "expectedOutput": "数据质量基线、敏感/非敏感分类和模型处理边界",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "finance-pilot",
+        "groupId": "finance",
+        "title": "基础核算与 OCR 试点验证",
+        "owner": "陈文斌",
+        "schedule": "第 1–2 个月",
+        "startDate": "2026-07-15",
+        "endDate": "2026-09-14",
+        "expectedOutput": "OCR 准确率与业务效果评估，达到门槛后再推广",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "finance-data-security"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "finance-scale",
+        "groupId": "finance",
+        "title": "报销、对账与税务推广",
+        "owner": "财务作战单元",
+        "schedule": "第 3–4 个月",
+        "startDate": "2026-09-15",
+        "endDate": "2026-11-14",
+        "expectedOutput": "凭证、报销审核、对账和税务辅助能力",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "finance-pilot"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "finance-deepen",
+        "groupId": "finance",
+        "title": "财务分析与预测深化",
+        "owner": "财务作战单元",
+        "schedule": "第 5–6 个月",
+        "startDate": "2026-11-15",
+        "endDate": "2027-01-14",
+        "expectedOutput": "自动报表、趋势分析、现金流预测和运营机制",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "finance-scale"
+        ],
+        "taskType": "milestone",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "admin-compute",
+        "groupId": "admin",
+        "title": "可持续算力与分级调度",
+        "owner": "谢莅",
+        "schedule": "立即解决",
+        "startDate": "2026-07-15",
+        "endDate": "2026-07-31",
+        "expectedOutput": "云端 API、本地模型、成本和业务连续性方案",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "admin-data-classification",
+        "groupId": "admin",
+        "title": "行政敏感数据分类",
+        "owner": "行政作战单元",
+        "schedule": "下次汇报前",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-01",
+        "expectedOutput": "敏感/非敏感数据清单及模型与部署边界",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "admin-filing",
+        "groupId": "admin",
+        "title": "首版次软件认定申报",
+        "owner": "谢莅",
+        "schedule": "8 月 15 日前",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-15",
+        "expectedOutput": "符合审查要求的申报材料",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 2,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "admin-high-frequency",
+        "groupId": "admin",
+        "title": "办公高频场景业务验证",
+        "owner": "行政作战单元",
+        "schedule": "1–3 个月",
+        "startDate": "2026-07-15",
+        "endDate": "2026-10-14",
+        "expectedOutput": "面试、考勤、会议纪要、制度问答的使用与效果证据",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "admin-compute",
+          "admin-data-classification"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "admin-knowledge-flow",
+        "groupId": "admin",
+        "title": "企业知识与流程智能体",
+        "owner": "行政作战单元",
+        "schedule": "3–6 个月及以后",
+        "startDate": "2026-10-15",
+        "endDate": "2027-01-14",
+        "expectedOutput": "合同、档案、政策、供应商与流程自动化能力",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "admin-high-frequency"
+        ],
+        "taskType": "milestone",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      }
+    ],
+    "companyWorkstreams": [
+      {
+        "id": "company-knowledge-system",
+        "title": "公司级知识系统",
+        "lead": "技术部牵头 · 产品、研发协同",
+        "units": "技术服务 × 产品 × 研发",
+        "objective": "统一事实源、权限、检索、Wiki 写作、Skill 编写测试、发布、版本和退役治理。",
+        "output": "总体蓝图、Wiki 规范、Skill 规范与最小试点",
+        "taskIds": [
+          "tech-company-knowledge",
+          "product-wiki-standard",
+          "rd-skill-standard",
+          "tech-company-knowledge-pilot"
+        ]
+      },
+      {
+        "id": "high-value-scenarios",
+        "title": "高价值业务场景",
+        "lead": "各作战单元并行推进",
+        "units": "研发 × 技服 × 产品 × 市场 × 财务 × 行政",
+        "objective": "把研发改造、技术问答、产品 POC、营销工具、财务试点和办公场景形成可复盘的业务闭环。",
+        "output": "首批场景清单、使用证据与验收结论",
+        "taskIds": [
+          "rd-tool-rebuild",
+          "tech-kb-foundation",
+          "product-high-value-pilot",
+          "market-sales",
+          "finance-pilot",
+          "admin-high-frequency"
+        ]
+      },
+      {
+        "id": "data-security",
+        "title": "数据安全与分级",
+        "lead": "行政、财务共同牵引",
+        "units": "行政 × 财务 × 全作战单元",
+        "objective": "形成敏感与非敏感数据清单，明确云端、本地模型和不同业务场景的处理边界。",
+        "output": "数据分类清单、模型使用边界与安全基线",
+        "taskIds": [
+          "admin-data-classification",
+          "finance-data-security"
+        ]
+      },
+      {
+        "id": "effect-ledger",
+        "title": "效果台账与业务验收",
+        "lead": "产品牵引 · 各单元共同记录",
+        "units": "产品 × 七个作战单元",
+        "objective": "以传统基线、AI 耗时、修改轮次、人工复核、实际使用和业务价值统一衡量转型效果。",
+        "output": "公司级效果台账、状态分级与汇报口径",
+        "taskIds": [
+          "product-effect-ledger",
+          "product-status-grading"
+        ]
+      }
+    ]
+  },
+  "materials": [],
+  "draft": {
+    "title": "虚谷 AI 转型促进作战地图",
+    "goal": "推动虚谷伟业整体 AI 转型落地",
+    "summary": "第一次作战汇报与九份材料归纳已经完成，当前以总作战计划统筹七个作战单元，进入首批场景、公司级知识系统、数据安全与效果台账的并行推进阶段。",
+    "projectStatus": "planning",
+    "statusLabel": "首批场景出征",
+    "version": "v4.2",
+    "updatedAt": "2026-07-17T09:26:59.155Z",
+    "overallProgress": null,
+    "currentStage": 2,
+    "committeeLead": "",
+    "memberCount": 14,
+    "members": "苏德财、李文彬、李帅、曾彬、冯治龙、魏粤川、吴生勇、王安迪、曹茜、马攀、魏定刚、陈文斌、谢莅",
+    "meeting": {
+      "label": "第一次作战汇报（已完成） · 2026.07.14",
+      "time": "14:00–17:20",
+      "topic": "第一次汇报形成 9 份总结材料，并据此拆解七个作战单元战况、公司级协同战线和下一阶段行动令。"
+    },
+    "groups": [
+      {
+        "id": "rd",
+        "name": "研发作战单元",
+        "short": "研",
+        "owner": "苏德财、李文彬",
+        "presenters": "苏德财、李文彬",
+        "departments": "研发相关部门",
+        "members": "苏德财、李文彬、李帅、曾彬",
+        "meetingTime": "14:00–14:20",
+        "objective": "并行推进旧系统可控改造与外围工具 AI 重构，把验证结果转化为可产品化、可测试、可发布的研发能力。",
+        "currentWork": "内核 AI 改造已完成改造评估与基准测试实施方案评估；数据库驱动和语言框架完成 AI 改造验证。",
+        "nextPlan": "月底形成旧系统工程化改造结论；推进驱动与语言框架产品化、自动化；选择运维平台等工具开展 AI 重构，并协同制定 Skill 工程与发布规范。",
+        "expectedOutput": "旧改结论与质量门槛、驱动框架产品化、工具重构试点、研发知识与 Skill 发布规范。",
+        "source": "644cd128d5de17a6.md；0ef818c5205bb47f.md"
+      },
+      {
+        "id": "tech",
+        "name": "技术服务作战单元",
+        "short": "技",
+        "owner": "冯治龙、魏粤川",
+        "presenters": "冯治龙、魏粤川",
+        "departments": "技术服务部",
+        "members": "冯治龙、魏粤川",
+        "meetingTime": "14:30–14:50",
+        "objective": "建设覆盖安装部署、运维、疑难问题和 SQL 优化的技术知识能力，并牵头形成公司统一知识系统治理与发布机制。",
+        "currentWork": "已明确虚谷数据库技术知识库和 BINLOG 同步工具 AI 化两项首轮任务；公司级知识系统进入方案统筹阶段。",
+        "nextPlan": "前期投入两人，用半个月落地知识库与 BINLOG 辅助工具；完善部门 Skill；牵头产品、研发制定公司级知识系统、Wiki 和 Skill 编写发布规范。",
+        "expectedOutput": "XuguDB 技术知识库、BINLOG AI 工具、技术服务 Skills、公司级知识系统蓝图与治理规范。",
+        "source": "1a309afc9ba4b933.md；0ef818c5205bb47f.md"
+      },
+      {
+        "id": "product",
+        "name": "产品作战单元",
+        "short": "产",
+        "owner": "吴生勇、王安迪",
+        "presenters": "吴生勇、王安迪",
+        "departments": "产品管理团队",
+        "members": "吴生勇、王安迪",
+        "meetingTime": "15:00–15:20",
+        "objective": "以事实源、任务状态、质量门禁和人工验收构建可控、可验、可复用的产品级 AI 项目体系。",
+        "currentWork": "已记录 9 项实践产出、2 项代表性 Office 成品和 7 个统一演示入口，标准化文档 Skill、Dev Skills 与项目 Harness 方法开始形成。",
+        "nextPlan": "聚焦文档、培训、POC 与内务高价值试点；建立效果台账和成果状态分级；协同技术部制定知识分类、事实源、Wiki 写作和版本追溯规范。",
+        "expectedOutput": "高价值试点、效果台账、项目 Harness、成果状态分级、Wiki 内容与事实口径规范。",
+        "source": "90f3d8aefed6b44e.md；0ef818c5205bb47f.md"
+      },
+      {
+        "id": "platform",
+        "name": "平台作战单元",
+        "short": "平",
+        "owner": "曹茜",
+        "presenters": "曹茜",
+        "departments": "待会议确认",
+        "members": "曹茜",
+        "meetingTime": "15:30–15:50",
+        "objective": "待补充平台作战单元正式行动计划。",
+        "currentWork": "当前附件中未发现平台作战单元规划材料。",
+        "nextPlan": "会议前补充工作进度、已有成效和下一步计划。",
+        "expectedOutput": "待平台作战单元确认。",
+        "source": "待补充"
+      },
+      {
+        "id": "market",
+        "name": "市场与生态作战单元",
+        "short": "市",
+        "owner": "马攀、魏定刚",
+        "presenters": "马攀、魏定刚",
+        "departments": "市场、销售支撑与生态运营",
+        "members": "马攀、魏定刚",
+        "meetingTime": "16:00–16:20",
+        "objective": "把生态、销售、项目支持和内容生产沉淀为有事实源、有质量门禁、可重复使用的系统与交付资产。",
+        "currentWork": "已形成 isv-analyzer、方案引擎 V3.1、ISV 回访/拜访系统、PPT 流水线、XuguDB MCP、AskDB 双端 App，以及 QAX、港航和迁移交付证据链。",
+        "nextPlan": "90 天内固化事实源与模板、接入认证预警、沉淀 PPT 组件、编目项目交付包，建立 AskDB 官方口径与 50–100 条评测集，并开展 2–3 个真实招投标试点。",
+        "expectedOutput": "ISV 业务系统、方案弹药、项目工具包、AskDB 口径与评测集、招投标试点、PPT 组件库和效果台账。",
+        "source": "4e6d7ea3e7e6ba85.md；ebab2fdcd7b1fc35.md"
+      },
+      {
+        "id": "finance",
+        "name": "财务作战单元",
+        "short": "财",
+        "owner": "陈文斌",
+        "presenters": "陈文斌",
+        "departments": "财务部",
+        "members": "陈文斌",
+        "meetingTime": "16:30–16:50",
+        "objective": "按照试点验证、推广覆盖、深化应用三阶段推进财务 AI，同时以数据质量和信息安全作为前置门槛。",
+        "currentWork": "已形成基础核算、报销、对账、税务、合同和报表分析的 6 个月三阶段路线，尚未形成业务验收结果。",
+        "nextPlan": "先完成财务数据分类与安全边界，再用 1–2 个月开展 OCR 基础核算试点；3–4 个月扩展报销、对账和税务；5–6 个月建设分析与预测。",
+        "expectedOutput": "数据分类方案、OCR 试点评估、报销与对账能力、财务分析平台和可复制运营机制。",
+        "source": "c9dd0004d364a214.md；0ef818c5205bb47f.md"
+      },
+      {
+        "id": "admin",
+        "name": "行政作战单元",
+        "short": "行",
+        "owner": "谢莅",
+        "presenters": "谢莅",
+        "departments": "行政与办公室",
+        "members": "谢莅",
+        "meetingTime": "17:00–17:20",
+        "objective": "在数据分级和可持续算力保障下，把六类办公场景从技能安装推进到可量化、可验收的业务使用。",
+        "currentWork": "办公室已完成全员 AI 客户端和技能框架部署，安装 56 个技能模块；当前免费算力耗尽，部分高耗能任务受阻。",
+        "nextPlan": "8 月 15 日前推进首版次软件认定申报；补充可持续算力；梳理敏感数据边界；分阶段推进高频办公、企业知识和流程智能体。",
+        "expectedOutput": "申报材料、算力与调度方案、数据分类、办公效果台账、企业知识能力和流程智能体。",
+        "source": "aeb7784f10e1bf8d.md；3e9a83448d66a3ee.md；0ef818c5205bb47f.md"
+      }
+    ],
+    "stages": [
+      {
+        "id": "founded",
+        "state": "已完成",
+        "title": "联合指挥部成立",
+        "date": "2026.07.02",
+        "description": "虚谷 AI 转型联合指挥部正式成立，明确联合指挥协同机制，并组建研发、技术服务、产品、平台、市场与生态、财务、行政七个作战单元。",
+        "expectedOutput": "联合指挥机制与七个作战单元正式就位",
+        "previewTitle": "联合指挥部成立与协同机制",
+        "previewCaption": "暂无成立会议截图，采用联合指挥部品牌视觉作为战果预览。",
+        "previewImages": [
+          "./assets/transformation-group-transparent-v2.png"
+        ]
+      },
+      {
+        "id": "report-1",
+        "state": "已完成",
+        "title": "第一次作战汇报",
+        "date": "2026.07.14",
+        "description": "七个作战单元完成第一次正式汇报，形成 9 份总结材料；材料已统一结构化并用于更新公司作战网络、单元战况与下一阶段行动令。",
+        "expectedOutput": "第一次作战汇报总结、9 份成果材料与公司级行动令",
+        "previewTitle": "第一次作战汇报 · 九份成果输出",
+        "previewCaption": "九份材料属于 2026.07.14 第一次作战汇报总结输出，后续结构化处理不改变其业务归属日期。",
+        "previewImages": [
+          "./assets/report-product-plan-v2.png",
+          "./assets/report-finance-plan.png",
+          "./assets/report-market-plan-v2.png"
+        ]
+      },
+      {
+        "id": "launch",
+        "state": "当前战役",
+        "title": "首批场景出征",
+        "date": "2026.07.15–08.31",
+        "description": "第一次作战汇报完成后启动：并行推进高价值业务场景、公司级知识系统规范、敏感数据分类和效果台账；技术部牵头产品、研发形成统一 Wiki 与 Skill 治理。",
+        "expectedOutput": "首批场景闭环、知识系统蓝图与规范、数据分类方案、效果台账基线",
+        "previewTitle": "首批场景行动展开示意",
+        "previewCaption": "依据 07/14 第一次作战汇报形成的计划绘制，表达七个作战单元向高价值业务场景、公司级知识系统、数据安全和效果台账并行推进；这是行动规划示意，不代表战果已经完成。",
+        "previewImages": [
+          "./assets/first-scenario-deployment-v1.png"
+        ]
+      },
+      {
+        "id": "pilot",
+        "state": "计划战役",
+        "title": "试点验证攻坚",
+        "date": "2026.09 起 · 待确认",
+        "description": "首批场景计划窗口结束后进入试点验证；具体启动日以后续正式汇报和实际战果确认为准。",
+        "expectedOutput": "试点结果、价值指标、问题清单与闭环证据",
+        "previewTitle": "试点闭环架构示意",
+        "previewCaption": "复用现有平台架构材料，后续以试点成果截图替换。",
+        "previewImages": [
+          "./assets/agentic-platform.png"
+        ]
+      },
+      {
+        "id": "scale",
+        "state": "计划战役",
+        "title": "跨单元扩展作战",
+        "date": "2026 Q4",
+        "description": "把验证有效的能力扩展至产品资质、招投标、合同往来、财务分析和更多业务流程。",
+        "expectedOutput": "跨部门复制清单、推广方案和协同机制",
+        "previewTitle": "跨场景扩展示意",
+        "previewCaption": "以现有多模态能力视觉表达扩展方向，待正式成果替换。",
+        "previewImages": [
+          "./assets/multimodal.png"
+        ]
+      },
+      {
+        "id": "institutionalize",
+        "state": "计划战役",
+        "title": "机制与能力固化",
+        "date": "2027 H1",
+        "description": "沉淀制度、知识库、工具链、Gate、数据、培训和安全治理，形成持续运转的 AI 转型能力。",
+        "expectedOutput": "组织机制、能力平台、知识资产与审计体系",
+        "previewTitle": "治理与安全能力示意",
+        "previewCaption": "复用现有安全治理视觉，待阶段成果材料替换。",
+        "previewImages": [
+          "./assets/high-security.png"
+        ]
+      }
+    ],
+    "closures": [
+      {
+        "id": "bp-complete",
+        "title": "BP 战果闭环",
+        "date": "2026.07.10",
+        "state": "已闭环",
+        "between": [
+          "founded",
+          "report-1"
+        ],
+        "description": "联合指挥部成立后的首项共同任务已完成，为第一次作战汇报建立统一的转型叙事与视觉材料基础。",
+        "result": "虚谷伟业 AI 转型 BP 材料",
+        "source": "市场与生态作战单元 · 虚谷伟业商业企划书：Agentic Reborn.pdf",
+        "sourceFile": "./assets/agentic-reborn-bp.pdf",
+        "previewImages": [
+          "./assets/bp-agentic-reborn-cover.png",
+          "./assets/bp-agentic-reborn-overview.png"
+        ]
+      },
+      {
+        "id": "report-0714-materials",
+        "title": "第一次作战汇报成果闭环",
+        "date": "2026.07.14",
+        "state": "已闭环",
+        "between": [
+          "report-1",
+          "launch"
+        ],
+        "description": "第一次作战汇报形成 9 份总结材料，覆盖整体汇报、研发、技术服务、产品、市场与生态、财务和行政等战况；材料后续已完成结构化与统一规划。",
+        "result": "第一次作战汇报总结与 9 份可追溯成果材料",
+        "source": "2026.07.14 第一次作战汇报 · 后台 9 份材料",
+        "previewImages": [
+          "./assets/report-product-plan-v2.png",
+          "./assets/report-finance-plan.png",
+          "./assets/report-market-plan-v2.png"
+        ]
+      }
+    ],
+    "tasks": [
+      {
+        "id": "platform-plan",
+        "groupId": "platform",
+        "title": "平台作战单元正式规划",
+        "owner": "曹茜",
+        "schedule": "待补充",
+        "startDate": "",
+        "endDate": "",
+        "expectedOutput": "战况、效果和下一步行动计划",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1
+      },
+      {
+        "id": "market-isv",
+        "groupId": "market",
+        "title": "生态适配与 ISV 互认证",
+        "owner": "马攀、魏定刚",
+        "schedule": "90 天持续推进",
+        "startDate": "2026-07-15",
+        "endDate": "2026-10-14",
+        "expectedOutput": "analyzer/方案引擎标准模板、ISV 系统、认证有效期与预警",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "market-sales",
+        "groupId": "market",
+        "title": "销售知识库与智能问答",
+        "owner": "市场与生态作战单元",
+        "schedule": "90 天首批",
+        "startDate": "2026-07-15",
+        "endDate": "2026-10-14",
+        "expectedOutput": "AskDB 同源官方口径、白名单和 50–100 条问答评测集",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "market-bid",
+        "groupId": "market",
+        "title": "招投标全流程智能化",
+        "owner": "市场与生态作战单元",
+        "schedule": "90 天真实试点",
+        "startDate": "2026-08-01",
+        "endDate": "2026-10-14",
+        "expectedOutput": "2–3 个真实标的解析、应答、审核与缺项召回记录",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "market-sales"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "market-content",
+        "groupId": "market",
+        "title": "联合宣传与内容运营",
+        "owner": "市场与生态作战单元",
+        "schedule": "持续推进",
+        "startDate": "2026-07-15",
+        "endDate": "2026-10-14",
+        "expectedOutput": "选题库、品牌规范、案例与内容资产复用流程",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "market-isv"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "market-ppt",
+        "groupId": "market",
+        "title": "营销材料与 PPT 工具链",
+        "owner": "马攀、魏定刚",
+        "schedule": "90 天组件化",
+        "startDate": "2026-07-15",
+        "endDate": "2026-10-14",
+        "expectedOutput": "至少 10 个高频可编辑组件与复用统计",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "market-bid",
+          "market-content"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "rd-core-assessment",
+        "groupId": "rd",
+        "title": "内核旧改评估与质量基线",
+        "owner": "苏德财、李文彬",
+        "schedule": "评估方案已形成 · 月底结论",
+        "startDate": "2026-07-02",
+        "endDate": "2026-07-14",
+        "expectedOutput": "旧改可行性、改造程度、人员门槛与测试质量基线",
+        "progress": 100,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "rd-driver-productize",
+        "groupId": "rd",
+        "title": "驱动与语言框架产品化",
+        "owner": "研发作战单元",
+        "schedule": "验证后持续推进",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-31",
+        "expectedOutput": "九类接口产品化、自动化测试和发布要求",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "rd-tool-rebuild",
+        "groupId": "rd",
+        "title": "外围工具 AI 重构试点",
+        "owner": "研发作战单元",
+        "schedule": "待选首个试点",
+        "startDate": "2026-08-01",
+        "endDate": "2026-09-30",
+        "expectedOutput": "运维平台等外围工具的重构方案与验收证据",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "rd-core-assessment"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "rd-skill-standard",
+        "groupId": "rd",
+        "title": "Skill 工程与发布规范协同",
+        "owner": "研发作战单元",
+        "schedule": "立即协同",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-15",
+        "expectedOutput": "Skill 目录、测试、审核、发布、兼容、版本和废止规范",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "rd-driver-productize"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "tech-kb-foundation",
+        "groupId": "tech",
+        "title": "XuguDB 技术知识库首轮",
+        "owner": "冯治龙、魏粤川",
+        "schedule": "半个月首轮",
+        "startDate": "2026-07-15",
+        "endDate": "2026-07-31",
+        "expectedOutput": "安装部署、运维、疑难问题和 SQL 优化知识库",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "tech-binlog-ai",
+        "groupId": "tech",
+        "title": "BINLOG 同步工具 AI 化",
+        "owner": "技术服务作战单元",
+        "schedule": "半个月首轮",
+        "startDate": "2026-07-15",
+        "endDate": "2026-07-31",
+        "expectedOutput": "BINLOG 辅助工具与可验证使用流程",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "tech-skill-refine",
+        "groupId": "tech",
+        "title": "技术服务 Skill 完善",
+        "owner": "技术服务作战单元",
+        "schedule": "首轮工具后",
+        "startDate": "2026-08-01",
+        "endDate": "2026-08-15",
+        "expectedOutput": "部门 Skills、使用说明与维护规则",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "tech-kb-foundation",
+          "tech-binlog-ai"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "tech-company-knowledge",
+        "groupId": "tech",
+        "title": "公司级知识系统方案与治理规范",
+        "owner": "技术部牵头 · 产品、研发协同",
+        "schedule": "立即牵头",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-15",
+        "expectedOutput": "总体蓝图、事实源、权限、Wiki、Skill、评测与发布治理",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "tech-company-knowledge-pilot",
+        "groupId": "tech",
+        "title": "公司级知识系统最小试点",
+        "owner": "技术部牵头 · 产品、研发协同",
+        "schedule": "规范后启动",
+        "startDate": "2026-08-16",
+        "endDate": "2026-09-30",
+        "expectedOutput": "最小知识域、发布流程、评测集和试点验收报告",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "tech-company-knowledge",
+          "tech-skill-refine"
+        ],
+        "taskType": "milestone",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "product-high-value-pilot",
+        "groupId": "product",
+        "title": "文档、培训、POC 与内务高价值试点",
+        "owner": "吴生勇、王安迪",
+        "schedule": "下一阶段",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-31",
+        "expectedOutput": "每个试点的输入、产出、人工复核、业务状态与退出条件",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "product-effect-ledger",
+        "groupId": "product",
+        "title": "AI 效果台账",
+        "owner": "产品作战单元",
+        "schedule": "与试点同步",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-31",
+        "expectedOutput": "传统基线、AI 耗时、修改轮次、复核结论和实际使用记录",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "product-harness",
+        "groupId": "product",
+        "title": "项目 Harness 治理",
+        "owner": "产品作战单元",
+        "schedule": "持续沉淀",
+        "startDate": "2026-07-15",
+        "endDate": "2026-09-30",
+        "expectedOutput": "目标、资料栈、任务状态、最小权限、检查、验收与经验回写",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "product-high-value-pilot",
+          "product-effect-ledger"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "product-wiki-standard",
+        "groupId": "product",
+        "title": "Wiki 写作与事实口径规范",
+        "owner": "产品作战单元",
+        "schedule": "公司知识系统协同",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-15",
+        "expectedOutput": "知识分类、Wiki 模板、事实源、审核和版本追溯规则",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "product-status-grading",
+        "groupId": "product",
+        "title": "成果状态分级",
+        "owner": "产品作战单元",
+        "schedule": "下一阶段",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-15",
+        "expectedOutput": "技术可用、业务验收、生产可用的统一状态口径",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "product-effect-ledger"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "finance-data-security",
+        "groupId": "finance",
+        "title": "财务数据治理与安全分类",
+        "owner": "陈文斌",
+        "schedule": "试点前置",
+        "startDate": "2026-07-15",
+        "endDate": "2026-07-31",
+        "expectedOutput": "数据质量基线、敏感/非敏感分类和模型处理边界",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "finance-pilot",
+        "groupId": "finance",
+        "title": "基础核算与 OCR 试点验证",
+        "owner": "陈文斌",
+        "schedule": "第 1–2 个月",
+        "startDate": "2026-07-15",
+        "endDate": "2026-09-14",
+        "expectedOutput": "OCR 准确率与业务效果评估，达到门槛后再推广",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "finance-data-security"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "finance-scale",
+        "groupId": "finance",
+        "title": "报销、对账与税务推广",
+        "owner": "财务作战单元",
+        "schedule": "第 3–4 个月",
+        "startDate": "2026-09-15",
+        "endDate": "2026-11-14",
+        "expectedOutput": "凭证、报销审核、对账和税务辅助能力",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "finance-pilot"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "finance-deepen",
+        "groupId": "finance",
+        "title": "财务分析与预测深化",
+        "owner": "财务作战单元",
+        "schedule": "第 5–6 个月",
+        "startDate": "2026-11-15",
+        "endDate": "2027-01-14",
+        "expectedOutput": "自动报表、趋势分析、现金流预测和运营机制",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "finance-scale"
+        ],
+        "taskType": "milestone",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "admin-compute",
+        "groupId": "admin",
+        "title": "可持续算力与分级调度",
+        "owner": "谢莅",
+        "schedule": "立即解决",
+        "startDate": "2026-07-15",
+        "endDate": "2026-07-31",
+        "expectedOutput": "云端 API、本地模型、成本和业务连续性方案",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "admin-data-classification",
+        "groupId": "admin",
+        "title": "行政敏感数据分类",
+        "owner": "行政作战单元",
+        "schedule": "下次汇报前",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-01",
+        "expectedOutput": "敏感/非敏感数据清单及模型与部署边界",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "admin-filing",
+        "groupId": "admin",
+        "title": "首版次软件认定申报",
+        "owner": "谢莅",
+        "schedule": "8 月 15 日前",
+        "startDate": "2026-07-15",
+        "endDate": "2026-08-15",
+        "expectedOutput": "符合审查要求的申报材料",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 2,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "admin-high-frequency",
+        "groupId": "admin",
+        "title": "办公高频场景业务验证",
+        "owner": "行政作战单元",
+        "schedule": "1–3 个月",
+        "startDate": "2026-07-15",
+        "endDate": "2026-10-14",
+        "expectedOutput": "面试、考勤、会议纪要、制度问答的使用与效果证据",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "admin-compute",
+          "admin-data-classification"
+        ],
+        "taskType": "action",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      },
+      {
+        "id": "admin-knowledge-flow",
+        "groupId": "admin",
+        "title": "企业知识与流程智能体",
+        "owner": "行政作战单元",
+        "schedule": "3–6 个月及以后",
+        "startDate": "2026-10-15",
+        "endDate": "2027-01-14",
+        "expectedOutput": "合同、档案、政策、供应商与流程自动化能力",
+        "progress": null,
+        "parentId": "",
+        "dependsOn": [
+          "admin-high-frequency"
+        ],
+        "taskType": "milestone",
+        "startMonth": 1,
+        "span": 1,
+        "scheduleWindowType": "derived-from-2026-07-14-material"
+      }
+    ],
+    "companyWorkstreams": [
+      {
+        "id": "company-knowledge-system",
+        "title": "公司级知识系统",
+        "lead": "技术部牵头 · 产品、研发协同",
+        "units": "技术服务 × 产品 × 研发",
+        "objective": "统一事实源、权限、检索、Wiki 写作、Skill 编写测试、发布、版本和退役治理。",
+        "output": "总体蓝图、Wiki 规范、Skill 规范与最小试点",
+        "taskIds": [
+          "tech-company-knowledge",
+          "product-wiki-standard",
+          "rd-skill-standard",
+          "tech-company-knowledge-pilot"
+        ]
+      },
+      {
+        "id": "high-value-scenarios",
+        "title": "高价值业务场景",
+        "lead": "各作战单元并行推进",
+        "units": "研发 × 技服 × 产品 × 市场 × 财务 × 行政",
+        "objective": "把研发改造、技术问答、产品 POC、营销工具、财务试点和办公场景形成可复盘的业务闭环。",
+        "output": "首批场景清单、使用证据与验收结论",
+        "taskIds": [
+          "rd-tool-rebuild",
+          "tech-kb-foundation",
+          "product-high-value-pilot",
+          "market-sales",
+          "finance-pilot",
+          "admin-high-frequency"
+        ]
+      },
+      {
+        "id": "data-security",
+        "title": "数据安全与分级",
+        "lead": "行政、财务共同牵引",
+        "units": "行政 × 财务 × 全作战单元",
+        "objective": "形成敏感与非敏感数据清单，明确云端、本地模型和不同业务场景的处理边界。",
+        "output": "数据分类清单、模型使用边界与安全基线",
+        "taskIds": [
+          "admin-data-classification",
+          "finance-data-security"
+        ]
+      },
+      {
+        "id": "effect-ledger",
+        "title": "效果台账与业务验收",
+        "lead": "产品牵引 · 各单元共同记录",
+        "units": "产品 × 七个作战单元",
+        "objective": "以传统基线、AI 耗时、修改轮次、人工复核、实际使用和业务价值统一衡量转型效果。",
+        "output": "公司级效果台账、状态分级与汇报口径",
+        "taskIds": [
+          "product-effect-ledger",
+          "product-status-grading"
+        ]
+      }
+    ]
+  }
+}

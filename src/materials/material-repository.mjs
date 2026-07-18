@@ -76,6 +76,10 @@ export function createMaterialRepository(database, options = {}) {
         INSERT INTO material_qa_grants (project_id, material_id, audience, enabled)
         VALUES (?, ?, 'disabled', 0)
       `).run(input.projectId, input.materialId);
+      database.prepare(`
+        INSERT INTO material_generation_grants (project_id, material_id, enabled)
+        VALUES (?, ?, 0)
+      `).run(input.projectId, input.materialId);
       database.prepare("DELETE FROM material_upload_locks WHERE attempt_id = ?").run(input.attemptId);
       database.prepare(`UPDATE material_upload_attempts SET outcome = 'accepted', finished_at = ? WHERE id = ? AND outcome = 'started'`).run(timestamp, input.attemptId);
       return { id: input.materialId, projectId: input.projectId, status: "queued", jobId: input.jobId, storageKey };

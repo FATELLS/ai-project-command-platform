@@ -8,6 +8,7 @@ import { createProjectRepository } from "../repositories/project-repository.mjs"
 import { clearSessionCookie, sessionCookie, sessionTokenFromRequest } from "../security/sessions.mjs";
 import { createChatService } from "../services/chat-service.mjs";
 import { createMaterialService, MaterialServiceError } from "../services/material-service.mjs";
+import { createProposalService, ProposalServiceError } from "../services/proposal-service.mjs";
 import { createStaticHandler, securityHeaders } from "./static.mjs";
 
 const projectIdPattern = /^[a-z0-9][a-z0-9._-]{2,63}$/;
@@ -80,6 +81,7 @@ export function createApp(options) {
   const moduleService = options.moduleService ?? createModuleService(database);
   const materialService = options.materialService ?? createMaterialService(database, options.materialOptions);
   const chatService = options.chatService ?? createChatService(database, options.chatOptions);
+  const proposalService = options.proposalService ?? createProposalService(database, options.proposalOptions);
   const handleStatic = createStaticHandler(options.publicDirectory ?? defaultPublicDirectory);
   const secureCookies = options.secureCookies ?? false;
   const now = options.now ?? (() => Date.now());
@@ -213,12 +215,44 @@ export function createApp(options) {
           requireCsrf(request, principal);
           return respond(response, 200, materialService.setQa(principal, projectId, materialId, await readJson(request, 8 * 1024)));
         }
+        if (segments.length === 6 && segments[5] === "generation" && request.method === "PATCH") {
+          requireCsrf(request, principal);
+          return respond(response, 200, materialService.setGeneration(principal, projectId, materialId, await readJson(request, 8 * 1024)));
+        }
         if (segments.length === 6 && segments[5] === "retry" && request.method === "POST") {
           requireCsrf(request, principal);
           return respond(response, 202, materialService.retry(principal, projectId, materialId));
         }
         if (segments.length === 6 && segments[5] === "evidence" && request.method === "GET") return respond(response, 200, materialService.listEvidence(principal, projectId, materialId));
         if (segments.length === 7 && segments[5] === "evidence" && request.method === "GET") return respond(response, 200, materialService.getEvidence(principal, projectId, materialId, segments[6]));
+        throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
+      }
+
+      if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "generation-tasks") {
+        const projectId = segments[2];
+        if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
+        const principal = requirePrincipal(request);
+        if (segments.length === 5 && segments[4] === "capabilities" && request.method === "GET") return respond(response, 200, proposalService.capabilities(principal, projectId));
+        if (segments.length === 4 && request.method === "GET") return respond(response, 200, proposalService.listJobs(principal, projectId));
+        if (segments.length === 4 && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 202, await proposalService.createJob(principal, projectId, await readJson(request, 16 * 1024)));
+        }
+        const jobId = segments[4];
+        if (segments.length === 5 && request.method === "GET") return respond(response, 200, proposalService.getJob(principal, projectId, jobId));
+        if (segments.length === 6 && segments[5] === "retry" && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 202, await proposalService.retryJob(principal, projectId, jobId, await readJson(request, 8 * 1024)));
+        }
+        throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
+      }
+
+      if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "change-proposals") {
+        const projectId = segments[2];
+        if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
+        const principal = requirePrincipal(request);
+        if (segments.length === 4 && request.method === "GET") return respond(response, 200, proposalService.listProposals(principal, projectId));
+        if (segments.length === 5 && request.method === "GET") return respond(response, 200, proposalService.getProposal(principal, projectId, segments[4]));
         throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
       }
 
@@ -309,7 +343,7 @@ export function createApp(options) {
           : ["upload_rate_limited", "upload_concurrency_limited"].includes(error.code) ? 429
             : ["duplicate_material", "project_capacity_limit", "project_material_limit"].includes(error.code) ? 409 : 400;
       }
-      const known = error instanceof HttpError || error instanceof ProjectServiceError || error instanceof ModuleServiceError || error instanceof MaterialServiceError || error instanceof AiServiceError || error instanceof MaterialGateError;
+      const known = error instanceof HttpError || error instanceof ProjectServiceError || error instanceof ModuleServiceError || error instanceof MaterialServiceError || error instanceof ProposalServiceError || error instanceof AiServiceError || error instanceof MaterialGateError;
       if (!known) console.error("Request failed", error);
       return respond(response, known ? error.status : 500, {
         error: known ? error.message : "服务器处理请求时发生错误",

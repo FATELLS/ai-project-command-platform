@@ -6,30 +6,60 @@ import { applyMigrations } from "./src/db/migrate.mjs";
 import { createApp } from "./src/http/app.mjs";
 import { importLegacyProject } from "./src/migration/legacy-project.mjs";
 import { createProjectRepository } from "./src/repositories/project-repository.mjs";
+import { createAuthService } from "./src/services/auth-service.mjs";
 
 const fixturePath = fileURLToPath(new URL("./fixtures/projects/xugu-agentic-group.json", import.meta.url));
 const host = process.env.HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 4173);
 const database = openDatabase(defaultDatabasePath());
-applyMigrations(database);
+let server;
 
-const repository = createProjectRepository(database);
-if (!repository.getProject("xugu-agentic-group")) {
-  const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
-  importLegacyProject(database, fixture, { projectId: "xugu-agentic-group" });
+try {
+  applyMigrations(database);
+  const repository = createProjectRepository(database);
+  if (!repository.getProject("xugu-agentic-group")) {
+    const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
+    importLegacyProject(database, fixture, { projectId: "xugu-agentic-group" });
+  }
+
+  const authService = createAuthService(database);
+  if (!authService.hasPlatformAdmin()) {
+    const bootstrapPassword = process.env.PLATFORM_BOOTSTRAP_PASSWORD;
+    if (!bootstrapPassword) {
+      throw new Error("首次启动需要设置 PLATFORM_BOOTSTRAP_PASSWORD（至少 12 个字符）");
+    }
+    const result = authService.ensureBootstrapAdmin({
+      loginName: process.env.PLATFORM_BOOTSTRAP_USERNAME || "admin",
+      displayName: process.env.PLATFORM_BOOTSTRAP_DISPLAY_NAME || "平台管理员",
+      password: bootstrapPassword
+    });
+    if (result.created) console.log(`Bootstrap administrator created: ${result.loginName}`);
+  }
+
+  server = createServer(createApp({
+    database,
+    authService,
+    secureCookies: ["1", "true"].includes(String(process.env.PLATFORM_COOKIE_SECURE).toLowerCase())
+  }));
+  server.listen(port, host, () => {
+    console.log(`AI Project Command Platform listening on http://${host}:${port}`);
+  });
+} catch (error) {
+  database.close();
+  console.error(error.message);
+  process.exitCode = 1;
 }
-
-const server = createServer(createApp({ database }));
-server.listen(port, host, () => {
-  console.log(`AI Project Command Platform listening on http://${host}:${port}`);
-});
 
 let closing = false;
 function shutdown() {
   if (closing) return;
   closing = true;
+  if (!server?.listening) {
+    if (database.isOpen) database.close();
+    return;
+  }
   server.close(() => {
-    database.close();
+    if (database.isOpen) database.close();
   });
 }
 

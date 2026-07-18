@@ -42,6 +42,10 @@ export function createAuthService(database, options = {}) {
     repository.insertAudit({ ...event, createdAt: event.createdAt ?? timestamp() });
   }
 
+  function hasPlatformAdmin() {
+    return repository.countPlatformAdmins() > 0;
+  }
+
   function ensureBootstrapAdmin(input) {
     if (repository.countPlatformAdmins() > 0) return { created: false };
     const loginName = normalizeLoginName(input.loginName ?? "admin");
@@ -148,5 +152,5 @@ export function createAuthService(database, options = {}) {
     return deleted;
   }
 
-  return { ensureBootstrapAdmin, authenticate, resolveSession, verifyCsrf, logout, repository };
+  return { hasPlatformAdmin, ensureBootstrapAdmin, authenticate, resolveSession, verifyCsrf, logout, repository };
 }

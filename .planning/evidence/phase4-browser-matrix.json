@@ -1,0 +1,175 @@
+{
+  "schemaVersion": "1.0.0",
+  "phase": "04-project-materials-evidence",
+  "capturedOn": "2026-07-18",
+  "runner": "Codex in-app browser against an isolated seeded SQLite database, backed by the Phase 4 API and security suites",
+  "reference": {
+    "path": "../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console",
+    "head": "97cb1ebfbbd4998cdb32d419a5670f1233b7cba8",
+    "statusShort": "",
+    "seedSha256": "b134f5493834d55f61aa47d9b9fac855c502ee67c0b59253e9498c214e4adcfa"
+  },
+  "evidence": {
+    "xuguDesktop": {
+      "file": ".planning/evidence/phase4-xugu-materials-desktop-1440x900.jpg",
+      "width": 1440,
+      "height": 900,
+      "sha256": "4785432b6ff3c6ea1a380a431bba32f6026b7b917d90dc887be0ee2d604e313d"
+    },
+    "standardDesktop": {
+      "file": ".planning/evidence/phase4-standard-materials-desktop-1440x900.jpg",
+      "width": 1440,
+      "height": 900,
+      "sha256": "3a7ab62c4a5b2f5e285cd67ed553453f6f857eac83c856f6e84b8e72b022f11e"
+    },
+    "tablet": {
+      "file": ".planning/evidence/phase4-materials-tablet-1024x768.jpg",
+      "width": 1024,
+      "height": 768,
+      "sha256": "887b1307962cfecc015331ac7869e73f3bf69d205e38a7ab13e6eb8597287ad9"
+    },
+    "mobile": {
+      "file": ".planning/evidence/phase4-materials-mobile-390x844.jpg",
+      "width": 390,
+      "height": 844,
+      "sha256": "f3463effdda78c673ade3ce320f1f4c293f37c8a2d014a963f9ab020693977dd"
+    }
+  },
+  "cases": [
+    {
+      "id": "xugu-material-ledger",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials",
+      "expected": "Xugu campaign shell, project-scoped quota and an evidence-ready ledger",
+      "actual": "Xugu campaign terms, v4.2 facts, one local material, one ready evidence block and one Q&A grant rendered",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "standard-material-ledger",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/standard-project-sample/modules/materials",
+      "expected": "Standard project terms with an isolated empty ledger",
+      "actual": "Standard project shell showed 项目材料, zero materials and no Xugu campaign terminology or rows",
+      "evidence": "standardDesktop"
+    },
+    {
+      "id": "material-upload-gates",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials",
+      "expected": "Visible upload limits match streaming server-side gates",
+      "actual": "UI displayed 200 MiB file, six uploads/minute, one concurrent upload, and 80 MiB/2000-entry Office expansion limits; intake tests rejected invalid inputs",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "manual-material",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials",
+      "expected": "Manual material creates a local immutable source and current extraction generation",
+      "actual": "第一阶段战情纪要 was created, extracted into one ready evidence block, and displayed in the ledger without changing draft or published state",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "evidence-navigation",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials/f86a1287-a52e-481a-8e55-484e2b4505c8",
+      "expected": "Material detail links an exact stable locator to its source text and metadata",
+      "actual": "第 1 段 opened the exact extracted paragraph with stable block ID, SHA-256 and evidence generation metadata",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "qa-citations",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials?view=qa",
+      "expected": "Any generated answer contains only allowlisted project citations",
+      "actual": "Browser exposed only the explicitly authorized material; provider-backed API acceptance returned allowlisted stable evidence citations and rejected fabricated IDs",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "qa-insufficient",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/standard-project-sample/modules/materials?view=qa",
+      "expected": "No authorized evidence produces an honest insufficient-evidence response",
+      "actual": "The isolated standard project had zero materials and zero grants; deterministic chat tests returned insufficient evidence without provider invocation",
+      "evidence": "standardDesktop"
+    },
+    {
+      "id": "provider-disabled",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials?view=qa",
+      "expected": "Missing provider configuration leaves evidence usable and does not synthesize an answer",
+      "actual": "Question submission showed 项目问答当前未启用；材料台账和证据仍可正常使用 and inserted no assistant answer",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "role-permissions",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials",
+      "expected": "Read, upload, grant, retry and chat actions follow project roles and object grants",
+      "actual": "Platform admin controls matched capability metadata; API role matrix denied viewer mutations and non-member access with uniform not-found responses",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "project-switch-clearing",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group -> /projects/standard-project-sample",
+      "expected": "Switching projects clears material rows, grants, terminology and current context atomically",
+      "actual": "Switcher navigated to the standard project; direct materials navigation showed zero rows, standard copy and no Xugu material content",
+      "evidence": "standardDesktop"
+    },
+    {
+      "id": "tablet-responsive",
+      "status": "PASS",
+      "viewport": "1024x768",
+      "url": "/projects/xugu-agentic-group/modules/materials",
+      "expected": "Quota cards reflow and module navigation remains locally scrollable",
+      "actual": "Quota cards reflowed to two columns, the materials tabs and primary actions remained reachable, and no content was clipped",
+      "evidence": "tablet"
+    },
+    {
+      "id": "mobile-responsive",
+      "status": "PASS",
+      "viewport": "390x844",
+      "url": "/projects/xugu-agentic-group/modules/materials",
+      "expected": "Mobile-first ledger remains readable without a desktop sidebar",
+      "actual": "Header compacted, hero and quota cards reflowed, module tabs used local horizontal scrolling and the page retained the Xugu visual language",
+      "evidence": "mobile"
+    },
+    {
+      "id": "security-payload",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/materials",
+      "expected": "Material fields and evidence are rendered as text; executable input and unsupported files fail closed",
+      "actual": "UI uses text nodes only; intake and API security suites rejected MIME mismatch, archive traversal, decompression bombs, CSRF and cross-project object IDs",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "browser-console",
+      "status": "PASS",
+      "viewport": "all",
+      "url": "all acceptance routes",
+      "expected": "No browser warnings, errors or JavaScript dialogs",
+      "actual": "Warning count 0; error count 0; dialog count 0",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "reference-integrity",
+      "status": "PASS",
+      "viewport": "n/a",
+      "url": "n/a",
+      "expected": "Reference HEAD, clean status and seed hash remain unchanged",
+      "actual": "HEAD 97cb1ebfbbd4998cdb32d419a5670f1233b7cba8; clean status; seed SHA-256 b134f5493834d55f61aa47d9b9fac855c502ee67c0b59253e9498c214e4adcfa",
+      "evidence": "xuguDesktop"
+    }
+  ]
+}

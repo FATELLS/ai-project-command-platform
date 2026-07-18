@@ -9,6 +9,9 @@ import { clearSessionCookie, sessionCookie, sessionTokenFromRequest } from "../s
 import { createChatService } from "../services/chat-service.mjs";
 import { createMaterialService, MaterialServiceError } from "../services/material-service.mjs";
 import { createProposalService, ProposalServiceError } from "../services/proposal-service.mjs";
+import { createReviewService, ReviewServiceError } from "../review/review-service.mjs";
+import { createReleaseService } from "../release/release-service.mjs";
+import { createMemberService, MemberServiceError } from "../services/member-service.mjs";
 import { createStaticHandler, securityHeaders } from "./static.mjs";
 
 const projectIdPattern = /^[a-z0-9][a-z0-9._-]{2,63}$/;
@@ -82,6 +85,9 @@ export function createApp(options) {
   const materialService = options.materialService ?? createMaterialService(database, options.materialOptions);
   const chatService = options.chatService ?? createChatService(database, options.chatOptions);
   const proposalService = options.proposalService ?? createProposalService(database, options.proposalOptions);
+  const reviewService = options.reviewService ?? createReviewService(database, options.reviewOptions);
+  const releaseService = options.releaseService ?? createReleaseService(database, options.releaseOptions);
+  const memberService = options.memberService ?? createMemberService(database, options.memberOptions);
   const handleStatic = createStaticHandler(options.publicDirectory ?? defaultPublicDirectory);
   const secureCookies = options.secureCookies ?? false;
   const now = options.now ?? (() => Date.now());
@@ -171,6 +177,35 @@ export function createApp(options) {
         }));
       }
 
+      if (segments[0] === "api" && segments[1] === "users") {
+        const principal = requirePrincipal(request);
+        if (segments.length === 2 && request.method === "GET") return respond(response, 200, memberService.listUsers(principal));
+        if (segments.length === 2 && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 201, memberService.createUser(principal, await readJson(request, 8 * 1024)));
+        }
+        if (segments.length === 4 && segments[3] === "status" && request.method === "PATCH") {
+          requireCsrf(request, principal);
+          return respond(response, 200, memberService.setUserStatus(principal, segments[2], await readJson(request, 4 * 1024)));
+        }
+        throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
+      }
+
+      if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "members") {
+        const projectId = segments[2], principal = requirePrincipal(request);
+        if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
+        if (segments.length === 4 && request.method === "GET") return respond(response, 200, memberService.listMembers(principal, projectId));
+        if (segments.length === 5 && request.method === "PUT") {
+          requireCsrf(request, principal);
+          return respond(response, 200, memberService.setMember(principal, projectId, segments[4], await readJson(request, 4 * 1024)));
+        }
+        if (segments.length === 5 && request.method === "DELETE") {
+          requireCsrf(request, principal);
+          return respond(response, 200, memberService.removeMember(principal, projectId, segments[4]));
+        }
+        throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
+      }
+
       if (request.method === "POST" && url.pathname === "/api/projects") {
         const principal = requirePrincipal(request);
         requireCsrf(request, principal);
@@ -253,6 +288,37 @@ export function createApp(options) {
         const principal = requirePrincipal(request);
         if (segments.length === 4 && request.method === "GET") return respond(response, 200, proposalService.listProposals(principal, projectId));
         if (segments.length === 5 && request.method === "GET") return respond(response, 200, proposalService.getProposal(principal, projectId, segments[4]));
+        if (segments.length === 6 && segments[5] === "review" && request.method === "GET") return respond(response, 200, reviewService.getReview(principal, projectId, segments[4]));
+        if (segments.length === 7 && segments[5] === "review" && request.method === "PATCH") {
+          requireCsrf(request, principal);
+          return respond(response, 200, reviewService.setDecision(principal, projectId, segments[4], segments[6], await readJson(request, 16 * 1024)));
+        }
+        if (segments.length === 8 && segments[5] === "review" && segments[6] === "modules" && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 200, reviewService.acceptModule(principal, projectId, segments[4], segments[7]));
+        }
+        if (segments.length === 6 && segments[5] === "merge" && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 200, reviewService.merge(principal, projectId, segments[4]));
+        }
+        throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
+      }
+
+      if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "release") {
+        const projectId = segments[2];
+        if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
+        const principal = requirePrincipal(request);
+        if (segments.length === 5 && segments[4] === "preview" && request.method === "GET") return respond(response, 200, releaseService.preview(principal, projectId));
+        if (segments.length === 5 && segments[4] === "history" && request.method === "GET") return respond(response, 200, releaseService.history(principal, projectId));
+        if (segments.length === 5 && segments[4] === "audit" && request.method === "GET") return respond(response, 200, releaseService.auditLog(principal, projectId, url.searchParams.get("limit")));
+        if (segments.length === 5 && segments[4] === "publish" && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 200, releaseService.publish(principal, projectId, await readJson(request, 8 * 1024)));
+        }
+        if (segments.length === 5 && segments[4] === "rollback" && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 200, releaseService.rollback(principal, projectId, await readJson(request, 8 * 1024)));
+        }
         throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
       }
 
@@ -343,7 +409,7 @@ export function createApp(options) {
           : ["upload_rate_limited", "upload_concurrency_limited"].includes(error.code) ? 429
             : ["duplicate_material", "project_capacity_limit", "project_material_limit"].includes(error.code) ? 409 : 400;
       }
-      const known = error instanceof HttpError || error instanceof ProjectServiceError || error instanceof ModuleServiceError || error instanceof MaterialServiceError || error instanceof ProposalServiceError || error instanceof AiServiceError || error instanceof MaterialGateError;
+      const known = error instanceof HttpError || error instanceof ProjectServiceError || error instanceof ModuleServiceError || error instanceof MaterialServiceError || error instanceof ProposalServiceError || error instanceof ReviewServiceError || error instanceof MemberServiceError || error instanceof AiServiceError || error instanceof MaterialGateError;
       if (!known) console.error("Request failed", error);
       return respond(response, known ? error.status : 500, {
         error: known ? error.message : "服务器处理请求时发生错误",

@@ -76,5 +76,13 @@ POST   /api/projects/:projectId/rollback
 - `projects` 通过两个显式指针分别定位当前 `published` 和 `draft` 版本。
 - `project_versions` 下按版本分离存储模块、作战单元、路线节点、闭环、任务、依赖和公司级战线。
 - 任务父子和前置依赖既经确定性图校验，也使用 SQLite 外键持久化。
-- `change_proposals` 是独立表；Phase 1 不提供将其写入草稿或发布版的路由。
-- 当前 HTTP 层只有读 API；会话和项目权限属于 Phase 2。
+- `change_proposals` 是独立表，仍无合并或发布路由；AI 不可能通过当前 HTTP 层写入草稿或发布版。
+
+## Phase 2 已实现平台边界
+
+- `users`、`sessions`、`project_members`、`recent_project_access` 和追加式 `audit_events` 提供认证、授权与追踪基础。
+- 会话原始 token 只存在于 HttpOnly Cookie，数据库只保存摘要；CSRF token 由认证会话端点返回并仅保存在浏览器内存。
+- 项目仓储先按平台管理员或成员关系筛选，再读取版本图；越权与不存在项目返回统一 404，失败读取不写最近访问。
+- 项目创建、编辑、归档和恢复均由服务层事务包裹，并与成员授予、审计事件共同提交或回滚。
+- HTTP 层只提供固定静态资源和明确 SPA 路由，使用 CSP、`nosniff`、`DENY`、`no-referrer` 与 `no-store`。
+- 平台 UI 只渲染发布态概览和生命周期控制。未来九类模块当前显示“即将开放”，不假装已经实现。

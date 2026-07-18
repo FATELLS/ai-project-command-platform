@@ -86,7 +86,7 @@ function iconButton(label, text, onClick, className = "ghost-button") {
 }
 
 function safeIntendedPath(pathname = location.pathname) {
-  return /^\/projects(?:\/[a-z0-9][a-z0-9._-]{2,63}(?:\/modules\/(?:overview|roadmap|units|task-network|gantt|outcomes|risks|metrics|materials))?)?$/.test(pathname) ? `${pathname}${location.search}` : "/projects";
+  return /^\/projects(?:\/[a-z0-9][a-z0-9._-]{2,63}(?:\/modules\/(?:overview|roadmap|units|task-network|gantt|outcomes|risks|metrics|materials)(?:\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127})?)?)?$/.test(pathname) ? `${pathname}${location.search}` : "/projects";
 }
 
 function formatDate(value) {
@@ -126,13 +126,13 @@ function handleExpired() {
 
 async function api(path, options = {}) {
   const headers = { accept: "application/json", ...(options.headers ?? {}) };
-  if (options.body !== undefined) headers["content-type"] = "application/json";
+  if (options.body !== undefined && options.rawBody === undefined) headers["content-type"] = "application/json";
   if (options.mutation && state.session?.csrfToken) headers["x-csrf-token"] = state.session.csrfToken;
   const response = await fetch(path, {
     method: options.method ?? "GET",
     credentials: "same-origin",
     headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body)
+    body: options.rawBody !== undefined ? options.rawBody : options.body === undefined ? undefined : JSON.stringify(options.body)
   });
   const payload = await response.json().catch(() => ({ error: "服务器返回了无法识别的响应" }));
   if (response.status === 401 && !options.allowUnauthorized) {
@@ -483,8 +483,13 @@ function canConfigureModules(project) {
 }
 
 function compactModuleHeading(project, module, presentation, version) {
+  const materials = module.type === "materials";
   return element("header", { className: "module-page-heading" }, [
-    element("div", {}, [element("span", { className: "eyebrow", text: presentation.kind === "campaign" ? "PUBLISHED CAMPAIGN MODULE" : "PUBLISHED PROJECT MODULE" }), element("h1", { text: module.title }), element("p", { text: `查看 ${project.name} 当前已发布的${module.title}事实。` })]),
+    element("div", {}, [
+      element("span", { className: "eyebrow", text: materials ? (presentation.kind === "campaign" ? "BATTLE MATERIAL INTAKE" : "PROJECT MATERIAL INTAKE") : (presentation.kind === "campaign" ? "PUBLISHED CAMPAIGN MODULE" : "PUBLISHED PROJECT MODULE") }),
+      element("h1", { text: module.title }),
+      element("p", { text: materials ? `归档 ${project.name} 的材料，形成可定位证据并进行只读项目问答。` : `查看 ${project.name} 当前已发布的${module.title}事实。` })
+    ]),
     element("div", { className: "module-heading-meta" }, [element("span", { className: "badge version", text: version }), element("span", { text: `更新于 ${formatDate(project.updatedAt)}` })])
   ]);
 }
@@ -498,7 +503,7 @@ function projectNotFound(projectId) {
   app.replaceChildren(appFrame(panel));
 }
 
-async function renderProject(projectId, requestedType = "overview") {
+async function renderProject(projectId, requestedType = "overview", materialId = "") {
   const definition = getClientModule(requestedType);
   if (!definition) { projectNotFound(projectId); return; }
   const requestId = ++state.routeRequest;
@@ -530,7 +535,7 @@ async function renderProject(projectId, requestedType = "overview") {
     ]);
     const projectPage = element("div", { className: "project-route" }, [
       breadcrumb,
-      ...(requestedType === "overview" ? [] : [compactModuleHeading(project, module, presentation, manifest.version)]),
+      ...(requestedType === "overview" || materialId ? [] : [compactModuleHeading(project, module, presentation, manifest.version)]),
       moduleNavigation(project, manifest, requestedType), slot
     ]);
     const configAction = canConfigureModules(project) ? [element("button", { type: "button", className: "admin-entry module-config-entry", text: "模块配置", onClick: event => openModuleConfiguration(project, presentation, event.currentTarget) })] : [];
@@ -548,7 +553,8 @@ async function renderProject(projectId, requestedType = "overview") {
           data: envelope.data, module: envelope.module, project, presentation, snapshot,
           query: new URLSearchParams(location.search), navigate, version: manifest.version,
           updatedAt: formatDate(snapshot.updatedAt || project.updatedAt), roleLabel: roleLabels[project.role] ?? project.role,
-          templateLabel: templateLabels[project.templateId] ?? project.templateId
+          templateLabel: templateLabels[project.templateId] ?? project.templateId,
+          materialId, api, showToast, session: state.session
         });
         slot.replaceChildren(rendered);
         document.title = `${project.name} · ${module.title}`;
@@ -837,6 +843,11 @@ async function renderRoute() {
     }
     if (!getClientModule(moduleMatch[2])) { projectNotFound(moduleMatch[1]); return; }
     await renderProject(moduleMatch[1], moduleMatch[2]);
+    return;
+  }
+  const materialMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/modules\/materials\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,127})$/);
+  if (materialMatch) {
+    await renderProject(materialMatch[1], "materials", materialMatch[2]);
     return;
   }
   navigate("/projects", { replace: true });

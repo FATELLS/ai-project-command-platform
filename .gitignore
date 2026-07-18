@@ -1,0 +1,20 @@
+.DS_Store
+node_modules/
+dist/
+coverage/
+*.log
+*.zip
+
+# Local runtime and credentials
+data/*
+!data/.gitkeep
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+.env
+.env.*
+!.env.example
+
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,14 @@
+{
+  "name": "ai-project-command-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "多项目、模板化、AI 辅助更新的项目作战管理平台",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "verify": "node scripts/verify.mjs",
+    "test": "npm run verify"
+  }
+}

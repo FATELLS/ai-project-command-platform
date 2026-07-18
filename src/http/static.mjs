@@ -3,7 +3,16 @@ import { join } from "node:path";
 
 const contentTypes = Object.freeze({
   "/app.js": "text/javascript; charset=utf-8",
-  "/styles.css": "text/css; charset=utf-8"
+  "/styles.css": "text/css; charset=utf-8",
+  "/assets/global-background.png": "image/png",
+  "/assets/brand-wave.png": "image/png",
+  "/assets/transformation-group-transparent-v2.png": "image/png"
+});
+
+const assetFiles = Object.freeze({
+  "/assets/global-background.png": ["assets", "global-background.png"],
+  "/assets/brand-wave.png": ["assets", "brand-wave.png"],
+  "/assets/transformation-group-transparent-v2.png": ["assets", "transformation-group-transparent-v2.png"]
 });
 
 export const securityHeaders = Object.freeze({
@@ -23,11 +32,17 @@ export function createStaticHandler(publicDirectory) {
     if (request.method !== "GET" && request.method !== "HEAD") return false;
     const pathname = url.pathname;
     const isApp = isApplicationRoute(pathname);
-    const fileName = isApp ? "index.html" : pathname === "/app.js" ? "app.js" : pathname === "/styles.css" ? "styles.css" : "";
-    if (!fileName) return false;
+    const fileParts = isApp
+      ? ["index.html"]
+      : pathname === "/app.js"
+        ? ["app.js"]
+        : pathname === "/styles.css"
+          ? ["styles.css"]
+          : assetFiles[pathname];
+    if (!fileParts) return false;
     let content;
     try {
-      content = await readFile(join(publicDirectory, fileName));
+      content = await readFile(join(publicDirectory, ...fileParts));
     } catch (error) {
       if (error.code === "ENOENT") return false;
       throw error;

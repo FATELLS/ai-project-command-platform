@@ -28,7 +28,7 @@
 - 项目服务：`src/services/project-service.mjs`、`src/repositories/project-repository.mjs`
 - SQLite：`src/db/`、`src/db/migrations/`
 - Xugu 迁移：`src/migration/legacy-project.mjs`
-- 前端：`public/index.html`、`public/styles.css`、`public/app.js`
+- 前端：`public/index.html`、`public/styles.css`、`public/app.js`；桌面视觉以 Xugu 稳定应用为基线，不得恢复深色侧栏式 SaaS 壳
 - 验证：`scripts/verify.mjs`、`test/`、`.planning/evidence/`
 
 ## 运行与验证

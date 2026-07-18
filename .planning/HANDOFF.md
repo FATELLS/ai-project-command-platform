@@ -17,6 +17,7 @@
 
 - Phase 1–2 已实现并通过验收，平台版本为 `0.3.0`。
 - 首个项目 `xugu-agentic-group` 与参考 v4.2 脱敏种子语义一致。
+- `xugu-agentic-group` 是首个 Xugu Agentic Group Schedule 作战项目；详情页标题、Banner、状态提示、事实与模块标签均按项目模板/术语配置渲染，新增标准项目不得复用 Xugu 作战文案。
 - 已有认证、基础角色、授权项目列表/检索/最近访问、项目切换、项目发布态概览和平台管理员生命周期 UI/API。
 - 默认数据库为 `data/platform.sqlite`，测试与统一验证只使用临时目录。
 - 参考项目位于 `../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console/`，必须继续只读。
@@ -29,6 +30,7 @@
 - SQLite：`src/db/`、`src/db/migrations/`
 - Xugu 迁移：`src/migration/legacy-project.mjs`
 - 前端：`public/index.html`、`public/styles.css`、`public/app.js`；桌面视觉以 Xugu 稳定应用为基线，不得恢复深色侧栏式 SaaS 壳
+- 项目表现配置：`public/app.js` 的 `projectPresentation` 只负责把服务端模板/术语映射到固定 UI 文案；项目 API 必须继续返回解析后的 `theme` 与 `terminology`，不得让项目注入页面代码。
 - 验证：`scripts/verify.mjs`、`test/`、`.planning/evidence/`
 
 ## 运行与验证

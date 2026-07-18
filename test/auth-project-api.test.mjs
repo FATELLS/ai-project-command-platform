@@ -120,10 +120,17 @@ test("viewer, editor, project admin, and platform admin role matrix is enforced"
     addUser(context.database, { id: "usr_outsider", loginName: "outsider", displayName: "Outsider" });
 
     const viewer = await login(context, "viewer");
-    assert.equal((await request(context, "/api/projects/xugu-agentic-group/public", { cookie: viewer.cookie })).response.status, 200);
+    const xuguDetail = await request(context, "/api/projects/xugu-agentic-group/public", { cookie: viewer.cookie });
+    assert.equal(xuguDetail.response.status, 200);
+    assert.equal(xuguDetail.payload.project.terminology.preset, "campaign");
+    assert.equal(xuguDetail.payload.project.terminology.unit, "作战单元");
+    assert.equal(xuguDetail.payload.project.theme.preset, "xugu-blue");
+    assert.equal(JSON.stringify(xuguDetail.payload.project).includes("terminologyJson"), false);
     assert.equal((await request(context, "/api/projects/xugu-agentic-group/draft", { cookie: viewer.cookie })).response.status, 404);
     const viewerList = await request(context, "/api/projects", { cookie: viewer.cookie });
     assert.equal(viewerList.payload.projects[0].role, "viewer");
+    assert.equal(viewerList.payload.projects[0].terminology.preset, "campaign");
+    assert.equal(JSON.stringify(viewerList.payload).includes("terminologyJson"), false);
     assert.equal(JSON.stringify(viewerList.payload).includes("draftVersion"), false);
 
     for (const role of ["project_editor", "project_admin"]) {
@@ -191,6 +198,14 @@ test("platform admin lifecycle is CSRF-protected and transactionally audited", a
     const project = context.database.prepare("SELECT * FROM projects WHERE id = 'second-project'").get();
     assert.notEqual(project.published_version_id, project.draft_version_id);
     assert.equal(context.database.prepare("SELECT role FROM project_members WHERE project_id = ? AND user_id = ?").get("second-project", admin.user.id).role, "project_admin");
+    const standardDetail = await request(context, "/api/projects/second-project/public", { cookie: admin.cookie });
+    assert.equal(standardDetail.payload.project.name, "Second project");
+    assert.equal(standardDetail.payload.project.terminology.preset, "standard");
+    assert.equal(standardDetail.payload.project.terminology.unit, "团队");
+    assert.equal(standardDetail.payload.project.theme.preset, "neutral-blue");
+    assert.equal(standardDetail.payload.snapshot.summary, "项目已创建，待配置团队、任务与里程碑。");
+    const standardList = await request(context, "/api/projects?q=second-project", { cookie: admin.cookie });
+    assert.equal(standardList.payload.projects[0].terminology.preset, "standard");
 
     const edited = await request(context, "/api/projects/second-project", {
       method: "PATCH", cookie: admin.cookie, csrf: admin.csrf,

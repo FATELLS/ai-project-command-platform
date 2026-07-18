@@ -48,11 +48,12 @@ function validateName(name) {
   return value;
 }
 
-function emptySnapshot(name, now) {
+function emptySnapshot(name, now, terminologyPreset) {
+  const campaign = terminologyPreset === "campaign";
   return {
     title: name,
     goal: "",
-    summary: "项目已创建，待配置作战单元和路线。",
+    summary: campaign ? "项目已创建，待配置作战单元和战役路线。" : "项目已创建，待配置团队、任务与里程碑。",
     projectStatus: "active",
     statusLabel: "刚刚创建",
     version: "v0.1",
@@ -101,7 +102,7 @@ export function createProjectService(database, options = {}) {
     if (projects.getProject(projectId)) throw new ProjectServiceError(409, "PROJECT_EXISTS", "项目 ID 已存在");
     return withTransaction(database, () => {
       const createdAt = timestamp();
-      const snapshot = emptySnapshot(name, createdAt);
+      const snapshot = emptySnapshot(name, createdAt, template.terminologyPreset);
       importLegacyProject(database, { published: snapshot, materials: [], draft: structuredClone(snapshot) }, {
         projectId,
         name,

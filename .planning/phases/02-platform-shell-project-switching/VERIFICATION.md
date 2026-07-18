@@ -32,6 +32,7 @@ The visual acceptance was rerun after the user-confirmed direction correction. D
 | First-run login and generic invalid credentials | PASS |
 | Admin login, Xugu facts, English/Chinese search and URL query | PASS |
 | Create standard project, switch to Xugu, URL/data synchronization | PASS |
+| Project-driven header/Banner/status/fact/module copy: standard vs campaign | PASS |
 | Archive and restore second project | PASS |
 | Viewer only sees assigned Xugu project and no management controls | PASS |
 | Null progress copy and published-data boundary | PASS |
@@ -47,6 +48,8 @@ Desktop visual evidence:
 - `.planning/evidence/phase2-xugu-reference-desktop-1440x900.jpg`
 - `.planning/evidence/phase2-xugu-aligned-projects-desktop-1280x720.jpg`
 - `.planning/evidence/phase2-xugu-aligned-detail-desktop-1280x720.jpg`
+
+The dynamic-copy browser matrix additionally created `standard-delivery-project` through the UI, confirmed standard terminology and the template-specific empty summary, switched back to `xugu-agentic-group`, and found no browser console warnings or errors.
 
 ## Boundaries retained
 

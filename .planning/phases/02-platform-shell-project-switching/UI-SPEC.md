@@ -134,6 +134,10 @@ Project navigation:
 Overview shell:
 
 - Hero with project name, stable ID, template, status, and published summary/goal.
+- Header brand, Banner kicker, current-state kicker, factual labels, and module labels come from the selected project's template and terminology configuration; they are not global Xugu constants.
+- `xugu-agentic-group` is the first campaign project and keeps “XUGU AGENTIC GROUP SCHEDULE”, “作战总览 / 作战单元 / 战役节点 / 战果档案” and campaign language.
+- `standard-project-v1` projects use their own project name plus “STANDARD PROJECT SCHEDULE”, “项目总览 / 团队 / 里程碑 / 交付物” and standard-project language.
+- Newly created summaries must use the selected template's terminology; standard projects must not inherit “作战单元” or “战役路线” copy.
 - The project hero and factual count row form the page's primary visual anchor.
 - Four factual count cards: units, tasks, roadmap stages, workstreams.
 - “Current status” panel shows `statusLabel`, `currentStage`, updated time, and published version.
@@ -206,7 +210,7 @@ Archive/restore:
 2. Invalid login shows generic inline error and remains on `/login`.
 3. Admin login reaches `/projects`; project cards show Xugu factual counts.
 4. Search by `xugu` and Chinese project name both work; URL query mirrors filters.
-5. Create a second standard project, navigate to it, switch back to Xugu, and verify both URL and data change together.
+5. Create a second standard project, navigate to it, switch back to Xugu, and verify URL, facts, header title, Banner, status kicker, factual labels, and module terminology all change together.
 6. Archive the second project, verify it leaves active results, then restore it from archived results.
 7. Viewer sees only assigned projects and cannot see management controls; direct mutation API is still rejected.
 8. Project shell shows published data and null progress as “暂无正式完成率”.

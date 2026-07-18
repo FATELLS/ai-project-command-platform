@@ -23,6 +23,41 @@ const templateLabels = Object.freeze({
   "standard-project-v1": "标准项目模板"
 });
 
+function projectPresentation(project = {}) {
+  const terminologyPreset = project.terminology?.preset;
+  const campaign = terminologyPreset ? terminologyPreset === "campaign" : project.templateId === "campaign-map-v1";
+  const terms = project.terminology ?? {};
+  return campaign ? {
+    kind: "campaign",
+    symbol: project.id === "xugu-agentic-group" ? "虚" : (project.name?.trim()?.[0] || "战"),
+    scheduleTitle: project.id === "xugu-agentic-group" ? "XUGU AGENTIC GROUP SCHEDULE" : "AGENTIC GROUP SCHEDULE",
+    homeLabel: "项目作战台",
+    overviewLabel: "作战总览",
+    heroKicker: "OVERALL MISSION · 总作战目标",
+    currentKicker: "CURRENT CAMPAIGN",
+    unit: terms.unit || "作战单元",
+    task: terms.task || "行动任务",
+    stage: terms.stage || "战役节点",
+    outcome: terms.outcome || "战果闭环",
+    workstream: "公司级战线",
+    modules: ["作战总览", "作战单元", "战役路线", "任务网络", "作战甘特", "战果档案", "风险", "指标", "材料"]
+  } : {
+    kind: "standard",
+    symbol: project.name?.trim()?.[0] || "项",
+    scheduleTitle: "STANDARD PROJECT SCHEDULE",
+    homeLabel: "项目中心",
+    overviewLabel: "项目总览",
+    heroKicker: "PROJECT OVERVIEW · 项目目标",
+    currentKicker: "CURRENT STATUS",
+    unit: terms.unit || "团队",
+    task: terms.task || "任务",
+    stage: terms.stage || "里程碑",
+    outcome: terms.outcome || "交付物",
+    workstream: "工作流",
+    modules: ["项目总览", "团队", "里程碑", "任务网络", "甘特", "交付物", "风险", "指标", "材料"]
+  };
+}
+
 function element(tag, options = {}, children = []) {
   const node = document.createElement(tag);
   let deferredValue;
@@ -181,6 +216,8 @@ function renderLogin() {
 
 function appFrame(mainContent, options = {}) {
   const user = state.session.user;
+  const project = options.project;
+  const presentation = options.presentation ?? projectPresentation(project);
   const logout = async () => {
       try { await api("/api/logout", { method: "POST", mutation: true }); } catch (error) { if (error.message === "AUTHENTICATION_REQUIRED") return; }
       state.session = null;
@@ -190,16 +227,17 @@ function appFrame(mainContent, options = {}) {
       history.replaceState({}, "", "/login");
       renderLogin();
     };
-  const brandLink = element("a", { className: "public-brand", href: "/projects", onClick: event => { event.preventDefault(); navigate("/projects"); } }, [
-    element("span", { className: "brand-symbol", ariaHidden: "true", text: "AI" }),
+  const brandDestination = project ? `/projects/${encodeURIComponent(project.id)}` : "/projects";
+  const brandLink = element("a", { className: "public-brand", href: brandDestination, onClick: event => { event.preventDefault(); navigate(brandDestination); } }, [
+    element("span", { className: "brand-symbol", ariaHidden: "true", text: project ? presentation.symbol : "AI" }),
     element("span", { className: "brand-title" }, [
-      element("strong", { text: "AI 项目作战管理平台" }),
-      element("small", { text: "AI PROJECT COMMAND PLATFORM" })
+      element("strong", { text: project?.name ?? "AI 项目作战管理平台" }),
+      element("small", { text: project ? presentation.scheduleTitle : "AI PROJECT COMMAND PLATFORM" })
     ])
   ]);
   const navigation = element("nav", { className: "public-nav", ariaLabel: "全局导航" }, [
     element("a", { className: options.projectMode ? "" : "active", href: "/projects", text: "项目作战台", onClick: event => { event.preventDefault(); navigate("/projects"); } }),
-    ...(options.projectMode ? [element("a", { className: "active", href: location.pathname, text: "项目总览" })] : []),
+    ...(options.projectMode ? [element("a", { className: "active", href: location.pathname, text: presentation.overviewLabel })] : []),
     element("span", { className: "nav-future", text: "模块中心 · 即将开放" })
   ]);
   const actions = element("div", { className: "header-actions" }, [
@@ -228,6 +266,7 @@ function statusControls(current, onSelect) {
 
 function projectCard(project, { recent = false, refresh } = {}) {
   const isArchived = project.status === "archived";
+  const presentation = projectPresentation(project);
   const title = element("h3");
   if (isArchived) title.textContent = project.name;
   else title.append(element("a", {
@@ -248,9 +287,9 @@ function projectCard(project, { recent = false, refresh } = {}) {
       element("span", { text: `更新于 ${formatDate(project.updatedAt)}` })
     ]),
     element("footer", { className: "card-footer" }, [
-      element("span", { text: `${project.unitCount} 单元` }),
-      element("span", { text: `${project.taskCount} 任务` }),
-      element("span", { text: `${project.stageCount} 阶段` }),
+      element("span", { text: `${project.unitCount} ${presentation.unit}` }),
+      element("span", { text: `${project.taskCount} ${presentation.task}` }),
+      element("span", { text: `${project.stageCount} ${presentation.stage}` }),
       element("span", { className: "badge role", text: roleLabels[project.role] ?? project.role })
     ])
   ]);
@@ -419,18 +458,19 @@ async function renderProject(projectId) {
       api("/api/projects?status=active&sort=recent")
     ]);
     const { project, snapshot } = detail;
+    const presentation = projectPresentation(project);
     const currentStageLabel = snapshot.currentStage != null && !/^\d+$/.test(String(snapshot.currentStage))
       ? String(snapshot.currentStage)
       : snapshot.statusLabel || "待配置";
     state.projects = list.projects;
-    document.title = `${project.name} · 项目概览`;
+    document.title = `${project.name} · ${presentation.overviewLabel}`;
     const counts = [
-      [snapshot.groups?.length ?? 0, "作战单元 / 团队"],
-      [snapshot.tasks?.length ?? 0, "行动任务"],
-      [snapshot.stages?.length ?? 0, "路线阶段"],
-      [snapshot.companyWorkstreams?.length ?? 0, "公司级工作流"]
+      [snapshot.groups?.length ?? 0, presentation.unit],
+      [snapshot.tasks?.length ?? 0, presentation.task],
+      [snapshot.stages?.length ?? 0, presentation.stage],
+      [snapshot.companyWorkstreams?.length ?? 0, presentation.workstream]
     ];
-    const navigation = [["Overview", false], ["Units", true], ["Roadmap", true], ["Task Network", true], ["Gantt", true], ["Outcomes", true], ["Risks", true], ["Metrics", true], ["Materials", true]];
+    const navigation = presentation.modules.map((label, index) => [label, index !== 0]);
     const projectNav = element("nav", { className: "project-nav section-card", ariaLabel: "项目模块" }, [
       element("h2", { text: "项目模块" }),
       element("ul", {}, navigation.map(([label, future]) => element("li", { className: future ? "" : "active", ariaCurrent: future ? undefined : "page" }, [
@@ -446,7 +486,7 @@ async function renderProject(projectId) {
       ]),
       element("section", { className: "project-hero goal-hero" }, [
         element("div", { className: "hero-copy goal-copy" }, [
-          element("span", { className: "single-goal", text: "OVERALL MISSION · 项目总目标" }),
+          element("span", { className: "single-goal", text: presentation.heroKicker }),
           element("h1", { text: project.name }),
           element("div", { className: "project-id", text: project.id }),
           element("p", { text: snapshot.summary || snapshot.goal || "暂无正式项目摘要" }),
@@ -460,12 +500,12 @@ async function renderProject(projectId) {
         element("aside", { className: "overall-card campaign-status-card" }, [
           element("div", { className: "planning-orbit", ariaHidden: "true" }, [element("i"), element("b", { text: "PLAN" })]),
           element("div", { className: "overall-copy" }, [
-            element("small", { text: "CURRENT CAMPAIGN" }),
+            element("small", { text: presentation.currentKicker }),
             element("b", { text: currentStageLabel }),
             element("span", { text: snapshot.statusLabel || "依据已发布项目事实推进当前行动" }),
             element("div", { className: "planning-badge", text: snapshot.overallProgress == null ? "当前按正式材料推进 · 不虚构完成比例" : `正式完成率 ${snapshot.overallProgress}%` })
           ]),
-          element("img", { src: "/assets/transformation-group-transparent-v2.png", alt: "项目联合指挥部" })
+          element("img", { src: "/assets/transformation-group-transparent-v2.png", alt: `${project.name}${presentation.unit}示意` })
         ])
       ]),
       element("section", { className: "fact-grid", ariaLabel: "项目事实计数" }, counts.map(([value, label]) => element("article", { className: "fact-card" }, [element("strong", { text: String(value) }), element("span", { text: label })]))),
@@ -487,7 +527,7 @@ async function renderProject(projectId) {
       ])
     ]);
     const content = element("div", { className: "project-layout" }, [projectNav, overview]);
-    app.replaceChildren(appFrame(content, { projectMode: true, switcher: projectSwitcher(list.projects, project.id) }));
+    app.replaceChildren(appFrame(content, { projectMode: true, project, presentation, switcher: projectSwitcher(list.projects, project.id) }));
   } catch (error) {
     if (error.message === "AUTHENTICATION_REQUIRED") return;
     const notFound = error.status === 404;

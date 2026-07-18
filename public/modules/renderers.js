@@ -388,6 +388,10 @@ function proposalPath(context, suffix = "") {
   return `/api/projects/${encodeURIComponent(context.project.id)}/change-proposals${suffix}`;
 }
 
+function releasePath(context, suffix = "") {
+  return `/api/projects/${encodeURIComponent(context.project.id)}/release${suffix}`;
+}
+
 function materialsUiPath(context, suffix = "") {
   return `/projects/${encodeURIComponent(context.project.id)}/modules/materials${suffix}`;
 }
@@ -424,7 +428,9 @@ function localTabs(context, view) {
   const qaLabel = context.presentation.kind === "campaign" ? "战情问答" : "项目问答";
   const proposalLabel = context.presentation.kind === "campaign" ? "作战更新提案" : "项目更新提案";
   const base = `/projects/${encodeURIComponent(context.project.id)}/modules/materials`;
-  const tabs = [["ledger", "材料台账"], ["qa", qaLabel], ["proposals", proposalLabel]].map(([value, label]) => el("a", {
+  const entries = [["ledger", "材料台账"], ["qa", qaLabel], ["proposals", proposalLabel]];
+  if (["platform_admin", "project_admin", "project_editor"].includes(context.project.role)) entries.push(["release", context.presentation.kind === "campaign" ? "审核与发布" : "审核发布中心"]);
+  const tabs = entries.map(([value, label]) => el("a", {
     href: `${base}?view=${value}`, ariaCurrent: view === value ? "page" : null, text: label,
     onClick: event => { event.preventDefault(); context.navigate(`${base}?view=${value}`); }
   }));
@@ -846,6 +852,8 @@ function renderQa(context, root) {
 const generationStateLabels = Object.freeze({ queued: "等待生成资源", retrieving_evidence: "锁定并整理证据", generating: "生成结构化增量", repairing: "修复结构输出", validating: "执行服务端校验", succeeded: "结构化提案已生成", failed_retryable: "生成暂时失败，可重试", failed_terminal: "生成失败，未创建提案", stale: "发布基准已变化" });
 const semanticLabels = Object.freeze({ fact: "事实 fact", plan: "计划 plan", suggestion: "建议 suggestion", unknown: "待确认 unknown" });
 const operationLabels = Object.freeze({ create: "新增建议", update: "更新建议", delete: "删除建议" });
+const proposalStatusLabels = Object.freeze({ pending: "待审核", accepted: "已合并草稿", rejected: "已驳回", superseded: "基准已过期" });
+const reviewLabels = Object.freeze({ pending: "待决定", accepted: "已接受", rejected: "已驳回" });
 
 function taskHref(context, id) { return materialsUiPath(context, `/generation-tasks/${encodeURIComponent(id)}`); }
 function proposalHref(context, id, changeId = "") { const query = changeId ? `?change=${encodeURIComponent(changeId)}` : ""; return materialsUiPath(context, `/proposals/${encodeURIComponent(id)}${query}`); }
@@ -868,7 +876,7 @@ function renderProposalWorkspace(context, root) {
     const stale=tasks.filter(item=>item.state==="stale").length;
     const proposalCards=proposals.map(item=>el("article",{className:"proposal-row"},[
       el("div",{},[el("span",{className:"eyebrow",text:"VALIDATED CHANGE PROPOSAL"}),el("h3",{text:`提案 ${item.proposalId}`}),el("p",{text:item.summary})]),
-      definitionList([["基准版本",item.baseVersionLabel??item.baseVersionId],["模板",`${item.template?.id??"—"} · ${item.template?.version??"—"}`],["建议变更",`${item.changes?.length??0} 项`],["状态",item.status==="pending"?"待后续审核":"基准版本已过期"]]),
+      definitionList([["基准版本",item.baseVersionLabel??item.baseVersionId],["模板",`${item.template?.id??"—"} · ${item.template?.version??"—"}`],["建议变更",`${item.changes?.length??0} 项`],["状态",proposalStatusLabels[item.status]??item.status]]),
       linkTo(context,proposalHref(context,item.proposalId),"查看结构化提案","secondary-button")
     ]));
     const taskCards=tasks.map(item=>{const usage=generationUsage(item);return el("article",{className:"generation-task-row"},[
@@ -899,24 +907,127 @@ function renderGenerationTaskDetail(context, root) {
     }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h1",{text:error.status===404?"生成任务不存在或你无权访问":"无法加载生成任务"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"secondary-button",text:"返回更新提案",onClick:()=>context.navigate(materialsUiPath(context,"?view=proposals"))})]));}finally{root.setAttribute("aria-busy","false");}};void load();
 }
 
-function valueText(value){return typeof value==="string"?value:JSON.stringify(value);}
+function valueText(value){
+  if(value===null||value===undefined||value==="")return "—";
+  if(Array.isArray(value))return value.join("、");
+  if(typeof value==="object")return Object.entries(value).map(([key,item])=>`${key}: ${valueText(item)}`).join("；");
+  if(typeof value==="boolean")return value?"是":"否";
+  return String(value);
+}
+
+function patchRows(value,prefix=""){
+  const rows=[];
+  for(const [key,item] of Object.entries(value??{})){
+    const path=prefix?`${prefix}.${key}`:key;
+    if(item&&typeof item==="object"&&!Array.isArray(item))rows.push(...patchRows(item,path));
+    else rows.push([path,item]);
+  }
+  return rows;
+}
+
+function setPatchValue(target,path,value){
+  const parts=path.split(".");let cursor=target;
+  for(const part of parts.slice(0,-1))cursor=cursor[part]??={};
+  cursor[parts.at(-1)]=value;
+}
+
+function editorValue(raw,original){
+  if(typeof original==="boolean")return Boolean(raw);
+  if(typeof original==="number")return Number(raw);
+  if(Array.isArray(original))return String(raw).split(",").map(item=>item.trim()).filter(Boolean);
+  return String(raw);
+}
+
+function openReviewEditor(context,change,onSaved,returnFocus){
+  modalSheet({title:"编辑后接受",eyebrow:"FIELD-BOUND REVIEW EDIT",project:context.project,returnFocus,className:"material-sheet review-edit-sheet",closeLabel:"关闭审核编辑",titleId:"review-edit-title",render:controls=>{
+    const patch=change.review?.editedPatch??change.patch, inputs=new Map();
+    const fields=patchRows(patch).map(([path,value],index)=>{
+      const id=`review-field-${index}`;let input;
+      if(typeof value==="boolean")input=el("input",{id,type:"checkbox",checked:value});
+      else if(typeof value==="number")input=el("input",{id,type:"number",value:String(value),step:"any",required:true});
+      else if(String(path).toLowerCase().includes("date"))input=el("input",{id,type:"date",value:String(value??"")});
+      else if(String(value??"").length>80)input=el("textarea",{id,rows:3,value:String(value??""),required:true});
+      else input=el("input",{id,type:"text",value:Array.isArray(value)?value.join(", "):String(value??""),required:true});
+      inputs.set(path,{input,original:value});return el("div",{className:"field"},[el("label",{htmlFor:id,text:path}),input,Array.isArray(value)?el("small",{text:"多个值请用英文逗号分隔"}):null]);
+    });
+    const note=el("textarea",{id:"review-note",rows:3,maxLength:500,placeholder:"可选：记录修改原因"});
+    const error=el("p",{className:"form-error",role:"alert"}),submit=el("button",{type:"submit",className:"primary-button",text:"校验并接受"});
+    const form=el("form",{className:"review-edit-form",onSubmit:async event=>{event.preventDefault();error.textContent="";submit.disabled=true;controls.setCommitting(true);try{const edited={};for(const [path,entry] of inputs){setPatchValue(edited,path,editorValue(entry.input.type==="checkbox"?entry.input.checked:entry.input.value,entry.original));}await context.api(proposalPath(context,`/${encodeURIComponent(context.proposalId)}/review/${encodeURIComponent(change.changeId)}`),{method:"PATCH",mutation:true,body:{decision:"accepted",patch:edited,note:note.value}});controls.setCommitting(false);controls.close();await onSaved();context.showToast("编辑已通过服务端校验并接受");}catch(requestError){error.textContent=requestError.message;controls.setCommitting(false);submit.disabled=false;}}},[...fields,el("div",{className:"field"},[el("label",{htmlFor:"review-note",text:"审核说明"}),note]),error,el("footer",{className:"sheet-actions"},[el("button",{type:"button",className:"secondary-button",text:"取消",onClick:controls.close}),submit])]);
+    controls.body.replaceChildren(el("p",{className:"material-boundary",text:"这里只编辑当前变更的受控字段；保存前会再次执行 Schema、证据、日期与依赖校验。"}),form);
+  }});
+}
+
 function renderProposalDetail(context, root) {
-  const load=async()=>{root.setAttribute("aria-busy","true");try{const response=await context.api(proposalPath(context,`/${encodeURIComponent(context.proposalId)}`));const proposal=response.proposal;const selectedId=context.query.get("change");const selected=proposal.changes.find(item=>item.changeId===selectedId)??proposal.changes[0];const base=proposalHref(context,proposal.proposalId);const index=el("nav",{className:"proposal-change-index",ariaLabel:"建议变更索引"},proposal.changes.map(item=>linkTo(context,proposalHref(context,proposal.proposalId,item.changeId),`${operationLabels[item.operation]} · ${item.targetId}`,item.changeId===selected.changeId?"selected":"")));
-      const fields=Object.entries(selected.patch).flatMap(([key,value])=>[el("dt",{text:key}),el("dd",{text:valueText(value)})]);const evidence=selected.evidence??[];
-      const evidenceList=evidence.length?el("ol",{className:"proposal-evidence-list"},evidence.map(item=>{const href=materialsUiPath(context,`/${encodeURIComponent(item.materialId)}?evidence=${encodeURIComponent(item.evidenceId)}`);return el("li",{},[linkTo(context,href,`${item.materialName??item.materialId} · ${locatorLabel(item)}`),el("small",{text:item.evidenceId})]);})):el("p",{className:"form-error",text:"该项没有直接证据引用。"});
-      const warnings=[...(proposal.warnings??[]),...(selected.warnings??[])];
-      root.replaceChildren(localTabs(context,"proposals"),linkTo(context,materialsUiPath(context,"?view=proposals"),"← 返回更新提案","back-link"),el("section",{className:"materials-detail-card proposal-detail"},[
-        el("header",{className:"material-detail-heading"},[el("div",{},[el("span",{className:"eyebrow",text:"VALIDATED CHANGE PROPOSAL"}),el("h1",{text:`结构化提案 ${proposal.proposalId}`})]),el("span",{className:"generation-state state-succeeded",text:"结构校验通过"})]),
-        el("p",{className:"material-boundary",text:`这是相对于发布版本 ${proposal.baseVersionLabel??proposal.baseVersionId} 的结构化建议；尚未写入草稿，也未发布。`}),
-        el("section",{className:"validation-summary"},[el("h2",{text:"服务端校验结果"}),definitionList([["Schema / 字段","通过"],["项目 / 来源归属","通过"],["发布基准 / 目标","通过"],["高影响字段证据","通过"],["日期 / 依赖 DAG","通过"],["重复 / 冲突","通过"],["变更数量",`${proposal.changes.length} 项`],["校验时间",uiDate(proposal.validation?.validatedAt)]])]),
-        el("div",{className:"proposal-detail-layout"},[index,el("article",{className:"proposal-change-card",ariaLive:"polite"},[
-          el("header",{},[el("span",{className:"eyebrow",text:selected.module}),el("h2",{text:`${operationLabels[selected.operation]} · ${selected.targetId}`})]),
-          definitionList([["changeId",selected.changeId],["语义类型",semanticLabels[selected.semanticType]??selected.semanticType],["置信度",`${selected.confidence>=.8?"高":selected.confidence>=.6?"中":"低"}（${selected.confidence.toFixed(2)}）`],["提示",["unknown","suggestion"].includes(selected.semanticType)?"不可视为已确认事实":"必须结合证据审核"]]),
-          el("h3",{text:"结构化字段"}),el("dl",{className:"proposal-patch-fields"},fields),el("h3",{text:"引用证据"}),evidenceList,
-          warnings.length?el("section",{className:"proposal-warnings"},[el("h3",{text:"警告"}),el("ul",{},[...new Set(warnings)].map(code=>el("li",{text:code})))]):el("p",{className:"validation-pass",text:"该项没有额外警告。"})
-        ])])
-      ]));
-    }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h1",{text:error.status===404?"更新提案不存在或你无权访问":"无法加载更新提案"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"secondary-button",text:"返回更新提案",onClick:()=>context.navigate(materialsUiPath(context,"?view=proposals"))})]));}finally{root.setAttribute("aria-busy","false");}};void load();
+  const load=async()=>{root.setAttribute("aria-busy","true");try{
+    const [detail,reviewResponse]=await Promise.all([context.api(proposalPath(context,`/${encodeURIComponent(context.proposalId)}`)),context.api(proposalPath(context,`/${encodeURIComponent(context.proposalId)}/review`))]);
+    const proposal=reviewResponse.proposal,evidenceByChange=new Map((detail.proposal.changes??[]).map(item=>[item.changeId,item.evidence??[]]));
+    const selectedId=context.query.get("change"),selected=proposal.changes.find(item=>item.changeId===selectedId)??proposal.changes[0];
+    const index=el("nav",{className:"proposal-change-index",ariaLabel:"建议变更索引"},proposal.changes.map(item=>linkTo(context,proposalHref(context,proposal.proposalId,item.changeId),`${reviewLabels[item.review?.decision??"pending"]} · ${operationLabels[item.operation]} · ${item.targetId}`,item.changeId===selected.changeId?"selected":"")));
+    const effectivePatch=selected.review?.editedPatch??selected.patch,originalRows=patchRows(selected.original??{}),suggestedRows=patchRows(effectivePatch),evidence=evidenceByChange.get(selected.changeId)??[];
+    const evidenceList=evidence.length?el("ol",{className:"proposal-evidence-list"},evidence.map(item=>{const href=materialsUiPath(context,`/${encodeURIComponent(item.materialId)}?evidence=${encodeURIComponent(item.evidenceId)}`);return el("li",{},[linkTo(context,href,`${item.materialName??item.materialId} · ${locatorLabel(item)}`),el("small",{text:item.claim??item.evidenceId})]);})):el("p",{className:"form-error",text:"该项没有直接证据引用。"});
+    const decide=async decision=>{try{await context.api(proposalPath(context,`/${encodeURIComponent(proposal.proposalId)}/review/${encodeURIComponent(selected.changeId)}`),{method:"PATCH",mutation:true,body:{decision}});context.showToast(decision==="accepted"?"该项已接受":"该项已驳回");await load();}catch(error){context.showToast(error.message);}};
+    const modules=[...new Set(proposal.changes.map(item=>item.module))],actions=[];
+    if(reviewResponse.capabilities.review){actions.push(el("button",{type:"button",className:"primary-button",text:"接受此项",onClick:()=>void decide("accepted")}),el("button",{type:"button",className:"danger-button",text:"驳回此项",onClick:()=>void decide("rejected")}),el("button",{type:"button",className:"secondary-button",text:"编辑后接受",onClick:event=>openReviewEditor(context,selected,load,event.currentTarget)}));}
+    const moduleActions=reviewResponse.capabilities.review?el("div",{className:"module-review-actions"},modules.map(module=>el("button",{type:"button",className:"ghost-button",text:`接受 ${module} 模块`,onClick:async()=>{try{await context.api(proposalPath(context,`/${encodeURIComponent(proposal.proposalId)}/review/modules/${encodeURIComponent(module)}`),{method:"POST",mutation:true});context.showToast(`${module} 模块已接受`);await load();}catch(error){context.showToast(error.message);}}}))):null;
+    const merge=reviewResponse.capabilities.merge?el("button",{type:"button",className:"primary-button",text:"事务合并到草稿",onClick:async()=>{try{const result=await context.api(proposalPath(context,`/${encodeURIComponent(proposal.proposalId)}/merge`),{method:"POST",mutation:true,body:{}});context.showToast(`已生成独立草稿 ${result.draft.versionLabel}`);await load();}catch(error){context.showToast(error.message);}}}):null;
+    const warnings=[...(proposal.warnings??[]),...(selected.warnings??[])];
+    root.replaceChildren(localTabs(context,"proposals"),linkTo(context,materialsUiPath(context,"?view=proposals"),"← 返回更新提案","back-link"),el("section",{className:"materials-detail-card proposal-detail review-detail"},[
+      el("header",{className:"material-detail-heading"},[el("div",{},[el("span",{className:"eyebrow",text:"HUMAN REVIEW · STRUCTURED DELTA"}),el("h1",{text:`审核提案 ${proposal.proposalId}`})]),el("span",{className:`review-state review-${selected.review?.decision??"pending"}`,text:reviewLabels[selected.review?.decision??"pending"]})]),
+      el("p",{className:"material-boundary",text:`基准为发布版本 ${proposal.baseVersionLabel??proposal.baseVersionId}。接受只记录审核决定；只有“事务合并到草稿”才会创建新的草稿版本。`}),
+      el("p",{className:"validation-pass",text:"服务端校验结果：Schema、项目归属、证据、日期与依赖检查均已通过；审核编辑会再次校验。"}),
+      el("div",{className:"review-summary-grid"},[summaryCard("待决定",reviewResponse.capabilities.pending,"必须逐项完成"),summaryCard("已接受",reviewResponse.capabilities.accepted,"等待事务合并"),summaryCard("已驳回",reviewResponse.capabilities.rejected,"保留审核记录"),summaryCard("草稿合并",reviewResponse.merged?"已完成":"未执行","不会直接发布")]),
+      moduleActions,
+      el("div",{className:"proposal-detail-layout"},[index,el("article",{className:"proposal-change-card",ariaLive:"polite"},[
+        el("header",{},[el("span",{className:"eyebrow",text:selected.module}),el("h2",{text:`${operationLabels[selected.operation]} · ${selected.targetId}`})]),
+        definitionList([["changeId",selected.changeId],["语义类型",semanticLabels[selected.semanticType]??selected.semanticType],["置信度",`${selected.confidence>=.8?"高":selected.confidence>=.6?"中":"低"}（${Number(selected.confidence).toFixed(2)}）`],["审核人",selected.review?.reviewedByName??"待审核"]]),
+        el("h3",{text:"结构化字段差异"}),
+        el("div",{className:"review-diff-grid"},[el("section",{},[el("h3",{text:"原值"}),selected.operation==="create"?el("p",{className:"empty-source",text:"新增项没有原值"}):el("dl",{className:"proposal-patch-fields"},originalRows.flatMap(([key,value])=>[el("dt",{text:key}),el("dd",{text:valueText(value)})]))]),el("section",{},[el("h3",{text:selected.review?.editedPatch?"审核编辑值":"建议值"}),el("dl",{className:"proposal-patch-fields"},suggestedRows.flatMap(([key,value])=>[el("dt",{text:key}),el("dd",{text:valueText(value)})]))])]),
+        el("h3",{text:"引用证据"}),evidenceList,
+        warnings.length?el("section",{className:"proposal-warnings"},[el("h3",{text:"警告"}),el("ul",{},[...new Set(warnings)].map(code=>el("li",{text:code})))]):el("p",{className:"validation-pass",text:"该项没有额外警告。"}),
+        actions.length?el("div",{className:"review-actions"},actions):null
+      ])]),
+      merge?el("footer",{className:"merge-bar"},[el("div",{},[el("strong",{text:"所有变更已完成审核"}),el("p",{text:"合并会以当前草稿为源创建新草稿；任一校验失败将整体回滚。"})]),merge]):null
+    ]));
+  }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h1",{text:error.status===404?"更新提案不存在或你无权访问":"无法加载更新提案"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"secondary-button",text:"返回更新提案",onClick:()=>context.navigate(materialsUiPath(context,"?view=proposals"))})]));}finally{root.setAttribute("aria-busy","false");}};void load();
+}
+
+function renderReleaseCenter(context,root){
+  const campaign=context.presentation.kind==="campaign",load=async()=>{root.setAttribute("aria-busy","true");try{
+    const [preview,history,members,audit]=await Promise.all([context.api(releasePath(context,"/preview")),context.api(releasePath(context,"/history")),context.api(`/api/projects/${encodeURIComponent(context.project.id)}/members`).catch(()=>({items:[]})),context.api(releasePath(context,"/audit")).catch(()=>({items:[]}))]);
+    const publish=preview.capabilities.publish?el("form",{className:"release-form",onSubmit:async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector("button");button.disabled=true;try{const result=await context.api(releasePath(context,"/publish"),{method:"POST",mutation:true,body:{previewToken:preview.previewToken,versionLabel:form.elements.versionLabel.value.trim(),acknowledged:form.elements.acknowledged.checked}});context.showToast(`已发布 ${result.versionLabel}`);context.navigate(materialsUiPath(context,"?view=release"));}catch(error){context.showToast(error.message);button.disabled=false;}}},[el("div",{className:"field"},[el("label",{htmlFor:"release-version-label",text:"发布版本标签"}),el("input",{id:"release-version-label",name:"versionLabel",required:true,pattern:"[A-Za-z0-9][A-Za-z0-9._-]{0,79}",placeholder:"例如：v1.1.0"})]),el("label",{className:"release-ack"},[el("input",{type:"checkbox",name:"acknowledged",required:true}),el("span",{text:"我已核对草稿差异、结构校验和待审核项"})]),el("button",{type:"submit",className:"primary-button",text:campaign?"发布当前作战版本":"发布当前项目版本"})]):el("p",{className:"empty-source",text:preview.changes.count?"当前角色只能预览，发布需要项目管理员权限。":"草稿与发布版本一致，暂无可发布差异。"});
+    const rollback=preview.capabilities.rollback?el("button",{type:"button",className:"danger-button",text:"回滚到直接上一发布版本",onClick:async event=>{event.currentTarget.disabled=true;try{await context.api(releasePath(context,"/rollback"),{method:"POST",mutation:true,body:{confirmed:true,targetVersionId:preview.rollbackTarget.versionId}});context.showToast("已回滚并创建新的草稿基线");context.navigate(materialsUiPath(context,"?view=release"));}catch(error){context.showToast(error.message);event.currentTarget.disabled=false;}}}):null;
+    const checklist=[["草稿结构校验",preview.checklist.graphValid],["存在待发布差异",preview.checklist.hasChanges],["没有未决定审核项",preview.checklist.unresolvedReviewItems===0],["提案不能直达发布",preview.checklist.proposalToPublishedDirectPath===false]];
+    const checklistNode=el("ul",{className:"release-checklist"},checklist.map(([label,passed])=>el("li",{className:passed?"passed":"blocked"},[el("strong",{text:passed?"通过":"阻止"}),el("span",{text:label})])));
+    const moduleCounts=preview.changes.count
+      ? el("div",{className:"release-module-counts"},Object.entries(preview.changes.byModule).map(([module,count])=>el("span",{className:"count-pill",text:`${module} · ${count}`})))
+      : el("p",{className:"empty-source",text:"当前草稿与发布版本一致。"});
+    const previewCard=el("section",{className:"release-preview-card"},[
+      el("h3",{text:"草稿差异预览"}),moduleCounts,el("h3",{text:"发布检查清单"}),checklistNode,
+      preview.validation.valid?el("p",{className:"validation-pass",text:preview.validation.message}):el("p",{className:"form-error",text:preview.validation.message})
+    ]);
+    const actionCard=el("aside",{className:"release-action-card"},[
+      el("h3",{text:"受控发布"}),publish,
+      rollback?el("div",{className:"rollback-panel"},[el("h3",{text:"安全回滚"}),el("p",{text:`仅可回滚到直接上一发布版本（版本 ID ${preview.rollbackTarget.versionId}）。`}),rollback]):null
+    ]);
+    const historyNode=history.items.length
+      ? el("ol",{className:"release-history"},history.items.map(item=>el("li",{},[el("strong",{text:`${item.action==="rollback"?"回滚":"发布"} · ${item.versionLabel}`}),el("span",{text:`${item.createdBy} · ${uiDate(item.createdAt)}`})])))
+      : el("p",{className:"empty-source",text:"尚无发布事件。"});
+    const memberRows=members.items.map(item=>el("tr",{},[el("td",{text:item.displayName}),el("td",{text:item.loginName}),el("td",{text:item.role}),el("td",{text:item.status})]));
+    const membersNode=memberRows.length
+      ? el("div",{className:"table-scroll"},[el("table",{className:"module-table member-table"},[el("thead",{},[el("tr",{},["成员","账号","角色","状态"].map(label=>el("th",{text:label})))]),el("tbody",{},memberRows)])])
+      : el("p",{className:"empty-source",text:"无权查看成员或尚无成员。"});
+    const auditNode=audit.items.length?el("details",{className:"audit-log"},[
+      el("summary",{text:`审计日志（${audit.items.length}）`}),
+      el("ol",{},audit.items.map(item=>el("li",{},[el("strong",{text:item.action}),el("span",{text:`${item.userName??"系统"} · ${uiDate(item.createdAt)}`})])))
+    ]):null;
+    root.replaceChildren(localTabs(context,"release"),el("section",{className:"materials-workspace-card release-center"},[
+      el("header",{className:"proposal-workspace-header"},[el("div",{},[el("span",{className:"eyebrow",text:campaign?"CAMPAIGN REVIEW & RELEASE":"PROJECT REVIEW & RELEASE"}),el("h2",{text:campaign?"审核与发布":"审核发布中心"}),el("p",{text:"固定渲染器提供草稿预览、检查清单、发布和直接前驱回滚；AI 无法执行这些动作。"})])]),
+      el("div",{className:"release-version-grid"},[summaryCard("当前发布",preview.published.versionLabel,`${preview.published.tasks} ${context.presentation.task}`),summaryCard("当前草稿",preview.draft.versionLabel,`${preview.draft.tasks} ${context.presentation.task}`),summaryCard("待发布差异",preview.changes.count,"按模块确定性计算"),summaryCard("未决定审核",preview.checklist.unresolvedReviewItems,"发布前必须人工核对")]),
+      el("div",{className:"release-layout"},[previewCard,actionCard]),
+      el("section",{className:"release-operations-grid"},[el("div",{},[el("h3",{text:"发布历史"}),historyNode]),el("div",{},[el("h3",{text:"项目成员"}),membersNode])]),
+      auditNode
+    ]));
+  }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(localTabs(context,"release"),el("section",{className:"module-error error-panel",role:"alert"},[el("h2",{text:"无法加载审核发布中心"}),el("p",{text:error.message}),el("button",{type:"button",className:"primary-button",text:"重新加载",onClick:load})]));}finally{root.setAttribute("aria-busy","false");}};void load();
 }
 
 export function renderMaterials(context) {
@@ -927,6 +1038,7 @@ export function renderMaterials(context) {
   else if (context.materialId) renderMaterialDetail(context, root);
   else if (context.query.get("view") === "qa") renderQa(context, root);
   else if (context.query.get("view") === "proposals") renderProposalWorkspace(context, root);
+  else if (context.query.get("view") === "release") renderReleaseCenter(context, root);
   else renderLedger(context, root);
   return root;
 }

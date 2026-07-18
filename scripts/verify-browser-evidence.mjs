@@ -25,6 +25,12 @@ const phase5RequiredCases = [
   "role-permissions", "project-switch-clearing", "no-phase6-actions", "tablet-responsive",
   "mobile-responsive", "security-payload", "browser-console", "reference-integrity"
 ];
+const phase6RequiredCases = [
+  "xugu-review-workspace", "standard-release-center", "original-proposed-evidence",
+  "single-review", "module-accept", "edit-revalidation", "atomic-draft-merge",
+  "release-preview", "publish", "rollback", "role-permissions", "project-switch-clearing",
+  "tablet-responsive", "mobile-responsive", "security-payload", "browser-console", "reference-integrity"
+];
 
 function sha256(bytes) {
   return createHash("sha256").update(bytes).digest("hex");
@@ -61,7 +67,8 @@ assert.equal(manifest.schemaVersion, "1.0.0");
 assert.ok([
   "03-module-registry-project-templates",
   "04-project-materials-evidence",
-  "05-structured-change-proposals"
+  "05-structured-change-proposals",
+  "06-review-publish-operations"
 ].includes(manifest.phase), "unsupported browser evidence phase");
 assert.ok(manifest.evidence && typeof manifest.evidence === "object");
 const phaseNumber = manifest.phase.slice(1, 2);
@@ -69,7 +76,9 @@ const requiredCases = phaseNumber === "3"
   ? phase3RequiredCases
   : phaseNumber === "4"
     ? phase4RequiredCases
-    : phase5RequiredCases;
+    : phaseNumber === "5"
+      ? phase5RequiredCases
+      : phase6RequiredCases;
 
 for (const [key, item] of Object.entries(manifest.evidence)) {
   assert.match(item.file, new RegExp(`^\\.planning/evidence/phase${phaseNumber}-[a-z0-9-]+\\.jpg$`), `${key} has an unsafe evidence path`);

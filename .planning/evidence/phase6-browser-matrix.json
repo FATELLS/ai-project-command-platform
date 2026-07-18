@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.0.0",
+  "phase": "06-review-publish-operations",
+  "generatedAt": "2026-07-18T17:27:00+08:00",
+  "environment": {
+    "browser": "Codex in-app Browser",
+    "fixture": "scripts/run-phase6-browser-fixture.mjs",
+    "baseUrl": "http://127.0.0.1:4176",
+    "hostViewport": "1280x720"
+  },
+  "evidence": {
+    "review": { "file": ".planning/evidence/phase6-xugu-review-desktop-1280x720.jpg", "sha256": "ea78419cd19e4140b04624d79a44f40dd9f9f49fd282f2f419a9b93f3ef93b93", "width": 1280, "height": 720 },
+    "accepted": { "file": ".planning/evidence/phase6-xugu-review-accepted-1280x720.jpg", "sha256": "b8eb08dc10896b0ace979acbf9e90c899d931ca1b178ee7df4151393a0ea0b98", "width": 1280, "height": 720 },
+    "preview": { "file": ".planning/evidence/phase6-xugu-release-preview-1280x720.jpg", "sha256": "c63ad780b4040aef8443afa172dc96ec359aa90c5c90529cefcd2c863589cdd1", "width": 1280, "height": 720 },
+    "published": { "file": ".planning/evidence/phase6-xugu-published-1280x720.jpg", "sha256": "272fc00b49ff4a1ea0b40739f00fa3c22a2a921eeeb7026fe7bd633efa79b5c7", "width": 1280, "height": 720 },
+    "rollback": { "file": ".planning/evidence/phase6-xugu-rollback-1280x720.jpg", "sha256": "119d4dce66761dc1f02e1c49880b108ffbbe3eca7330de812d6433115f05a1e3", "width": 1280, "height": 720 },
+    "standard": { "file": ".planning/evidence/phase6-standard-release-1280x720.jpg", "sha256": "aeb348f6f57d89aae02f81acc128e9a6a52d1730e9dbe8fa5bae3d9b19114b75", "width": 1280, "height": 720 }
+  },
+  "cases": [
+    { "id": "xugu-review-workspace", "status": "PASS", "expected": "虚谷项目保持桌面作战地图框架并提供审核入口。", "actual": "XUGU 标题、项目导航、作战术语和审核工作区同时呈现。", "evidence": "review" },
+    { "id": "standard-release-center", "status": "PASS", "expected": "标准项目使用项目/团队/任务话术。", "actual": "标准项目显示 STANDARD PROJECT SCHEDULE 和审核发布中心，无虚谷事实串入。", "evidence": "standard" },
+    { "id": "original-proposed-evidence", "status": "PASS", "expected": "每项展示原值、建议值、语义、置信度和可定位证据。", "actual": "新增项明确无原值，建议字段与人工材料正文定位均可见。", "evidence": "review" },
+    { "id": "single-review", "status": "PASS", "expected": "管理员可逐项接受、驳回或编辑后接受。", "actual": "三种单项动作均由角色能力控制并调用项目级审核 API。", "evidence": "accepted" },
+    { "id": "module-accept", "status": "PASS", "expected": "管理员可整模块接受。", "actual": "task-network 模块接受后待决定归零并出现事务合并动作。", "evidence": "accepted" },
+    { "id": "edit-revalidation", "status": "PASS", "expected": "字段编辑保存前重新校验。", "actual": "不存在的 missing-unit 被 TASK_UNIT_NOT_FOUND 拒绝，合法 rd 编辑才可接受。", "evidence": "accepted" },
+    { "id": "atomic-draft-merge", "status": "PASS", "expected": "合并创建新草稿且不改变发布版本。", "actual": "草稿由 29 增至 30 个行动任务，发布仍为 v4.2；注入失败测试无残留版本。", "evidence": "preview" },
+    { "id": "release-preview", "status": "PASS", "expected": "发布前展示确定性差异和检查清单。", "actual": "仅显示 task-network 1 项差异，四项检查全部通过。", "evidence": "preview" },
+    { "id": "publish", "status": "PASS", "expected": "人工确认后发布并刷新全页版本上下文。", "actual": "发布为 v4.3-uat，页面头部与发布中心一致并产生历史/审计。", "evidence": "published" },
+    { "id": "rollback", "status": "PASS", "expected": "只回滚直接上一发布版本并创建草稿基线。", "actual": "从 v4.3-uat 回到 v4.2，发布与回滚事件均保留。", "evidence": "rollback" },
+    { "id": "role-permissions", "status": "PASS", "expected": "查看者无审核发布入口，编辑者只读预览，管理员可变更。", "actual": "三个账号真实登录验证；未授权动作不渲染且 API 失败关闭。", "evidence": "review" },
+    { "id": "project-switch-clearing", "status": "PASS", "expected": "切换标准项目不保留虚谷草稿、成员或术语。", "actual": "标准发布中心为 v1.3/7 任务且无虚谷审核历史。", "evidence": "standard" },
+    { "id": "tablet-responsive", "status": "PASS", "expected": "1279px 以下发布区单列，摘要卡两列。", "actual": "浏览器主视图无溢出；CSS/DOM 合同测试验证 1279px 单列回退和横向局部滚动。", "evidence": "preview" },
+    { "id": "mobile-responsive", "status": "PASS", "expected": "767px 以下差异、操作和历史改为单列且按钮可触达。", "actual": "CSS/DOM 合同测试验证 767px 单列、全宽动作与可滚动标签；桌面仍为主布局。", "evidence": "accepted" },
+    { "id": "security-payload", "status": "PASS", "expected": "浏览器不接收密钥或可执行项目/模型代码。", "actual": "页面只使用 textContent/固定组件，网络契约和源码测试无 apiKey/baseUrl/动态执行。", "evidence": "review" },
+    { "id": "browser-console", "status": "PASS", "expected": "完整审核、发布、回滚和项目切换无可见运行错误。", "actual": "浏览器完成全部交互，服务端无未处理异常，所有页面进入稳定可操作状态。", "evidence": "rollback" },
+    { "id": "reference-integrity", "status": "PASS", "expected": "只读 Xugu 参考项目不发生变化。", "actual": "参考 HEAD、worktree 和 state.seed.json 哈希均与验收前一致。", "evidence": "review" }
+  ],
+  "reference": {
+    "path": "../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console",
+    "head": "97cb1ebfbbd4998cdb32d419a5670f1233b7cba8",
+    "statusShort": "",
+    "seedSha256": "b134f5493834d55f61aa47d9b9fac855c502ee67c0b59253e9498c214e4adcfa"
+  }
+}

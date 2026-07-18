@@ -626,6 +626,47 @@ body { overflow-x: clip; }
 .proposal-evidence-list small { margin-top: 4px; color: var(--ink-600); }
 .proposal-warnings { padding: 16px; border-left: 4px solid var(--orange-600); border-radius: 10px; background: var(--orange-100); }
 .proposal-warnings h3, .proposal-warnings ul { margin-top: 0; }
+.review-state { min-height: 34px; display: inline-flex; align-items: center; padding: 6px 11px; border-radius: 999px; font-size: 12px; font-weight: 800; }
+.review-pending { color: #80531d; background: var(--orange-100); }
+.review-accepted { color: #17663a; background: #e4f7ec; }
+.review-rejected { color: #8e2f35; background: #fdecee; }
+.review-summary-grid, .release-version-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 12px; margin: 20px 0; }
+.module-review-actions, .review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.module-review-actions { margin: 0 0 18px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.review-diff-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; margin: 16px 0; }
+.review-diff-grid > section { min-width: 0; }
+.review-diff-grid h3 { margin: 0 0 8px; }
+.review-actions { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--line); }
+.review-actions button { min-height: 40px; }
+.merge-bar { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 20px; padding: 18px; border: 1px solid #b8d9c5; border-radius: 14px; background: #effaf3; }
+.merge-bar p { margin: 4px 0 0; color: var(--ink-600); }
+.review-edit-form { display: grid; gap: 14px; }
+.review-edit-sheet { width: min(620px,100%); }
+.release-center { min-width: 0; }
+.release-layout { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(300px,.65fr); gap: 18px; }
+.release-preview-card, .release-action-card, .release-operations-grid > div { padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--canvas); }
+.release-preview-card h3, .release-action-card h3, .release-operations-grid h3 { margin: 0 0 14px; }
+.release-preview-card h3:not(:first-child) { margin-top: 22px; }
+.release-module-counts { display: flex; flex-wrap: wrap; gap: 8px; }
+.release-checklist { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.release-checklist li { display: grid; grid-template-columns: 54px 1fr; gap: 10px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: #fff; }
+.release-checklist li strong { font-size: 12px; }
+.release-checklist .passed strong { color: #17663a; }
+.release-checklist .blocked strong { color: #a33b31; }
+.release-form { display: grid; gap: 14px; }
+.release-ack { display: flex; align-items: flex-start; gap: 9px; color: var(--ink-600); font-size: 13px; }
+.release-ack input { width: 18px; min-height: 18px; margin-top: 1px; }
+.rollback-panel { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line); }
+.rollback-panel p { color: var(--ink-600); font-size: 13px; }
+.release-operations-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; margin-top: 18px; }
+.release-history, .audit-log ol { display: grid; gap: 8px; margin: 0; padding-left: 22px; }
+.release-history li, .audit-log li { padding: 8px; }
+.release-history strong, .release-history span, .audit-log strong, .audit-log span { display: block; }
+.release-history span, .audit-log span { margin-top: 3px; color: var(--ink-600); font-size: 12px; }
+.audit-log { margin-top: 18px; padding: 16px 20px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.audit-log summary { cursor: pointer; font-weight: 800; }
+.audit-log ol { margin-top: 14px; }
+.member-table { min-width: 560px; }
 .validation-pass { padding: 12px 16px; color: #0d7252; background: var(--green-100); border-radius: 10px; }
 
 .sheet-backdrop { position: fixed; z-index: 90; inset: 0; display: flex; justify-content: flex-end; background: rgba(7,26,61,.58); }
@@ -664,6 +705,8 @@ body { overflow-x: clip; }
   .proposal-row dl { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .generation-detail-layout, .proposal-detail-layout { grid-template-columns: 1fr; }
   .proposal-change-index { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .review-summary-grid, .release-version-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .release-layout { grid-template-columns: 1fr; }
   .evidence-index { max-height: 280px; grid-template-columns: repeat(2,minmax(0,1fr)); }
 }
 
@@ -742,4 +785,8 @@ body { overflow-x: clip; }
   .proposal-change-index { display: flex; overflow-x: auto; }
   .proposal-change-index a { min-width: 210px; }
   .proposal-change-card { padding: 16px; }
+  .review-diff-grid, .release-operations-grid { grid-template-columns: 1fr; }
+  .review-summary-grid, .release-version-grid { grid-template-columns: 1fr 1fr; }
+  .merge-bar { align-items: stretch; flex-direction: column; }
+  .merge-bar button, .review-actions button, .release-action-card button { width: 100%; }
 }

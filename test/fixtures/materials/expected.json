@@ -1,0 +1,8 @@
+{
+  "text": { "kind": "text", "locator": "line" },
+  "docx": { "kind": "paragraph", "locator": "paragraph" },
+  "pptx": { "kind": "slide", "locator": "slide" },
+  "xlsx": { "kind": "sheet", "locator": "sheet-cell" },
+  "pdf": { "kind": "page", "locator": "pdf-page" },
+  "image": { "kind": "image", "locator": "ocr" }
+}

@@ -32,6 +32,7 @@ const required = [
   ".planning/phases/01-project-domain-data-foundation/01-01-PLAN.md",
   ".planning/phases/01-project-domain-data-foundation/01-02-PLAN.md",
   ".planning/phases/01-project-domain-data-foundation/01-03-PLAN.md",
+  ".planning/phases/01-project-domain-data-foundation/VERIFICATION.md",
   "fixtures/projects/xugu-agentic-group.json",
   "src/db/migrations/001_initial.sql"
 ];

@@ -119,3 +119,13 @@
 - `ChangeProposal` 使用仓库内版本化 Schema、六类 allowlist 模板与固定模块/操作；模型输出不能选择代码、项目或执行路径。
 - 服务端独立验证证据、语义、日期、任务依赖 DAG、重复项和 base version 冲突，任何失败都不会写入 `draft`/`published`。
 - generation 配额、并发、attempt、token 和 cost 与 chat 分账；浏览器只展示结构化任务/提案，不提前提供 Phase 6 审核或发布动作。
+
+## 2026-07-18：Phase 5 实现完成
+
+状态：`accepted`
+
+- 完成迁移 005、六类不可变更新模板、`change-proposal-v1@1.0.0`、规范化生成任务/attempt/提案/证据关系和项目复合约束。
+- 完成锁定发布基准与当前证据 manifest 的生成编排、独立 provider/配额、幂等、stale、一次修复、重试 lineage、Token/成本记录和稳定失败状态。
+- 完成确定性 envelope、项目/证据、模板/字段、目标、语义、日期、依赖 DAG、重复与版本冲突校验；仅完整通过的提案原子保存，任何路径均不写 draft/published。
+- 完成 Xugu/标准项目提案工作区、任务/提案详情、置信度/警告、精确来源回跳和无密钥诚实降级；未提前开放 Phase 6 动作。
+- 120 项自动化测试、15 个 Phase 5 浏览器用例、5 张哈希/尺寸机检截图和统一验证全部通过；参考 Xugu 应用未被修改。

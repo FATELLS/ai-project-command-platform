@@ -11,50 +11,46 @@
 5. `.planning/ROADMAP.md`
 6. `.planning/STATE.md`
 7. `AI-SPEC.md`
-8. `.planning/phases/01-project-domain-data-foundation/RESEARCH.md`
+8. `.planning/phases/02-platform-shell-project-switching/VERIFICATION.md`
 
 ## 当前状态
 
-- Phase 1 已实现并通过验收。
-- 平台当前是可运行的 SQLite 数据底座和读 API，尚无前端、登录或 AI 更新闭环。
-- 首个项目为 `xugu-agentic-group`，导入数据与参考项目 v4.2 脱敏种子一致。
-- 默认数据库为 `data/platform.sqlite`，已被 Git 忽略；测试和验证只使用临时数据目录。
+- Phase 1–2 已实现并通过验收，平台版本为 `0.3.0`。
+- 首个项目 `xugu-agentic-group` 与参考 v4.2 脱敏种子语义一致。
+- 已有认证、基础角色、授权项目列表/检索/最近访问、项目切换、项目发布态概览和平台管理员生命周期 UI/API。
+- 默认数据库为 `data/platform.sqlite`，测试与统一验证只使用临时目录。
 - 参考项目位于 `../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console/`，必须继续只读。
 
 ## 代码入口
 
-- HTTP：`server.mjs`、`src/http/app.mjs`
-- SQLite：`src/db/database.mjs`、`src/db/migrate.mjs`、`src/db/migrations/`
-- 项目校验：`src/domain/project-validator.mjs`
-- 仓储：`src/repositories/project-repository.mjs`
-- 虚谷迁移：`src/migration/legacy-project.mjs`
-- CLI：`scripts/migrate-db.mjs`、`scripts/import-project.mjs`、`scripts/export-project.mjs`
-- 验证：`scripts/verify.mjs`、`test/`
+- HTTP/静态：`server.mjs`、`src/http/app.mjs`、`src/http/static.mjs`
+- 认证安全：`src/security/`、`src/services/auth-service.mjs`、`src/repositories/auth-repository.mjs`
+- 项目服务：`src/services/project-service.mjs`、`src/repositories/project-repository.mjs`
+- SQLite：`src/db/`、`src/db/migrations/`
+- Xugu 迁移：`src/migration/legacy-project.mjs`
+- 前端：`public/index.html`、`public/styles.css`、`public/app.js`
+- 验证：`scripts/verify.mjs`、`test/`、`.planning/evidence/`
 
-## 验证
+## 运行与验证
+
+首次运行需要服务端 `PLATFORM_BOOTSTRAP_PASSWORD`；已有管理员的数据库后续无需再次提供。
 
 ```bash
 npm run verify
 ```
 
-当前通过：
-
-- 12 项 Node.js 自动化测试；
-- 新建与重复数据库迁移；
-- 虚谷原子导入、幂等导入、冲突拒绝和语义等价导出；
-- 两项目仓储与 API 隔离；
-- `/api/projects/xugu-agentic-group/public` 与 `/api/public` 兼容一致性；
-- 参考项目 HEAD、Git 状态和种子 SHA-256 不变。
+当前通过 30 项自动化测试、临时数据库/API/静态冒烟、Xugu 语义等价、敏感文件检查、三视口浏览器验收和参考项目只读校验。
 
 ## 风险和边界
 
-- Phase 1 尚无会话和角色校验；`draft` API 仅用于本地阶段验收，不得在 Phase 2 权限完成前公开部署。
-- 当前平台名称仍可在后续确认，但稳定项目 ID 不应随显示名称改变。
-- `node:sqlite` 技术选择要求 Node.js 24.15+；参考应用本身的 Node 18 运行边界不受影响。
-- 数据库备份/恢复、完整审计和发布/回滚在后续阶段完成。
+- Phase 2 只有基础用户/成员数据模型，没有用户与成员管理 UI。
+- 当前生命周期审计覆盖登录与项目创建/编辑/归档/恢复；材料、审核、发布和回滚审计待对应阶段实现。
+- 项目详情只展示发布态概览；九类完整模块、路线/甘特/任务网络通用渲染属于 Phase 3。
+- Secure Cookie 依赖部署时启用 HTTPS 与 `PLATFORM_SECURE_COOKIES=true`。
+- 备份恢复、PostgreSQL、多机和生产级运维仍未实现。
 
 ## 下一步
 
-- 规划 Phase 2：会话、基础角色、项目列表/检索/切换、项目创建/归档和项目壳。
-- 将 `draft` 和项目管理 API 放在项目成员权限之后。
-- 保持 `/api/public` 为有限期兼容入口，新功能使用项目级 URL。
+- 规划 Phase 3：模块注册表、版本化模块 Schema、`campaign-map-v1` 与 `standard-project-v1`。
+- 把 Xugu 路线、任务网络、甘特和成果视觉迁移为固定通用渲染器，不执行项目或 AI 代码。
+- 保持 `/api/public` 为有限兼容入口，新功能继续使用项目级 URL。

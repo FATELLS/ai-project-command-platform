@@ -43,3 +43,16 @@
 - 状态：`accepted`
 - 决策：项目保存指向 `published` 和 `draft` 的独立版本指针；作战单元、路线、任务、依赖和战线按版本使用独立表存储。
 - 原因：确保项目隔离、关系约束、事务更新和未来发布/回滚不依赖单一巨型 JSON。
+
+## D-009 服务端摘要会话与内存 CSRF
+
+- 状态：`accepted`
+- 决策：使用随机 Cookie 会话，数据库只保存 token 摘要；Cookie 为 HttpOnly、SameSite=Strict，CSRF token 只进入页面内存。
+- 原因：避免将可重放凭据暴露给 JavaScript 或 Web Storage，并同时覆盖会话固定、跨站写请求和浏览器后退缓存风险。
+- 影响：首版采用 30 分钟空闲与 8 小时绝对过期；HTTPS 部署必须启用 Secure Cookie。
+
+## D-010 平台壳只使用本地固定组件
+
+- 状态：`accepted`
+- 决策：Phase 2 使用仓库内语义 HTML/CSS/JavaScript，不引入远程 UI registry、CDN、项目提供的组件或内联可执行资源。
+- 原因：平台与项目内容边界必须清晰，且当前阶段不应提前形成任意代码低代码入口。

@@ -38,6 +38,11 @@ function validateDates(patch, changeId) {
   if (patch.startDate && patch.endDate && patch.startDate > patch.endDate) fail("INVALID_DATE_RANGE", "任务开始日期晚于结束日期", { changeId });
 }
 function validateTaskGraph(context, changes) {
+  const units = new Set(context.published.units.map(item => item.id));
+  for (const change of changes.filter(item => item.module === "units")) {
+    if (change.operation === "delete") units.delete(change.targetId);
+    else if (change.operation === "create") units.add(change.targetId);
+  }
   const tasks = new Map(context.published.tasks.map(item => [item.id, structuredClone(item)]));
   for (const change of changes.filter(item => ["task-network", "gantt"].includes(item.module))) {
     if (change.operation === "delete") { tasks.delete(change.targetId); continue; }
@@ -52,6 +57,7 @@ function validateTaskGraph(context, changes) {
     if (name && names.has(name) && names.get(name) !== task.id) fail("DUPLICATE_NAME", "提案将产生重复任务名称", { targetId: task.id });
     if (name) names.set(name, task.id);
     const unit = task.unitId;
+    if (!unit || !units.has(unit)) fail("TASK_UNIT_NOT_FOUND", "任务所属团队或作战单元不存在", { targetId: task.id, unitId: unit ?? null });
     const links = [...new Set([task.parentId, ...(task.dependsOn ?? [])].filter(Boolean))];
     for (const link of links) {
       const linked = tasks.get(link);

@@ -13,11 +13,12 @@ function valueAfter(flag) {
 const databasePath = resolve(valueAfter("--database") ?? defaultDatabasePath());
 const fixturePath = resolve(valueAfter("--fixture") ?? "fixtures/projects/xugu-agentic-group.json");
 const projectId = valueAfter("--project") ?? "xugu-agentic-group";
+const templateId = valueAfter("--template") ?? "campaign-map-v1";
 const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
 const database = openDatabase(databasePath);
 try {
   applyMigrations(database);
-  const result = importLegacyProject(database, fixture, { projectId });
+  const result = importLegacyProject(database, fixture, { projectId, templateId });
   const repository = createProjectRepository(database);
   const project = repository.getProject(projectId);
   console.log(JSON.stringify({

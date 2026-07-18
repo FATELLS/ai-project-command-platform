@@ -1,0 +1,16 @@
+{
+  "schemaVersion": "phase6-eval-v1",
+  "projectId": "xugu-agentic-group",
+  "cases": [
+    { "id": "meeting-plan-with-source", "dimension": "grounding", "expected": "accept", "expectedCode": null, "description": "会议计划带本项目人工材料证据并创建任务" },
+    { "id": "completed-without-source", "dimension": "grounding", "expected": "reject", "expectedCode": "EVIDENCE_REQUIRED", "description": "完成状态没有证据不得进入提案" },
+    { "id": "cross-project-evidence", "dimension": "isolation", "expected": "reject", "expectedCode": "EVIDENCE_PROJECT_MISMATCH", "description": "另一项目证据引用必须失败关闭" },
+    { "id": "stale-published-base", "dimension": "versioning", "expected": "reject", "expectedCode": "BASE_VERSION_CONFLICT", "description": "发布基准变化后不得静默重基" },
+    { "id": "task-dependency-cycle", "dimension": "graph", "expected": "reject", "expectedCode": "TASK_DEPENDENCY_CYCLE", "description": "任务依赖环不得生成或合并" },
+    { "id": "invalid-date-order", "dimension": "dates", "expected": "reject", "expectedCode": "INVALID_DATE_RANGE", "description": "任务结束日期早于开始日期" },
+    { "id": "duplicate-unit-name", "dimension": "duplicates", "expected": "reject", "expectedCode": "DUPLICATE_NAME", "description": "同项目同版本作战单元名称重复" },
+    { "id": "edited-field-invalid", "dimension": "review", "expected": "reject", "expectedCode": "PROPOSAL_VALIDATION_FAILED", "description": "人工编辑后仍需重新执行确定性校验" },
+    { "id": "atomic-merge-failure", "dimension": "transactions", "expected": "reject", "expectedCode": "DRAFT_MERGE_INVALID", "description": "任一接受项失败时不产生部分草稿" },
+    { "id": "direct-predecessor-rollback", "dimension": "release", "expected": "accept", "expectedCode": null, "description": "发布后只允许回滚到直接上一发布版本并写审计" }
+  ]
+}

@@ -2,31 +2,17 @@ import { withTransaction } from "../db/database.mjs";
 import { importLegacyProject } from "../migration/legacy-project.mjs";
 import { createAuthRepository } from "../repositories/auth-repository.mjs";
 import { createProjectRepository } from "../repositories/project-repository.mjs";
+import { listTemplates, resolveTemplate } from "../templates/catalog.mjs";
 
 const projectIdPattern = /^[a-z0-9][a-z0-9._-]{2,63}$/;
-const templates = Object.freeze({
-  "campaign-map-v1": {
-    version: "1.0.0",
-    name: "Campaign Map",
-    themePreset: "xugu-blue",
-    terminologyPreset: "campaign"
-  },
-  "standard-project-v1": {
-    version: "1.0.0",
-    name: "Standard Project",
-    themePreset: "neutral-blue",
-    terminologyPreset: "standard"
-  }
-});
+const templates = Object.freeze(Object.fromEntries(listTemplates().map(template => [template.id, template])));
 const themes = Object.freeze({
-  "xugu-blue": { preset: "xugu-blue", accent: "#1265f2" },
+  ...Object.fromEntries(listTemplates().map(template => [template.theme.preset, template.theme])),
   "deep-navy": { preset: "deep-navy", accent: "#0b2c68" },
-  "neutral-blue": { preset: "neutral-blue", accent: "#5f7088" }
 });
-const terminologies = Object.freeze({
-  campaign: { preset: "campaign", unit: "作战单元", task: "行动任务", stage: "战役节点", outcome: "战果闭环" },
-  standard: { preset: "standard", unit: "团队", task: "任务", stage: "里程碑", outcome: "交付物" }
-});
+const terminologies = Object.freeze(Object.fromEntries(
+  listTemplates().map(template => [template.terminology.preset, template.terminology])
+));
 
 export class ProjectServiceError extends Error {
   constructor(status, code, message) {
@@ -48,12 +34,11 @@ function validateName(name) {
   return value;
 }
 
-function emptySnapshot(name, now, terminologyPreset) {
-  const campaign = terminologyPreset === "campaign";
+function emptySnapshot(name, now, template) {
   return {
     title: name,
     goal: "",
-    summary: campaign ? "项目已创建，待配置作战单元和战役路线。" : "项目已创建，待配置团队、任务与里程碑。",
+    summary: template.copy.emptyProjectSummary,
     projectStatus: "active",
     statusLabel: "刚刚创建",
     version: "v0.1",
@@ -97,20 +82,24 @@ export function createProjectService(database, options = {}) {
       throw new ProjectServiceError(400, "INVALID_PROJECT_ID", "项目 ID 必须是小写字母、数字、点、下划线或连字符");
     }
     const name = validateName(input.name);
-    const template = templates[input.templateId];
-    if (!template) throw new ProjectServiceError(400, "INVALID_TEMPLATE", "项目模板无效");
+    let template;
+    try {
+      template = resolveTemplate(input.templateId);
+    } catch {
+      throw new ProjectServiceError(400, "INVALID_TEMPLATE", "项目模板无效");
+    }
     if (projects.getProject(projectId)) throw new ProjectServiceError(409, "PROJECT_EXISTS", "项目 ID 已存在");
     return withTransaction(database, () => {
       const createdAt = timestamp();
-      const snapshot = emptySnapshot(name, createdAt, template.terminologyPreset);
+      const snapshot = emptySnapshot(name, createdAt, template);
       importLegacyProject(database, { published: snapshot, materials: [], draft: structuredClone(snapshot) }, {
         projectId,
         name,
         templateId: input.templateId,
         templateVersion: template.version,
         templateName: template.name,
-        theme: themes[template.themePreset],
-        terminology: terminologies[template.terminologyPreset],
+        theme: template.theme,
+        terminology: template.terminology,
         now: createdAt
       });
       projects.addProjectMember(projectId, principal.id, "project_admin", createdAt);

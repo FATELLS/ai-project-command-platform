@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { withTransaction } from "../db/database.mjs";
 import { validateLegacyFixture } from "../domain/project-validator.mjs";
 import { createProjectRepository } from "../repositories/project-repository.mjs";
+import { resolveTemplate, templateConfigJson } from "../templates/catalog.mjs";
 
 const projectIdPattern = /^[a-z0-9][a-z0-9._-]*$/;
 const entityArrays = new Set(["groups", "stages", "closures", "tasks", "companyWorkstreams"]);
-const moduleTypes = ["overview", "units", "roadmap", "task-network", "gantt", "outcomes", "risks", "metrics", "materials"];
 
 function sha256(value) {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -27,7 +27,7 @@ function without(source, keys) {
   return Object.fromEntries(Object.entries(source).filter(([key]) => !keys.has(key)));
 }
 
-function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum, now) {
+function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum, now, template) {
   const metadata = without(snapshot, entityArrays);
   const versionResult = database.prepare(`
     INSERT INTO project_versions (project_id, layer, version_label, source_checksum, metadata_json, created_at)
@@ -37,9 +37,16 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
 
   const insertModule = database.prepare(`
     INSERT INTO project_modules (version_id, external_id, module_type, position, enabled, data_json)
-    VALUES (?, ?, ?, ?, 1, '{}')
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
-  moduleTypes.forEach((moduleType, position) => insertModule.run(versionId, moduleType, moduleType, position));
+  template.modules.forEach(module => insertModule.run(
+    versionId,
+    module.type,
+    module.type,
+    module.position,
+    module.enabled ? 1 : 0,
+    JSON.stringify({ schemaVersion: module.schemaVersion, viewVariant: module.viewVariant })
+  ));
 
   const insertUnit = database.prepare(`
     INSERT INTO project_units (version_id, external_id, position, name, data_json) VALUES (?, ?, ?, ?, ?)
@@ -119,22 +126,29 @@ export function importLegacyProject(database, fixture, options = {}) {
     const now = options.now ?? new Date().toISOString();
     const templateId = options.templateId ?? "campaign-map-v1";
     const templateVersion = options.templateVersion ?? "1.0.0";
+    const template = resolveTemplate(templateId, templateVersion);
     const projectName = options.name ?? fixture.published.title;
     database.prepare(`
       INSERT OR IGNORE INTO templates (id, version, name, config_json, created_at) VALUES (?, ?, ?, ?, ?)
-    `).run(templateId, templateVersion, options.templateName ?? "Campaign Map", JSON.stringify({ modules: moduleTypes }), now);
+    `).run(template.id, template.version, template.name, templateConfigJson(template), now);
+    const storedTemplate = database.prepare(
+      "SELECT name, config_json AS configJson FROM templates WHERE id = ? AND version = ?"
+    ).get(template.id, template.version);
+    if (storedTemplate.name !== template.name || !semanticallyEqual(JSON.parse(storedTemplate.configJson), template)) {
+      throw new Error(`Template ${template.id}@${template.version} differs from the immutable catalog`);
+    }
     database.prepare(`
       INSERT INTO projects (
         id, name, template_id, template_version, status, theme_json, terminology_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)
     `).run(
       projectId, projectName, templateId, templateVersion,
-      JSON.stringify(options.theme ?? { preset: "xugu-blue", palette: ["xugu-blue", "white", "warm-orange"] }),
-      JSON.stringify(options.terminology ?? { preset: "campaign", unit: "作战单元", task: "行动任务", stage: "战役节点", outcome: "战果闭环" }),
+      JSON.stringify(options.theme ?? template.theme),
+      JSON.stringify(options.terminology ?? template.terminology),
       now, now
     );
-    const publishedVersionId = insertVersionGraph(database, projectId, "published", fixture.published, sha256(fixture.published), now);
-    const draftVersionId = insertVersionGraph(database, projectId, "draft", fixture.draft, sha256(fixture.draft), now);
+    const publishedVersionId = insertVersionGraph(database, projectId, "published", fixture.published, sha256(fixture.published), now, template);
+    const draftVersionId = insertVersionGraph(database, projectId, "draft", fixture.draft, sha256(fixture.draft), now, template);
     database.prepare(`
       UPDATE projects SET published_version_id = ?, draft_version_id = ?, updated_at = ? WHERE id = ?
     `).run(publishedVersionId, draftVersionId, now, projectId);

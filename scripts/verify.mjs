@@ -110,7 +110,7 @@ const runtimeDir = await mkdtemp(join(tmpdir(), "platform-verify-"));
 const database = openDatabase(join(runtimeDir, "platform.sqlite"));
 let server;
 try {
-  assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql"]);
+  assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql"]);
   assert.deepEqual(applyMigrations(database), []);
   const imported = importLegacyProject(database, fixture, {
     projectId: "xugu-agentic-group",

@@ -38,12 +38,44 @@ const required = [
   ".planning/phases/02-platform-shell-project-switching/02-01-PLAN.md",
   ".planning/phases/02-platform-shell-project-switching/02-02-PLAN.md",
   ".planning/phases/02-platform-shell-project-switching/02-03-PLAN.md",
+  ".planning/phases/03-module-registry-project-templates/UI-SPEC.md",
+  ".planning/phases/03-module-registry-project-templates/03-VALIDATION.md",
+  ".planning/phases/03-module-registry-project-templates/03-01-PLAN.md",
+  ".planning/phases/03-module-registry-project-templates/03-02-PLAN.md",
+  ".planning/phases/03-module-registry-project-templates/03-03-PLAN.md",
+  ".planning/phases/03-module-registry-project-templates/03-04-PLAN.md",
+  ".planning/phases/03-module-registry-project-templates/VERIFICATION.md",
+  ".planning/evidence/phase3-browser-matrix.json",
+  ".planning/evidence/phase3-xugu-modules-desktop-1440x900.jpg",
+  ".planning/evidence/phase3-standard-modules-desktop-1440x900.jpg",
+  ".planning/evidence/phase3-modules-tablet-1024x768.jpg",
+  ".planning/evidence/phase3-modules-mobile-390x844.jpg",
   "fixtures/projects/xugu-agentic-group.json",
+  "fixtures/projects/standard-project-sample.json",
   "src/db/migrations/001_initial.sql",
   "src/db/migrations/002_auth_project_access.sql",
+  "src/db/migrations/003_module_registry_templates.sql",
+  "src/templates/catalog.mjs",
+  "src/templates/template-validator.mjs",
+  "src/modules/registry.mjs",
+  "src/modules/schemas.mjs",
+  "src/modules/loaders.mjs",
+  "src/modules/module-service.mjs",
+  "scripts/seed-project-fixture.mjs",
+  "scripts/verify-browser-evidence.mjs",
   "public/index.html",
   "public/styles.css",
-  "public/app.js"
+  "public/app.js",
+  "public/modules/registry.js",
+  "public/modules/shared.js",
+  "public/modules/renderers.js",
+  "test/template-catalog.test.mjs",
+  "test/db-foundation.test.mjs",
+  "test/project-migration.test.mjs",
+  "test/module-registry.test.mjs",
+  "test/module-api.test.mjs",
+  "test/module-ui-server.test.mjs",
+  "test/platform-ui-server.test.mjs"
 ];
 
 function run(command, args, options = {}) {
@@ -89,15 +121,27 @@ for (const file of [
   "src/http/app.mjs",
   "src/http/static.mjs",
   "src/migration/legacy-project.mjs",
+  "src/templates/catalog.mjs",
+  "src/templates/template-validator.mjs",
+  "src/modules/registry.mjs",
+  "src/modules/schemas.mjs",
+  "src/modules/loaders.mjs",
+  "src/modules/module-service.mjs",
   "src/repositories/auth-repository.mjs",
   "src/repositories/project-repository.mjs",
   "src/security/passwords.mjs",
   "src/security/sessions.mjs",
   "src/services/auth-service.mjs",
   "src/services/project-service.mjs",
-  "public/app.js"
+  "scripts/seed-project-fixture.mjs",
+  "scripts/verify-browser-evidence.mjs",
+  "public/app.js",
+  "public/modules/registry.js",
+  "public/modules/shared.js",
+  "public/modules/renderers.js"
 ]) run(process.execPath, ["--check", file]);
 run(process.execPath, ["--test"]);
+run(process.execPath, ["scripts/verify-browser-evidence.mjs", ".planning/evidence/phase3-browser-matrix.json"]);
 
 const tracked = run("git", ["ls-files"], { capture: true }).split("\n").filter(Boolean);
 const forbiddenTracked = tracked.filter(file =>
@@ -158,4 +202,4 @@ try {
 }
 
 assert.deepEqual(await referenceSnapshot(), referenceBefore, "read-only Xugu reference project changed during verification");
-console.log("Verification passed: Phase 2 authentication, project switching/lifecycle, responsive shell, Xugu equivalence, and source read-only checks are valid.");
+console.log("Verification passed: Phase 3 versioned templates, fixed nine-module registry/renderers, project isolation, browser evidence, Xugu equivalence, and source read-only checks are valid.");

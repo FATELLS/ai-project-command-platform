@@ -1,0 +1,184 @@
+{
+  "schemaVersion": "1.0.0",
+  "phase": "03-module-registry-project-templates",
+  "capturedOn": "2026-07-18",
+  "runner": "Codex in-app browser against an isolated seeded SQLite database",
+  "reference": {
+    "path": "../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console",
+    "head": "97cb1ebfbbd4998cdb32d419a5670f1233b7cba8",
+    "statusShort": "",
+    "seedSha256": "b134f5493834d55f61aa47d9b9fac855c502ee67c0b59253e9498c214e4adcfa"
+  },
+  "evidence": {
+    "xuguDesktop": {
+      "file": ".planning/evidence/phase3-xugu-modules-desktop-1440x900.jpg",
+      "width": 1440,
+      "height": 900,
+      "sha256": "5b5d21865e8010419216dbe195ce64cbb2269a526598b6fb91a86b9d03769559"
+    },
+    "standardDesktop": {
+      "file": ".planning/evidence/phase3-standard-modules-desktop-1440x900.jpg",
+      "width": 1440,
+      "height": 900,
+      "sha256": "09f4ccb74945c7fb7cca3d7daab54b3fc578d61b491e1691837c935865c8d9ea"
+    },
+    "tablet": {
+      "file": ".planning/evidence/phase3-modules-tablet-1024x768.jpg",
+      "width": 1024,
+      "height": 768,
+      "sha256": "b39fe3356d948cad9763d044989e646b27c9701f33a5a5d34c8888b502f07dc5"
+    },
+    "mobile": {
+      "file": ".planning/evidence/phase3-modules-mobile-390x844.jpg",
+      "width": 390,
+      "height": 844,
+      "sha256": "d45288ab3cdf88c08126395f3d0f600591ef3fb392c14f1ba8243ec0938e309a"
+    }
+  },
+  "cases": [
+    {
+      "id": "xugu-overview",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group",
+      "expected": "Xugu frame, nine-module navigation and v4.2 facts",
+      "actual": "Nine enabled modules; v4.2; 7 units, 29 tasks, 6 stages and 2 closures",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "xugu-roadmap",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/roadmap",
+      "expected": "Six stages, two closures and four workstreams",
+      "actual": "Six ordered stages, two closure branches and four company workstreams rendered",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "xugu-task-network",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/task-network",
+      "expected": "Seven unit groups and 29 tasks",
+      "actual": "Seven grouped units and all 29 tasks rendered with hierarchy/dependency detail",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "xugu-gantt",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/gantt",
+      "expected": "Date-derived schedule and honest undated bucket",
+      "actual": "Twenty-eight dated tasks rendered; one undated task appears only in 待排期",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "xugu-outcomes",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/outcomes",
+      "expected": "Two source-preserving outcomes and accessible safe preview",
+      "actual": "Two records retain state/source semantics and the same-origin lightbox is usable",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "standard-project",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/standard-project-sample",
+      "expected": "Standard terms and standard view variants without campaign copy",
+      "actual": "Three teams, seven tasks, four milestones and two workflows use linear roadmap, dependency list and lane Gantt; no campaign terminology",
+      "evidence": "standardDesktop"
+    },
+    {
+      "id": "two-project-switch",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group -> /projects/standard-project-sample -> /projects/xugu-agentic-group",
+      "expected": "URL, template, views, facts and copy switch atomically",
+      "actual": "Both project homes and module routes switched without data or copy crossover",
+      "evidence": "standardDesktop"
+    },
+    {
+      "id": "draft-module-config",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/overview",
+      "expected": "Optional draft module can be disabled without changing published navigation",
+      "actual": "Materials was disabled and saved in draft; published still showed it; reopening draft showed disabled",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "viewer-permissions",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group",
+      "expected": "Viewer sees published modules and no configuration control",
+      "actual": "Viewer had no 模块配置 control and draft/config access remained unavailable",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "loading-error-empty",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/standard-project-sample/modules/materials",
+      "expected": "Honest module state with no fabricated facts or upload affordance",
+      "actual": "Materials states Phase 4 boundary and exposes no upload, Q&A, delete or AI action",
+      "evidence": "standardDesktop"
+    },
+    {
+      "id": "tablet-responsive",
+      "status": "PASS",
+      "viewport": "1024x768",
+      "url": "/projects/xugu-agentic-group/modules/task-network",
+      "expected": "Scrollable module row, local visualization overflow only",
+      "actual": "Layout remained usable with no page-level horizontal overflow",
+      "evidence": "tablet"
+    },
+    {
+      "id": "mobile-responsive",
+      "status": "PASS",
+      "viewport": "390x844",
+      "url": "/projects/xugu-agentic-group/modules/gantt",
+      "expected": "List-first mobile module view and usable configuration sheet",
+      "actual": "Single-column fallback, list-first module content and no page-level horizontal overflow",
+      "evidence": "mobile"
+    },
+    {
+      "id": "keyboard-reduced-motion",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/xugu-agentic-group/modules/outcomes",
+      "expected": "Keyboard-operable navigation/preview and nonessential motion disabled when requested",
+      "actual": "Module navigation and safe lightbox completed by keyboard; reduced-motion media contract removed nonessential transitions",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "security-payload",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "/projects/security-payload-fixture",
+      "expected": "Markup and executable URL payloads render as text or fail closed",
+      "actual": "Project name <script>alert(1)</script> rendered as text; zero inline scripts and zero dialogs",
+      "evidence": "standardDesktop"
+    },
+    {
+      "id": "browser-console",
+      "status": "PASS",
+      "viewport": "1440x900",
+      "url": "all acceptance routes",
+      "expected": "No browser warnings, errors or payload dumps",
+      "actual": "Warning count 0; error count 0; dialog count 0",
+      "evidence": "xuguDesktop"
+    },
+    {
+      "id": "reference-integrity",
+      "status": "PASS",
+      "viewport": "n/a",
+      "url": "n/a",
+      "expected": "Reference HEAD, clean status and seed hash remain unchanged",
+      "actual": "HEAD 97cb1ebfbbd4998cdb32d419a5670f1233b7cba8; clean status; seed SHA-256 b134f5493834d55f61aa47d9b9fac855c502ee67c0b59253e9498c214e4adcfa",
+      "evidence": "xuguDesktop"
+    }
+  ]
+}

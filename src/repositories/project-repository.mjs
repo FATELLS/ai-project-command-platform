@@ -128,5 +128,119 @@ export function createProjectRepository(database) {
     };
   }
 
-  return { listProjects, getProject, resolveVersion, getSnapshot, getLegacyFixture, countVersion };
+  function roleExpression(isPlatformAdmin) {
+    return isPlatformAdmin ? "platform_admin" : undefined;
+  }
+
+  function listAuthorizedProjects(principal, filters = {}) {
+    const requestedStatus = ["active", "archived", "all"].includes(filters.status) ? filters.status : "active";
+    const status = principal.isPlatformAdmin ? requestedStatus : "active";
+    const query = String(filters.q ?? "").trim().toLowerCase();
+    const pattern = `%${query.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
+    const orderBy = filters.sort === "name"
+      ? "p.name COLLATE NOCASE ASC, p.id ASC"
+      : filters.sort === "updated"
+        ? "p.updated_at DESC, p.name COLLATE NOCASE ASC"
+        : "CASE WHEN recent.last_accessed_at IS NULL THEN 1 ELSE 0 END, recent.last_accessed_at DESC, p.updated_at DESC";
+    const rows = database.prepare(`
+      SELECT p.id, p.name, p.template_id AS templateId, p.template_version AS templateVersion,
+             p.status, p.updated_at AS updatedAt,
+             published.version_label AS publishedVersion,
+             CASE WHEN ? = 1 THEN 'platform_admin' ELSE membership.role END AS role,
+             json_extract(published.metadata_json, '$.summary') AS summary,
+             (SELECT count(*) FROM project_units u WHERE u.version_id = p.published_version_id) AS unitCount,
+             (SELECT count(*) FROM project_tasks t WHERE t.version_id = p.published_version_id) AS taskCount,
+             (SELECT count(*) FROM project_stages s WHERE s.version_id = p.published_version_id) AS stageCount,
+             recent.last_accessed_at AS lastAccessedAt
+      FROM projects p
+      JOIN project_versions published ON published.id = p.published_version_id AND published.project_id = p.id AND published.layer = 'published'
+      LEFT JOIN project_members membership ON membership.project_id = p.id AND membership.user_id = ?
+      LEFT JOIN recent_project_access recent ON recent.project_id = p.id AND recent.user_id = ?
+      WHERE (? = 1 OR membership.user_id IS NOT NULL)
+        AND (? = 'all' OR p.status = ?)
+        AND (? = '' OR lower(p.name) LIKE ? ESCAPE '\\' OR lower(p.id) LIKE ? ESCAPE '\\')
+      ORDER BY ${orderBy}
+    `).all(
+      principal.isPlatformAdmin ? 1 : 0,
+      principal.id,
+      principal.id,
+      principal.isPlatformAdmin ? 1 : 0,
+      status,
+      status,
+      query,
+      pattern,
+      pattern
+    ).map(row => ({
+      ...row,
+      role: roleExpression(principal.isPlatformAdmin) ?? row.role,
+      summary: row.summary ?? "",
+      isRecent: Boolean(row.lastAccessedAt)
+    }));
+    const recent = rows
+      .filter(project => project.status === "active" && project.lastAccessedAt)
+      .sort((left, right) => right.lastAccessedAt.localeCompare(left.lastAccessedAt))
+      .slice(0, 4);
+    return { projects: rows, recent };
+  }
+
+  function getAuthorizedProject(principal, projectId, capability = "public") {
+    const row = database.prepare(`
+      SELECT p.id, p.name, p.template_id AS templateId, p.template_version AS templateVersion,
+             p.status, p.updated_at AS updatedAt,
+             published.version_label AS publishedVersion,
+             CASE WHEN ? = 1 THEN 'platform_admin' ELSE membership.role END AS role
+      FROM projects p
+      JOIN project_versions published ON published.id = p.published_version_id AND published.project_id = p.id
+      LEFT JOIN project_members membership ON membership.project_id = p.id AND membership.user_id = ?
+      WHERE p.id = ? AND p.status = 'active' AND (? = 1 OR membership.user_id IS NOT NULL)
+    `).get(principal.isPlatformAdmin ? 1 : 0, principal.id, projectId, principal.isPlatformAdmin ? 1 : 0);
+    if (!row) return undefined;
+    const role = roleExpression(principal.isPlatformAdmin) ?? row.role;
+    if (capability === "draft" && !["platform_admin", "project_admin", "project_editor"].includes(role)) return undefined;
+    return { ...row, role };
+  }
+
+  function recordRecentAccess(userId, projectId, accessedAt) {
+    database.prepare(`
+      INSERT INTO recent_project_access (user_id, project_id, last_accessed_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(user_id, project_id) DO UPDATE SET last_accessed_at = excluded.last_accessed_at
+    `).run(userId, projectId, accessedAt);
+  }
+
+  function addProjectMember(projectId, userId, role, createdAt) {
+    database.prepare(`
+      INSERT INTO project_members (project_id, user_id, role, created_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(project_id, user_id) DO UPDATE SET role = excluded.role
+    `).run(projectId, userId, role, createdAt);
+  }
+
+  function updateProjectMetadata(projectId, values) {
+    return database.prepare(`
+      UPDATE projects SET name = ?, theme_json = ?, terminology_json = ?, updated_at = ?
+      WHERE id = ?
+    `).run(values.name, JSON.stringify(values.theme), JSON.stringify(values.terminology), values.updatedAt, projectId).changes;
+  }
+
+  function setProjectStatus(projectId, status, changedAt) {
+    return database.prepare(`
+      UPDATE projects SET status = ?, archived_at = ?, updated_at = ? WHERE id = ?
+    `).run(status, status === "archived" ? changedAt : null, changedAt, projectId).changes;
+  }
+
+  return {
+    listProjects,
+    getProject,
+    resolveVersion,
+    getSnapshot,
+    getLegacyFixture,
+    countVersion,
+    listAuthorizedProjects,
+    getAuthorizedProject,
+    recordRecentAccess,
+    addProjectMember,
+    updateProjectMetadata,
+    setProjectStatus
+  };
 }

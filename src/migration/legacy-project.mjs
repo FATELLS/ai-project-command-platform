@@ -122,15 +122,15 @@ export function importLegacyProject(database, fixture, options = {}) {
     const projectName = options.name ?? fixture.published.title;
     database.prepare(`
       INSERT OR IGNORE INTO templates (id, version, name, config_json, created_at) VALUES (?, ?, ?, ?, ?)
-    `).run(templateId, templateVersion, "Campaign Map", JSON.stringify({ modules: moduleTypes }), now);
+    `).run(templateId, templateVersion, options.templateName ?? "Campaign Map", JSON.stringify({ modules: moduleTypes }), now);
     database.prepare(`
       INSERT INTO projects (
         id, name, template_id, template_version, status, theme_json, terminology_json, created_at, updated_at
       ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?)
     `).run(
       projectId, projectName, templateId, templateVersion,
-      JSON.stringify({ palette: ["xugu-blue", "white", "warm-orange"] }),
-      JSON.stringify({ unit: "作战单元", task: "行动任务", stage: "战役节点", outcome: "战果闭环" }),
+      JSON.stringify(options.theme ?? { preset: "xugu-blue", palette: ["xugu-blue", "white", "warm-orange"] }),
+      JSON.stringify(options.terminology ?? { preset: "campaign", unit: "作战单元", task: "行动任务", stage: "战役节点", outcome: "战果闭环" }),
       now, now
     );
     const publishedVersionId = insertVersionGraph(database, projectId, "published", fixture.published, sha256(fixture.published), now);

@@ -180,7 +180,13 @@ export function createProjectRepository(database) {
       .filter(project => project.status === "active" && project.lastAccessedAt)
       .sort((left, right) => right.lastAccessedAt.localeCompare(left.lastAccessedAt))
       .slice(0, 4);
-    return { projects: rows, recent };
+    const activeCount = database.prepare(`
+      SELECT count(DISTINCT p.id) AS count
+      FROM projects p
+      LEFT JOIN project_members membership ON membership.project_id = p.id AND membership.user_id = ?
+      WHERE p.status = 'active' AND (? = 1 OR membership.user_id IS NOT NULL)
+    `).get(principal.id, principal.isPlatformAdmin ? 1 : 0).count;
+    return { projects: rows, recent, activeCount };
   }
 
   function getAuthorizedProject(principal, projectId, capability = "public") {

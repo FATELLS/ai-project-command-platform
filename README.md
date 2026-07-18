@@ -4,7 +4,7 @@
 
 ## 当前结果
 
-Phase 1–3 已完成：
+Phase 1–6 已完成：
 
 - Node.js + SQLite 项目域、规范化版本图与可校验迁移；
 - scrypt 密码、HttpOnly 会话、CSRF、空闲/绝对过期和登录限流；
@@ -16,14 +16,18 @@ Phase 1–3 已完成：
 - `campaign-map-v1@1.0.0` 与 `standard-project-v1@1.0.0` 版本化目录，以及九类服务端白名单模块和固定客户端渲染器；
 - Xugu 作战路线/任务网络/甘特/战果与标准项目线性路线/依赖列表/泳道甘特/交付物共用同一套固定代码；
 - 管理员和编辑者可事务性调整草稿模块顺序/启停，发布态不受影响，查看者无配置入口；
-- 55 项自动化测试、16 个真实浏览器阻断用例和四张 SHA-256/尺寸机检证据。
+- 项目隔离的材料上传、证据处理/定位、带引用只读问答和独立 AI 配额；
+- 六类更新模板、锁定发布基准/材料/证据的生成任务和严格 `ChangeProposal`；
+- 逐项/整模块人工审核、字段重新校验、copy-on-write 草稿合并、发布预览、人工发布和直接前驱回滚；
+- 完整角色 API、追加审计、SQLite 一致备份/离线恢复和项目导入导出；
+- 138 项自动化测试、Phase 3–6 共 63 个浏览器阻断用例和 19 张 SHA-256/尺寸机检证据。
 
-材料页当前只声明 Phase 4 边界，不提供上传或问答。材料与证据、AI 变更提案、差异审核、发布和回滚尚未实现。
+首版单服务器内部试用闭环已经完成。LLM 仍只能生成带来源的结构化提案，不能审核、合并、发布、回滚或生成页面代码。
 
 ## 环境
 
 - Node.js 24.15 或更高版本；
-- 无第三方 npm 运行依赖；
+- 运行依赖已锁定在 `package.json`；
 - 默认数据库：`data/platform.sqlite`（Git 忽略）；
 - 可用 `PLATFORM_DATA_DIR` 指定独立运行目录。
 
@@ -55,6 +59,23 @@ GET    /api/projects/:projectId/public/modules/:moduleType
 GET    /api/projects/:projectId/draft/modules
 GET    /api/projects/:projectId/draft/modules/:moduleType
 PATCH  /api/projects/:projectId/draft/modules
+GET    /api/projects/:projectId/materials
+POST   /api/projects/:projectId/materials/manual
+POST   /api/projects/:projectId/generation-tasks
+GET    /api/projects/:projectId/change-proposals
+GET    /api/projects/:projectId/change-proposals/:proposalId/review
+PATCH  /api/projects/:projectId/change-proposals/:proposalId/review/:changeId
+POST   /api/projects/:projectId/change-proposals/:proposalId/review/modules/:moduleType
+POST   /api/projects/:projectId/change-proposals/:proposalId/merge
+GET    /api/projects/:projectId/release/preview
+POST   /api/projects/:projectId/release/publish
+POST   /api/projects/:projectId/release/rollback
+GET    /api/projects/:projectId/release/audit
+GET    /api/projects/:projectId/members
+PUT    /api/projects/:projectId/members/:userId
+DELETE /api/projects/:projectId/members/:userId
+GET    /api/users
+POST   /api/users
 PATCH  /api/projects/:projectId
 POST   /api/projects/:projectId/archive
 POST   /api/projects/:projectId/restore
@@ -69,6 +90,8 @@ GET    /api/public
 npm run migrate
 npm run import:xugu
 npm run export:xugu
+npm run backup -- --output /secure/path/platform-backup.sqlite
+npm run restore -- --input /secure/path/platform-backup.sqlite
 npm run verify
 ```
 

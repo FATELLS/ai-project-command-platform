@@ -71,18 +71,23 @@ POST   /api/projects/:projectId/rollback
 - AI Provider：通过统一网关适配，密钥仅服务端保存。
 - 不在首版引入微服务、消息队列或任意代码插件。
 
-## Phase 1 已实现数据边界
+## 已实现数据边界
 
 - `projects` 通过两个显式指针分别定位当前 `published` 和 `draft` 版本。
 - `project_versions` 下按版本分离存储模块、作战单元、路线节点、闭环、任务、依赖和公司级战线。
 - 任务父子和前置依赖既经确定性图校验，也使用 SQLite 外键持久化。
-- `change_proposals` 是独立表，仍无合并或发布路由；AI 不可能通过当前 HTTP 层写入草稿或发布版。
+- `change_proposals`、`proposal_review_items`、`proposal_merges` 和 `publication_events` 分离保存模型建议、人工决定、草稿结果和版本事件。
+- 审核编辑复用锁定 generation context 和确定性 validator；任务所属单元、日期、证据、依赖和重复在保存决定前再次检查。
+- 合并复制当前草稿为新版本，应用全部接受项并完成外键/完整图校验后才切换指针；事务失败不保留复制版本。
+- 发布复制当前草稿为新发布版本并创建新草稿基线；回滚只接受最新发布事件的直接前驱。AI 不拥有任何审核或版本动作。
 
-## Phase 2 已实现平台边界
+## 已实现平台与运营边界
 
 - `users`、`sessions`、`project_members`、`recent_project_access` 和追加式 `audit_events` 提供认证、授权与追踪基础。
 - 会话原始 token 只存在于 HttpOnly Cookie，数据库只保存摘要；CSRF token 由认证会话端点返回并仅保存在浏览器内存。
 - 项目仓储先按平台管理员或成员关系筛选，再读取版本图；越权与不存在项目返回统一 404，失败读取不写最近访问。
 - 项目创建、编辑、归档和恢复均由服务层事务包裹，并与成员授予、审计事件共同提交或回滚。
 - HTTP 层只提供固定静态资源和明确 SPA 路由，使用 CSP、`nosniff`、`DENY`、`no-referrer` 与 `no-store`。
-- 平台 UI 只渲染发布态概览和生命周期控制。未来九类模块当前显示“即将开放”，不假装已经实现。
+- 平台 UI 使用九类固定 renderer，并在 Materials 工作区内提供提案审核与发布中心；项目数据只能驱动受控字段和术语。
+- 平台/项目管理员、编辑者和查看者分别获得明确能力；用户/成员、审核、合并、发布与回滚动作写追加式审计。
+- SQLite 运行备份使用一致快照；恢复在应用离线时校验完整性、外键和迁移后替换，并保留恢复前备份。

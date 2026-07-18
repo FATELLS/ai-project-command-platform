@@ -20,12 +20,12 @@ export function validateProviderConfig(config) {
 export function createOpenAiCompatibleProvider(config, options = {}) {
   const base = validateProviderConfig(config); const fetchImpl = options.fetchImpl ?? globalThis.fetch; const sleep = options.sleep ?? delay;
   const endpoint = new URL(`${base.pathname.replace(/\/$/, "")}/chat/completions`, base.origin).toString();
-  return Object.freeze({ configured: true, async generate(request, { signal } = {}) {
+  return Object.freeze({ configured: true, safeLabel: String(config.safeLabel ?? "openai-compatible").slice(0, 80), async generate(request, { signal } = {}) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const deadline = AbortSignal.timeout(config.timeoutMs ?? 45_000); const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
       let response;
       try {
-        response = await fetchImpl(endpoint, { method: "POST", headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ model: config.model, messages: request.messages, temperature: 0.1, max_tokens: Math.min(config.maxOutputTokens ?? 1_200, 1_200), stream: false, response_format: request.responseFormat }), signal: combined });
+        response = await fetchImpl(endpoint, { method: "POST", headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ model: config.model, messages: request.messages, temperature: 0.1, max_tokens: Math.min(config.maxOutputTokens ?? 1_200, 8_000), stream: false, response_format: request.responseFormat }), signal: combined });
       } catch (error) {
         if (signal?.aborted) throw signal.reason; if (attempt === 0 && error?.name !== "AbortError") { await sleep(1); continue; } throw safeProviderError(error?.name === "AbortError" ? "AI_PROVIDER_TIMEOUT" : "AI_PROVIDER_NETWORK_ERROR");
       }
@@ -33,8 +33,8 @@ export function createOpenAiCompatibleProvider(config, options = {}) {
       if (!response.ok) { if (attempt === 0 && retryStatuses.has(response.status)) { await sleep(1); continue; } throw safeProviderError(`AI_PROVIDER_HTTP_${response.status}`); }
       let payload; try { payload = JSON.parse(body); } catch { throw safeProviderError("AI_PROVIDER_INVALID_JSON"); }
       if (!Array.isArray(payload.choices) || payload.choices.length !== 1) throw safeProviderError("AI_PROVIDER_INVALID_OUTPUT");
-      const choice = payload.choices[0]; if (choice.message?.tool_calls || choice.finish_reason !== "stop" || typeof choice.message?.content !== "string" || !choice.message.content.trim() || choice.message.content.length > 16_000) throw safeProviderError("AI_PROVIDER_INVALID_OUTPUT");
-      return { content: choice.message.content, usage: { input: Number(payload.usage?.prompt_tokens ?? 0), output: Number(payload.usage?.completion_tokens ?? 0) } };
+      const choice = payload.choices[0]; if (choice.message?.tool_calls || choice.finish_reason !== "stop" || typeof choice.message?.content !== "string" || !choice.message.content.trim() || choice.message.content.length > (config.maxContentCharacters ?? 16_000)) throw safeProviderError("AI_PROVIDER_INVALID_OUTPUT");
+      return { content: choice.message.content, usage: { input: Number(payload.usage?.prompt_tokens ?? 0), output: Number(payload.usage?.completion_tokens ?? 0) }, providerLabel: String(config.safeLabel ?? "openai-compatible").slice(0, 80) };
     }
     throw safeProviderError("AI_PROVIDER_UNAVAILABLE");
   } });

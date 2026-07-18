@@ -160,6 +160,7 @@ test("authorized list supports factual summaries, search, status, and recent top
       assert.equal(opened.payload.snapshot.overallProgress, null);
     }
     const list = await request(context, "/api/projects?sort=recent", { cookie: admin.cookie });
+    assert.equal(list.payload.activeCount, 6);
     assert.equal(list.payload.recent.length, 4);
     assert.deepEqual(list.payload.recent.map(item => item.id), [
       "sample-project-5", "sample-project-4", "sample-project-3", "sample-project-2"

@@ -45,6 +45,17 @@ const required = [
   ".planning/phases/03-module-registry-project-templates/03-03-PLAN.md",
   ".planning/phases/03-module-registry-project-templates/03-04-PLAN.md",
   ".planning/phases/03-module-registry-project-templates/VERIFICATION.md",
+  ".planning/phases/04-project-materials-evidence/CONTEXT.md",
+  ".planning/phases/04-project-materials-evidence/RESEARCH.md",
+  ".planning/phases/04-project-materials-evidence/UI-SPEC.md",
+  ".planning/phases/04-project-materials-evidence/AI-SPEC.md",
+  ".planning/phases/04-project-materials-evidence/EVAL.md",
+  ".planning/phases/04-project-materials-evidence/04-VALIDATION.md",
+  ".planning/phases/04-project-materials-evidence/04-01-PLAN.md",
+  ".planning/phases/04-project-materials-evidence/04-02-PLAN.md",
+  ".planning/phases/04-project-materials-evidence/04-03-PLAN.md",
+  ".planning/phases/04-project-materials-evidence/04-04-PLAN.md",
+  ".planning/phases/04-project-materials-evidence/04-05-PLAN.md",
   ".planning/evidence/phase3-browser-matrix.json",
   ".planning/evidence/phase3-xugu-modules-desktop-1440x900.jpg",
   ".planning/evidence/phase3-standard-modules-desktop-1440x900.jpg",
@@ -55,6 +66,24 @@ const required = [
   "src/db/migrations/001_initial.sql",
   "src/db/migrations/002_auth_project_access.sql",
   "src/db/migrations/003_module_registry_templates.sql",
+  "src/db/migrations/004_materials_evidence.sql",
+  "src/materials/policy.mjs",
+  "src/materials/storage.mjs",
+  "src/materials/material-repository.mjs",
+  "src/materials/ingest-service.mjs",
+  "src/materials/processing-service.mjs",
+  "src/materials/evidence-service.mjs",
+  "src/materials/extractors/index.mjs",
+  "src/ai/retriever.mjs",
+  "src/ai/prompt-builder.mjs",
+  "src/ai/answer-validator.mjs",
+  "src/ai/provider-factory.mjs",
+  "src/ai/quota.mjs",
+  "src/ai/providers/disabled-provider.mjs",
+  "src/ai/providers/fake-provider.mjs",
+  "src/ai/providers/openai-compatible-provider.mjs",
+  "src/services/material-service.mjs",
+  "src/services/chat-service.mjs",
   "src/templates/catalog.mjs",
   "src/templates/template-validator.mjs",
   "src/modules/registry.mjs",
@@ -75,7 +104,15 @@ const required = [
   "test/module-registry.test.mjs",
   "test/module-api.test.mjs",
   "test/module-ui-server.test.mjs",
-  "test/platform-ui-server.test.mjs"
+  "test/platform-ui-server.test.mjs",
+  "test/material-gate.test.mjs",
+  "test/material-extraction.test.mjs",
+  "test/evidence-isolation.test.mjs",
+  "test/chat-retrieval.test.mjs",
+  "test/chat-provider.test.mjs",
+  "test/ai-quota.test.mjs",
+  "test/material-api.test.mjs",
+  "test/material-ui-server.test.mjs"
 ];
 
 function run(command, args, options = {}) {
@@ -127,12 +164,37 @@ for (const file of [
   "src/modules/schemas.mjs",
   "src/modules/loaders.mjs",
   "src/modules/module-service.mjs",
+  "src/materials/policy.mjs",
+  "src/materials/storage.mjs",
+  "src/materials/material-repository.mjs",
+  "src/materials/ingest-service.mjs",
+  "src/materials/processing-service.mjs",
+  "src/materials/evidence-service.mjs",
+  "src/materials/extractors/common.mjs",
+  "src/materials/extractors/text.mjs",
+  "src/materials/extractors/ooxml.mjs",
+  "src/materials/extractors/pdf.mjs",
+  "src/materials/extractors/image.mjs",
+  "src/materials/extractors/subprocess.mjs",
+  "src/materials/extractors/index.mjs",
+  "src/ai/errors.mjs",
+  "src/ai/retriever.mjs",
+  "src/ai/prompt-builder.mjs",
+  "src/ai/answer-validator.mjs",
+  "src/ai/published-facts.mjs",
+  "src/ai/provider-factory.mjs",
+  "src/ai/quota.mjs",
+  "src/ai/providers/disabled-provider.mjs",
+  "src/ai/providers/fake-provider.mjs",
+  "src/ai/providers/openai-compatible-provider.mjs",
   "src/repositories/auth-repository.mjs",
   "src/repositories/project-repository.mjs",
   "src/security/passwords.mjs",
   "src/security/sessions.mjs",
   "src/services/auth-service.mjs",
   "src/services/project-service.mjs",
+  "src/services/material-service.mjs",
+  "src/services/chat-service.mjs",
   "scripts/seed-project-fixture.mjs",
   "scripts/verify-browser-evidence.mjs",
   "public/app.js",
@@ -143,10 +205,22 @@ for (const file of [
 run(process.execPath, ["--test"]);
 run(process.execPath, ["scripts/verify-browser-evidence.mjs", ".planning/evidence/phase3-browser-matrix.json"]);
 
+const phase4BrowserMatrix = join(root, ".planning/evidence/phase4-browser-matrix.json");
+try {
+  await access(phase4BrowserMatrix);
+  run(process.execPath, ["scripts/verify-browser-evidence.mjs", ".planning/evidence/phase4-browser-matrix.json"]);
+} catch (error) {
+  if (process.env.REQUIRE_PHASE4_BROWSER_EVIDENCE === "1") {
+    throw new Error("Phase 4 browser evidence is required but has not been generated", { cause: error });
+  }
+  console.log("Phase 4 browser evidence pending: deterministic and Phase 3 browser gates remain enforced.");
+}
+
 const tracked = run("git", ["ls-files"], { capture: true }).split("\n").filter(Boolean);
 const forbiddenTracked = tracked.filter(file =>
-  file === ".env" || file === "data/ai-config.json" ||
-  /^data\/(?:uploads|processed)\//.test(file) || /\.sqlite(?:-wal|-shm)?$/.test(file)
+  (file !== ".env.example" && /^\.env(?:\.|$)/.test(file)) || file === "data/ai-config.json" ||
+  /^(?:data|runtime|storage)\/(?:uploads|processed|materials|logs)\//.test(file) ||
+  /\.(?:sqlite(?:-wal|-shm)?|pem|key|p12|log)$/.test(file)
 );
 assert.deepEqual(forbiddenTracked, [], `runtime or sensitive files are tracked: ${forbiddenTracked.join(", ")}`);
 
@@ -154,7 +228,7 @@ const runtimeDir = await mkdtemp(join(tmpdir(), "platform-verify-"));
 const database = openDatabase(join(runtimeDir, "platform.sqlite"));
 let server;
 try {
-  assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql"]);
+  assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql", "004_materials_evidence.sql"]);
   assert.deepEqual(applyMigrations(database), []);
   const imported = importLegacyProject(database, fixture, {
     projectId: "xugu-agentic-group",
@@ -166,7 +240,12 @@ try {
 
   const auth = createAuthService(database);
   auth.ensureBootstrapAdmin({ loginName: "verify-admin", password: "phase-two-verify-password", displayName: "Verify Admin" });
-  server = createServer(createApp({ database, authService: auth }));
+  server = createServer(createApp({
+    database,
+    authService: auth,
+    materialOptions: { storageRoot: join(runtimeDir, "materials") },
+    chatOptions: { environment: {} }
+  }));
 
   await new Promise((resolveListen, reject) => {
     server.once("error", reject);
@@ -186,6 +265,12 @@ try {
   const compatibilityResponse = await fetch(`${baseUrl}/api/public`, { headers });
   assert.equal(scopedResponse.status, 200);
   assert.equal(compatibilityResponse.status, 200);
+  const capabilityResponse = await fetch(`${baseUrl}/api/projects/xugu-agentic-group/materials/capabilities`, { headers });
+  assert.equal(capabilityResponse.status, 200);
+  const capabilities = await capabilityResponse.json();
+  assert.equal(capabilities.limits.maxFileBytes, 200 * 1024 * 1024);
+  assert.equal(JSON.stringify(capabilities).includes("apiKey"), false);
+  assert.equal(JSON.stringify(capabilities).includes("baseUrl"), false);
   const scoped = (await scopedResponse.json()).snapshot;
   const compatibility = await compatibilityResponse.json();
   assert.equal(scoped.version, "v4.2");
@@ -202,4 +287,4 @@ try {
 }
 
 assert.deepEqual(await referenceSnapshot(), referenceBefore, "read-only Xugu reference project changed during verification");
-console.log("Verification passed: Phase 3 versioned templates, fixed nine-module registry/renderers, project isolation, browser evidence, Xugu equivalence, and source read-only checks are valid.");
+console.log("Verification passed: Phase 4 secure materials, bounded evidence, cited no-key RAG, project isolation, Phase 3 browser evidence, Xugu equivalence, and source read-only checks are valid.");

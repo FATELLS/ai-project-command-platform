@@ -14,6 +14,9 @@ const fixture = JSON.parse(readFileSync(new URL("../fixtures/projects/xugu-agent
 const html = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const css = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
 const client = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
+const clientRegistry = readFileSync(new URL("../public/modules/registry.js", import.meta.url), "utf8");
+const clientShared = readFileSync(new URL("../public/modules/shared.js", import.meta.url), "utf8");
+const clientRenderers = readFileSync(new URL("../public/modules/renderers.js", import.meta.url), "utf8");
 
 async function setup() {
   const directory = mkdtempSync(join(tmpdir(), "platform-ui-"));
@@ -66,11 +69,12 @@ test("CSS implements Xugu-aligned desktop frame, focus, and responsive fallbacks
 });
 
 test("client contract keeps credentials in memory and renders server data through safe DOM APIs", () => {
+  const completeClient = `${client}\n${clientRegistry}\n${clientShared}\n${clientRenderers}`;
   for (const copy of [
     "登录项目作战平台", "登录平台", "清除搜索条件", "没有找到匹配项目", "重新加载项目",
-    "项目不存在或你无权访问", "暂无正式完成率", "即将开放", "归档项目", "恢复项目",
+    "项目或模块不存在，或你无权访问", "暂无正式完成率", "模块配置", "归档项目", "恢复项目",
     "会话已过期，请重新登录"
-  ]) assert.match(client, new RegExp(copy));
+  ]) assert.match(completeClient, new RegExp(copy));
   assert.match(client, /credentials:\s*"same-origin"/);
   assert.match(client, /replaceChildren/);
   assert.match(client, /textContent/);
@@ -88,12 +92,18 @@ test("client contract keeps credentials in memory and renders server data throug
   assert.match(client, /projectPresentation\(project\)/);
   assert.match(client, /project\?\.name/);
   assert.doesNotMatch(client, /global-rail/);
+  assert.doesNotMatch(client, /即将开放/);
+  assert.match(client, /public\/modules|\/modules\/registry\.js|canonicalModulePath/);
+  for (const source of [client, clientRegistry, clientShared, clientRenderers]) {
+    assert.doesNotMatch(source, /\.innerHTML\s*=/);
+    assert.doesNotMatch(source, /eval\(|new Function|javascript:/);
+  }
 });
 
 test("security headers, MIME types, and direct routes are deterministic", async () => {
   const context = await setup();
   try {
-    for (const route of ["/", "/login", "/projects", "/projects/xugu-agentic-group"]) {
+    for (const route of ["/", "/login", "/projects", "/projects/xugu-agentic-group", "/projects/xugu-agentic-group/modules/roadmap"]) {
       const response = await fetch(`${context.baseUrl}${route}`);
       assert.equal(response.status, 200);
       assert.match(response.headers.get("content-type"), /^text\/html/);
@@ -106,6 +116,11 @@ test("security headers, MIME types, and direct routes are deterministic", async 
     const script = await fetch(`${context.baseUrl}/app.js`);
     assert.match(script.headers.get("content-type"), /^text\/javascript/);
     assert.equal(await script.text(), client);
+    for (const [route, expected] of [["registry.js", clientRegistry], ["shared.js", clientShared], ["renderers.js", clientRenderers]]) {
+      const moduleScript = await fetch(`${context.baseUrl}/modules/${route}`);
+      assert.match(moduleScript.headers.get("content-type"), /^text\/javascript/);
+      assert.equal(await moduleScript.text(), expected);
+    }
     const stylesheet = await fetch(`${context.baseUrl}/styles.css`);
     assert.match(stylesheet.headers.get("content-type"), /^text\/css/);
     assert.equal(await stylesheet.text(), css);

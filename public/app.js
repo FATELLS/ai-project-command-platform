@@ -1,3 +1,6 @@
+import { canonicalModulePath, getClientModule, moduleTypes } from "/modules/registry.js";
+import { moduleError, moduleSkeleton, unsupportedState, validateEnvelope, validateManifest } from "/modules/shared.js";
+
 const app = document.querySelector("#app");
 const toast = document.querySelector("#toast");
 
@@ -8,7 +11,8 @@ const state = {
   projects: [],
   recent: [],
   searchTimer: null,
-  dialogReturnFocus: null
+  dialogReturnFocus: null,
+  routeRequest: 0
 };
 
 const roleLabels = Object.freeze({
@@ -39,8 +43,7 @@ function projectPresentation(project = {}) {
     task: terms.task || "行动任务",
     stage: terms.stage || "战役节点",
     outcome: terms.outcome || "战果闭环",
-    workstream: "公司级战线",
-    modules: ["作战总览", "作战单元", "战役路线", "任务网络", "作战甘特", "战果档案", "风险", "指标", "材料"]
+    workstream: "公司级战线"
   } : {
     kind: "standard",
     symbol: project.name?.trim()?.[0] || "项",
@@ -53,8 +56,7 @@ function projectPresentation(project = {}) {
     task: terms.task || "任务",
     stage: terms.stage || "里程碑",
     outcome: terms.outcome || "交付物",
-    workstream: "工作流",
-    modules: ["项目总览", "团队", "里程碑", "任务网络", "甘特", "交付物", "风险", "指标", "材料"]
+    workstream: "工作流"
   };
 }
 
@@ -84,7 +86,7 @@ function iconButton(label, text, onClick, className = "ghost-button") {
 }
 
 function safeIntendedPath(pathname = location.pathname) {
-  return /^\/projects(?:\/[a-z0-9][a-z0-9._-]{2,63})?$/.test(pathname) ? pathname : "/projects";
+  return /^\/projects(?:\/[a-z0-9][a-z0-9._-]{2,63}(?:\/modules\/(?:overview|roadmap|units|task-network|gantt|outcomes|risks|metrics|materials))?)?$/.test(pathname) ? `${pathname}${location.search}` : "/projects";
 }
 
 function formatDate(value) {
@@ -237,11 +239,11 @@ function appFrame(mainContent, options = {}) {
   ]);
   const navigation = element("nav", { className: "public-nav", ariaLabel: "全局导航" }, [
     element("a", { className: options.projectMode ? "" : "active", href: "/projects", text: "项目作战台", onClick: event => { event.preventDefault(); navigate("/projects"); } }),
-    ...(options.projectMode ? [element("a", { className: "active", href: location.pathname, text: presentation.overviewLabel })] : []),
-    element("span", { className: "nav-future", text: "模块中心 · 即将开放" })
+    ...(options.projectMode ? [element("a", { className: "active", href: location.pathname, text: options.moduleTitle ?? presentation.overviewLabel })] : [])
   ]);
   const actions = element("div", { className: "header-actions" }, [
     ...(options.switcher ? [element("div", { className: "header-switcher" }, [element("span", { text: "当前项目" }), options.switcher])] : []),
+    ...(options.projectActions ?? []),
     element("span", { className: "update-time" }, [element("i", { ariaHidden: "true" }), element("span", { text: user.displayName })]),
     iconButton("退出登录", "退出", logout, "admin-entry")
   ]);
@@ -448,95 +450,229 @@ function projectSwitcher(projects, currentId) {
   return select;
 }
 
-async function renderProject(projectId) {
-  document.title = "项目概览 · AI 项目作战管理平台";
-  const loading = element("div", { className: "empty-panel" }, [element("h1", { text: "正在加载项目" }), element("p", { text: "正在读取已发布项目事实…" })]);
-  app.replaceChildren(appFrame(loading));
+function moduleNavigation(project, manifest, activeType) {
+  const scrollBehavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  const list = element("ul", {}, manifest.modules.map(module => {
+    const path = canonicalModulePath(project.id, module.type);
+    return element("li", {}, [element("a", {
+      href: path,
+      className: module.type === activeType ? "active" : "",
+      ariaCurrent: module.type === activeType ? "page" : undefined,
+      text: module.title,
+      onClick: event => { event.preventDefault(); navigate(path); },
+      onFocus: event => event.currentTarget.scrollIntoView({ inline: "nearest", block: "nearest" })
+    })]);
+  }));
+  list.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    const links = [...list.querySelectorAll("a")];
+    const current = links.indexOf(document.activeElement);
+    if (current < 0) return;
+    event.preventDefault();
+    links[(current + (event.key === "ArrowRight" ? 1 : -1) + links.length) % links.length].focus();
+  });
+  return element("nav", { className: "project-nav section-card", ariaLabel: "项目模块" }, [
+    element("button", { type: "button", className: "module-scroll-button previous", ariaLabel: "向前滚动模块", text: "‹", onClick: () => list.scrollBy({ left: -280, behavior: scrollBehavior }) }),
+    list,
+    element("button", { type: "button", className: "module-scroll-button next", ariaLabel: "向后滚动模块", text: "›", onClick: () => list.scrollBy({ left: 280, behavior: scrollBehavior }) })
+  ]);
+}
+
+function canConfigureModules(project) {
+  return ["platform_admin", "project_admin", "project_editor"].includes(project.role);
+}
+
+function compactModuleHeading(project, module, presentation, version) {
+  return element("header", { className: "module-page-heading" }, [
+    element("div", {}, [element("span", { className: "eyebrow", text: presentation.kind === "campaign" ? "PUBLISHED CAMPAIGN MODULE" : "PUBLISHED PROJECT MODULE" }), element("h1", { text: module.title }), element("p", { text: `查看 ${project.name} 当前已发布的${module.title}事实。` })]),
+    element("div", { className: "module-heading-meta" }, [element("span", { className: "badge version", text: version }), element("span", { text: `更新于 ${formatDate(project.updatedAt)}` })])
+  ]);
+}
+
+function projectNotFound(projectId) {
+  const panel = element("div", { className: "error-panel" }, [
+    element("h1", { text: "项目或模块不存在，或你无权访问" }),
+    element("p", { text: "请检查地址，或返回项目总览查看当前已启用模块。" }),
+    element("button", { type: "button", className: "secondary-button", text: "返回项目总览", onClick: () => navigate(`/projects/${encodeURIComponent(projectId)}`) })
+  ]);
+  app.replaceChildren(appFrame(panel));
+}
+
+async function renderProject(projectId, requestedType = "overview") {
+  const definition = getClientModule(requestedType);
+  if (!definition) { projectNotFound(projectId); return; }
+  const requestId = ++state.routeRequest;
+  document.title = "正在加载模块 · AI 项目作战管理平台";
+  const initial = element("div", { className: "route-loading", ariaBusy: "true" }, [element("h1", { text: "正在加载项目模块" }), moduleSkeleton(requestedType)]);
+  app.replaceChildren(appFrame(initial));
   try {
-    const [detail, list] = await Promise.all([
+    const [detail, list, manifest] = await Promise.all([
       api(`/api/projects/${encodeURIComponent(projectId)}/public`),
-      api("/api/projects?status=active&sort=recent")
+      api("/api/projects?status=active&sort=recent"),
+      api(`/api/projects/${encodeURIComponent(projectId)}/public/modules`)
     ]);
+    if (requestId !== state.routeRequest) return;
     const { project, snapshot } = detail;
+    const expectedManifest = { projectId, version: project.publishedVersion, templateId: project.templateId, templateVersion: project.templateVersion };
+    if (!validateManifest(manifest, expectedManifest, moduleTypes)) {
+      app.replaceChildren(appFrame(unsupportedState(() => renderProject(projectId, requestedType)), { projectMode: true, project }));
+      return;
+    }
+    const module = manifest.modules.find(candidate => candidate.type === requestedType);
+    if (!module) { projectNotFound(projectId); return; }
     const presentation = projectPresentation(project);
-    const currentStageLabel = snapshot.currentStage != null && !/^\d+$/.test(String(snapshot.currentStage))
-      ? String(snapshot.currentStage)
-      : snapshot.statusLabel || "待配置";
     state.projects = list.projects;
-    document.title = `${project.name} · ${presentation.overviewLabel}`;
-    const counts = [
-      [snapshot.groups?.length ?? 0, presentation.unit],
-      [snapshot.tasks?.length ?? 0, presentation.task],
-      [snapshot.stages?.length ?? 0, presentation.stage],
-      [snapshot.companyWorkstreams?.length ?? 0, presentation.workstream]
-    ];
-    const navigation = presentation.modules.map((label, index) => [label, index !== 0]);
-    const projectNav = element("nav", { className: "project-nav section-card", ariaLabel: "项目模块" }, [
-      element("h2", { text: "项目模块" }),
-      element("ul", {}, navigation.map(([label, future]) => element("li", { className: future ? "" : "active", ariaCurrent: future ? undefined : "page" }, [
-        element("span", { text: label }),
-        ...(future ? [element("small", { text: "即将开放" })] : [])
-      ])))
+    const slot = element("section", { className: "module-content", ariaLive: "polite", ariaBusy: "true" }, [moduleSkeleton(requestedType)]);
+    const breadcrumb = element("nav", { className: "breadcrumb", ariaLabel: "面包屑" }, [
+      element("a", { href: "/projects", text: "Projects", onClick: event => { event.preventDefault(); navigate("/projects"); } }),
+      element("span", { ariaHidden: "true", text: "/" }), element("span", { text: project.name }),
+      ...(requestedType === "overview" ? [] : [element("span", { ariaHidden: "true", text: "/" }), element("span", { text: module.title })])
     ]);
-    const overview = element("div", {}, [
-      element("nav", { className: "breadcrumb", ariaLabel: "面包屑" }, [
-        element("a", { href: "/projects", text: "Projects", onClick: event => { event.preventDefault(); navigate("/projects"); } }),
-        element("span", { ariaHidden: "true", text: "/" }),
-        element("span", { text: project.name })
-      ]),
-      element("section", { className: "project-hero goal-hero" }, [
-        element("div", { className: "hero-copy goal-copy" }, [
-          element("span", { className: "single-goal", text: presentation.heroKicker }),
-          element("h1", { text: project.name }),
-          element("div", { className: "project-id", text: project.id }),
-          element("p", { text: snapshot.summary || snapshot.goal || "暂无正式项目摘要" }),
-          element("div", { className: "hero-badges goal-tags" }, [
-            element("span", { className: "badge active", text: "进行中" }),
-            element("span", { className: "badge role", text: roleLabels[project.role] ?? project.role }),
-            element("span", { className: "badge version", text: project.publishedVersion }),
-            element("span", { className: "badge archived", text: templateLabels[project.templateId] ?? project.templateId })
-          ])
-        ]),
-        element("aside", { className: "overall-card campaign-status-card" }, [
-          element("div", { className: "planning-orbit", ariaHidden: "true" }, [element("i"), element("b", { text: "PLAN" })]),
-          element("div", { className: "overall-copy" }, [
-            element("small", { text: presentation.currentKicker }),
-            element("b", { text: currentStageLabel }),
-            element("span", { text: snapshot.statusLabel || "依据已发布项目事实推进当前行动" }),
-            element("div", { className: "planning-badge", text: snapshot.overallProgress == null ? "当前按正式材料推进 · 不虚构完成比例" : `正式完成率 ${snapshot.overallProgress}%` })
-          ]),
-          element("img", { src: "/assets/transformation-group-transparent-v2.png", alt: `${project.name}${presentation.unit}示意` })
-        ])
-      ]),
-      element("section", { className: "fact-grid", ariaLabel: "项目事实计数" }, counts.map(([value, label]) => element("article", { className: "fact-card" }, [element("strong", { text: String(value) }), element("span", { text: label })]))),
-      element("div", { className: "detail-grid" }, [
-        element("section", { className: "detail-panel" }, [
-          element("h2", { text: "当前状态" }),
-          element("dl", { className: "detail-list" }, [
-            element("dt", { text: "状态说明" }), element("dd", { text: snapshot.statusLabel || "暂无状态说明" }),
-            element("dt", { text: "当前阶段" }), element("dd", { text: currentStageLabel }),
-            element("dt", { text: "正式完成率" }), element("dd", { text: snapshot.overallProgress == null ? "暂无正式完成率" : `${snapshot.overallProgress}%` }),
-            element("dt", { text: "更新时间" }), element("dd", { text: formatDate(snapshot.updatedAt || project.updatedAt) }),
-            element("dt", { text: "发布版本" }), element("dd", { text: project.publishedVersion })
-          ])
-        ]),
-        element("section", { className: "detail-panel" }, [
-          element("h2", { text: "项目边界" }),
-          element("p", { className: "boundary-note", text: "当前页面只读取已发布数据。草稿编辑、审核与发布属于后续受控工作流，本阶段不会直接修改 published。" })
-        ])
-      ])
+    const projectPage = element("div", { className: "project-route" }, [
+      breadcrumb,
+      ...(requestedType === "overview" ? [] : [compactModuleHeading(project, module, presentation, manifest.version)]),
+      moduleNavigation(project, manifest, requestedType), slot
     ]);
-    const content = element("div", { className: "project-layout" }, [projectNav, overview]);
-    app.replaceChildren(appFrame(content, { projectMode: true, project, presentation, switcher: projectSwitcher(list.projects, project.id) }));
+    const configAction = canConfigureModules(project) ? [element("button", { type: "button", className: "admin-entry module-config-entry", text: "模块配置", onClick: event => openModuleConfiguration(project, presentation, event.currentTarget) })] : [];
+    app.replaceChildren(appFrame(projectPage, { projectMode: true, project, presentation, moduleTitle: module.title, switcher: projectSwitcher(list.projects, project.id), projectActions: configAction }));
+    let slowTimer = setTimeout(() => {
+      if (requestId === state.routeRequest && slot.getAttribute("aria-busy") === "true") slot.append(element("p", { className: "slow-loading", text: "加载时间较长，请稍候…" }));
+    }, 10_000);
+    try {
+      const envelope = await api(`/api/projects/${encodeURIComponent(projectId)}/public/modules/${requestedType}`);
+      if (requestId !== state.routeRequest) return;
+      const valid = validateEnvelope(envelope, { ...expectedManifest, type: requestedType, allowedViews: definition.allowedViews });
+      if (!valid) slot.replaceChildren(unsupportedState(() => renderProject(projectId, requestedType)));
+      else {
+        const rendered = definition.render({
+          data: envelope.data, module: envelope.module, project, presentation, snapshot,
+          query: new URLSearchParams(location.search), navigate, version: manifest.version,
+          updatedAt: formatDate(snapshot.updatedAt || project.updatedAt), roleLabel: roleLabels[project.role] ?? project.role,
+          templateLabel: templateLabels[project.templateId] ?? project.templateId
+        });
+        slot.replaceChildren(rendered);
+        document.title = `${project.name} · ${module.title}`;
+      }
+    } catch (error) {
+      if (error.message === "AUTHENTICATION_REQUIRED" || requestId !== state.routeRequest) return;
+      if (error.status === 404) { projectNotFound(projectId); return; }
+      slot.replaceChildren(moduleError(`无法加载${module.title}`, error.message, () => renderProject(projectId, requestedType)));
+    } finally {
+      clearTimeout(slowTimer);
+      slot.setAttribute("aria-busy", "false");
+    }
   } catch (error) {
-    if (error.message === "AUTHENTICATION_REQUIRED") return;
-    const notFound = error.status === 404;
-    const panel = element("div", { className: "error-panel" }, [
-      element("h1", { text: notFound ? "项目不存在或你无权访问" : "项目加载失败" }),
-      element("p", { text: notFound ? "请检查地址或返回项目列表。" : error.message }),
-      element("button", { type: "button", className: "secondary-button", text: notFound ? "返回项目列表" : "重新加载项目", onClick: () => notFound ? navigate("/projects") : renderProject(projectId) })
-    ]);
+    if (error.message === "AUTHENTICATION_REQUIRED" || requestId !== state.routeRequest) return;
+    if (error.status === 404) { projectNotFound(projectId); return; }
+    const panel = moduleError("项目模块加载失败", error.message, () => renderProject(projectId, requestedType));
     app.replaceChildren(appFrame(panel));
+  }
+}
+
+async function openModuleConfiguration(project, presentation, returnFocus) {
+  const backdrop = element("div", { className: "sheet-backdrop" });
+  const sheet = element("section", { className: "module-config-sheet", role: "dialog", ariaModal: "true", ariaLabelledby: "module-config-title", ariaBusy: "true" });
+  backdrop.append(sheet);
+  document.body.append(backdrop);
+  let dirty = false;
+  let saving = false;
+  let modules = [];
+
+  const remove = () => { backdrop.remove(); returnFocus?.focus(); };
+  const confirmDiscard = () => {
+    if (!dirty) { remove(); return; }
+    const confirmationBackdrop = element("div", { className: "dialog-backdrop nested-confirmation" });
+    const continueEditing = element("button", { type: "button", className: "secondary-button", text: "继续编辑", onClick: () => { confirmationBackdrop.remove(); sheet.focus(); } });
+    const discard = element("button", { type: "button", className: "danger-button", text: "放弃修改", onClick: () => { confirmationBackdrop.remove(); remove(); } });
+    const confirmation = element("section", { className: "dialog discard-dialog", role: "alertdialog", ariaModal: "true", ariaLabelledby: "discard-title" }, [
+      element("h2", { id: "discard-title", text: "放弃未保存的模块配置？" }),
+      element("p", { text: "本次启停和排序调整不会保存。" }),
+      element("div", { className: "dialog-actions" }, [continueEditing, discard])
+    ]);
+    confirmationBackdrop.append(confirmation);
+    document.body.append(confirmationBackdrop);
+    continueEditing.focus();
+  };
+  const closeButton = iconButton("关闭模块配置", "×", confirmDiscard, "dialog-close");
+  sheet.replaceChildren(element("header", { className: "sheet-header" }, [
+    element("div", {}, [element("span", { className: "eyebrow", text: "DRAFT CONFIGURATION" }), element("h2", { id: "module-config-title", text: "模块配置" })]), closeButton
+  ]), element("p", { className: "draft-banner", text: "正在配置草稿模块；当前发布页面不会立即变化。" }), moduleSkeleton("units"));
+  closeButton.focus();
+
+  const onSheetKeydown = event => {
+    if (event.key === "Escape" && !saving) { event.preventDefault(); confirmDiscard(); return; }
+    if (event.key !== "Tab") return;
+    const focusable = [...sheet.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled)")];
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  };
+  backdrop.addEventListener("keydown", onSheetKeydown);
+
+  try {
+    const manifest = await api(`/api/projects/${encodeURIComponent(project.id)}/draft/modules`);
+    modules = manifest.modules.map(module => ({ ...module }));
+    const error = element("p", { className: "form-error sheet-error", role: "alert" });
+    const list = element("ol", { className: "module-config-list" });
+    const save = element("button", { type: "button", className: "primary-button", text: "保存草稿配置" });
+    const cancel = element("button", { type: "button", className: "secondary-button", text: "放弃本次修改", onClick: confirmDiscard });
+    const names = new Map(modules.map(module => [module.type, module.title]));
+    const renderRows = focusType => {
+      list.replaceChildren(...modules.map((module, index) => {
+        const toggleId = `module-enabled-${module.type}`;
+        const toggle = element("input", { id: toggleId, type: "checkbox", checked: module.enabled, disabled: module.required, ariaLabel: `${module.title}启用状态`, onChange: () => { module.enabled = toggle.checked; dirty = true; } });
+        const row = element("li", { className: "module-config-row", dataset: { moduleType: module.type } }, [
+          element("span", { className: "order-number", text: String(index + 1) }),
+          element("div", { className: "module-config-name" }, [
+            element("label", { htmlFor: toggleId, text: names.get(module.type) ?? module.type }),
+            element("small", { text: `固定视图：${module.viewVariant}` }),
+            ...(module.required ? [element("span", { className: "badge required", text: "必填模块" })] : [])
+          ]),
+          toggle,
+          element("div", { className: "order-actions" }, [
+            element("button", { type: "button", className: "ghost-button", text: "上移", disabled: index === 0, onClick: () => { [modules[index - 1], modules[index]] = [modules[index], modules[index - 1]]; dirty = true; renderRows(module.type); } }),
+            element("button", { type: "button", className: "ghost-button", text: "下移", disabled: index === modules.length - 1, onClick: () => { [modules[index + 1], modules[index]] = [modules[index], modules[index + 1]]; dirty = true; renderRows(module.type); } })
+          ])
+        ]);
+        return row;
+      }));
+      if (focusType) list.querySelector(`[data-module-type="${CSS.escape(focusType)}"] .order-actions button:not(:disabled)`)?.focus();
+    };
+    save.addEventListener("click", async () => {
+      error.textContent = "";
+      saving = true;
+      save.disabled = cancel.disabled = closeButton.disabled = true;
+      save.textContent = "正在保存…";
+      try {
+        await api(`/api/projects/${encodeURIComponent(project.id)}/draft/modules`, {
+          method: "PATCH", mutation: true,
+          body: { modules: modules.map((module, position) => ({ type: module.type, schemaVersion: module.schemaVersion, position, enabled: module.enabled, viewVariant: module.viewVariant })) }
+        });
+        dirty = false;
+        remove();
+        showToast("草稿模块配置已保存");
+      } catch (requestError) {
+        if (requestError.message !== "AUTHENTICATION_REQUIRED") error.textContent = "未能保存模块配置，请检查后重试";
+      } finally {
+        saving = false;
+        save.disabled = cancel.disabled = closeButton.disabled = false;
+        save.textContent = "保存草稿配置";
+      }
+    });
+    renderRows();
+    sheet.setAttribute("aria-busy", "false");
+    sheet.replaceChildren(
+      element("header", { className: "sheet-header" }, [element("div", {}, [element("span", { className: "eyebrow", text: "DRAFT CONFIGURATION" }), element("h2", { id: "module-config-title", text: "模块配置" })]), closeButton]),
+      element("p", { className: "draft-banner", text: "正在配置草稿模块；当前发布页面不会立即变化。" }),
+      element("p", { className: "sheet-copy", text: `配置 ${project.name} 的九个固定模块。禁用不会删除${presentation.task}或其他事实。` }),
+      list, error, element("footer", { className: "sheet-actions" }, [cancel, save])
+    );
+    closeButton.focus();
+  } catch (error) {
+    if (error.message === "AUTHENTICATION_REQUIRED") { remove(); return; }
+    sheet.setAttribute("aria-busy", "false");
+    sheet.append(element("div", { className: "error-panel" }, [element("h3", { text: "无法加载草稿模块配置" }), element("p", { text: error.message }), element("button", { type: "button", className: "secondary-button", text: "关闭", onClick: remove })]));
   }
 }
 
@@ -673,6 +809,7 @@ function openRestoreDialog(project, refresh) {
 }
 
 async function renderRoute() {
+  state.routeRequest += 1;
   if (!state.session) {
     if (location.pathname !== "/login") state.intendedPath = safeIntendedPath();
     history.replaceState({}, "", "/login");
@@ -689,7 +826,17 @@ async function renderRoute() {
   }
   const match = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})$/);
   if (match) {
-    await renderProject(match[1]);
+    await renderProject(match[1], "overview");
+    return;
+  }
+  const moduleMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/modules\/([a-z0-9][a-z0-9-]{1,63})$/);
+  if (moduleMatch) {
+    if (moduleMatch[2] === "overview") {
+      navigate(`/projects/${encodeURIComponent(moduleMatch[1])}${location.search}`, { replace: true });
+      return;
+    }
+    if (!getClientModule(moduleMatch[2])) { projectNotFound(moduleMatch[1]); return; }
+    await renderProject(moduleMatch[1], moduleMatch[2]);
     return;
   }
   navigate("/projects", { replace: true });

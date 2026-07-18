@@ -3,6 +3,9 @@ import { join } from "node:path";
 
 const contentTypes = Object.freeze({
   "/app.js": "text/javascript; charset=utf-8",
+  "/modules/registry.js": "text/javascript; charset=utf-8",
+  "/modules/shared.js": "text/javascript; charset=utf-8",
+  "/modules/renderers.js": "text/javascript; charset=utf-8",
   "/styles.css": "text/css; charset=utf-8",
   "/assets/global-background.png": "image/png",
   "/assets/brand-wave.png": "image/png",
@@ -10,6 +13,9 @@ const contentTypes = Object.freeze({
 });
 
 const assetFiles = Object.freeze({
+  "/modules/registry.js": ["modules", "registry.js"],
+  "/modules/shared.js": ["modules", "shared.js"],
+  "/modules/renderers.js": ["modules", "renderers.js"],
   "/assets/global-background.png": ["assets", "global-background.png"],
   "/assets/brand-wave.png": ["assets", "brand-wave.png"],
   "/assets/transformation-group-transparent-v2.png": ["assets", "transformation-group-transparent-v2.png"]

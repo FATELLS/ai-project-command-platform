@@ -58,7 +58,7 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
   const insertClosure = database.prepare(`
     INSERT INTO project_closures (version_id, external_id, position, title, date_label, data_json) VALUES (?, ?, ?, ?, ?, ?)
   `);
-  snapshot.closures.forEach((closure, position) => {
+  (snapshot.closures ?? []).forEach((closure, position) => {
     insertClosure.run(versionId, closure.id, position, closure.title, closure.date ?? "", JSON.stringify(without(closure, new Set(["id", "title", "date"]))));
   });
 
@@ -79,7 +79,7 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
   const insertTaskLink = database.prepare(`
     INSERT INTO task_links (version_id, task_external_id, depends_on_external_id, position) VALUES (?, ?, ?, ?)
   `);
-  snapshot.tasks.forEach(task => task.dependsOn.forEach((dependency, position) => {
+  snapshot.tasks.forEach(task => (task.dependsOn ?? []).forEach((dependency, position) => {
     insertTaskLink.run(versionId, task.id, dependency, position);
   }));
 
@@ -89,12 +89,12 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
   const insertWorkstreamTask = database.prepare(`
     INSERT INTO workstream_tasks (version_id, workstream_external_id, task_external_id, position) VALUES (?, ?, ?, ?)
   `);
-  snapshot.companyWorkstreams.forEach((workstream, position) => {
+  (snapshot.companyWorkstreams ?? []).forEach((workstream, position) => {
     insertWorkstream.run(
       versionId, workstream.id, position, workstream.title,
       JSON.stringify(without(workstream, new Set(["id", "title", "taskIds"])))
     );
-    workstream.taskIds.forEach((taskId, taskPosition) => {
+    (workstream.taskIds ?? []).forEach((taskId, taskPosition) => {
       insertWorkstreamTask.run(versionId, workstream.id, taskId, taskPosition);
     });
   });

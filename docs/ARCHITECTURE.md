@@ -66,7 +66,15 @@ POST   /api/projects/:projectId/rollback
 
 ## 技术选择
 
-- 首版：单服务器 Node.js + SQLite。
+- 首版：单服务器 Node.js 24.15+ + 内置 `node:sqlite`。
 - 后续多机部署：在仓储接口后迁移 PostgreSQL。
 - AI Provider：通过统一网关适配，密钥仅服务端保存。
 - 不在首版引入微服务、消息队列或任意代码插件。
+
+## Phase 1 已实现数据边界
+
+- `projects` 通过两个显式指针分别定位当前 `published` 和 `draft` 版本。
+- `project_versions` 下按版本分离存储模块、作战单元、路线节点、闭环、任务、依赖和公司级战线。
+- 任务父子和前置依赖既经确定性图校验，也使用 SQLite 外键持久化。
+- `change_proposals` 是独立表；Phase 1 不提供将其写入草稿或发布版的路由。
+- 当前 HTTP 层只有读 API；会话和项目权限属于 Phase 2。

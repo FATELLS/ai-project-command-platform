@@ -19,3 +19,14 @@
 - 已确认 `fixtures/projects/xugu-agentic-group.json` 与参考项目 `data/state.seed.json` 的 SHA-256 完全一致。
 - Phase 1 实施范围为项目域模型、SQLite 迁移、版本仓储、项目级 API、虚谷导入/导出和确定性验收。
 - GSD 技能引用的 `gsd-core` 工作流文件仍未安装；继续按技能要求的研究、计划、检查、分波执行和验证门槛手工编排。
+
+## 2026-07-18：Phase 1 实现完成
+
+状态：`accepted`
+
+- 研究、三个执行计划和验收门槛已写入 `.planning/phases/01-project-domain-data-foundation/`。
+- 专用 GSD 研究、规划、检查和执行角色在本机均未能在限定时间内产出文件，已中止并由主 Agent 按同一产物和门槛完成实施。
+- 实现 Node.js 内置 SQLite 迁移、规范化版本实体、项目仓储、旧夹具导入/导出、项目级读 API 和旧 `/api/public` 兼容入口。
+- 通过 12 项自动化测试，覆盖迁移校验和、事务回滚、任务图、幂等导入、冲突拒绝、语义导出、两项目隔离和 API 路由。
+- 统一 `npm run verify` 额外使用临时数据库完成导入/导出和 API 冒烟，并校验参考项目未变。
+- 未实现或开放后续阶段的登录、UI、材料、AI 提案、审核、发布和回滚能力。

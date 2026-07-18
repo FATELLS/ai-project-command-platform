@@ -6,7 +6,7 @@
 
 - 本项目是独立的新平台项目，不是现有虚谷作战地图的结果目录。
 - 当前只完成项目初始化、需求、架构、路线图和迁移夹具；不得宣称多项目平台已经实现。
-- 现有稳定应用位于同级 `../xugu-ai-transformation-console/`，默认只读，作为迁移来源和验收基线。
+- 现有稳定应用位于 `../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console/`，默认只读，作为迁移来源和验收基线。
 
 ## 项目记忆
 

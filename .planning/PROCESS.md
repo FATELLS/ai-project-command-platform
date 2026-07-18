@@ -110,3 +110,12 @@
 - Xugu 和标准项目通过同一固定材料 renderer 显示各自模板术语；人工材料、证据导航、禁用态问答和项目切换已通过真实浏览器验收。
 - 94 项自动化测试、15 个 Phase 4 浏览器用例、四张哈希/尺寸机检截图和统一验证全部通过；参考 Xugu 应用未被修改。
 - Phase 4 未创建提案，也未写入 draft/published；下一阶段进入结构化 `ChangeProposal`。
+
+## 2026-07-18：Phase 5 规划启动
+
+状态：`accepted for planning`
+
+- 生成任务锁定项目、当前发布版本、模板、材料和证据代际；只生成相对当前 `published` 的结构化增量。
+- `ChangeProposal` 使用仓库内版本化 Schema、六类 allowlist 模板与固定模块/操作；模型输出不能选择代码、项目或执行路径。
+- 服务端独立验证证据、语义、日期、任务依赖 DAG、重复项和 base version 冲突，任何失败都不会写入 `draft`/`published`。
+- generation 配额、并发、attempt、token 和 cost 与 chat 分账；浏览器只展示结构化任务/提案，不提前提供 Phase 6 审核或发布动作。

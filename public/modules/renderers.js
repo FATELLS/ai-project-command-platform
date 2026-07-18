@@ -380,6 +380,18 @@ function chatPath(context, suffix = "") {
   return `/api/projects/${encodeURIComponent(context.project.id)}/chat${suffix}`;
 }
 
+function generationPath(context, suffix = "") {
+  return `/api/projects/${encodeURIComponent(context.project.id)}/generation-tasks${suffix}`;
+}
+
+function proposalPath(context, suffix = "") {
+  return `/api/projects/${encodeURIComponent(context.project.id)}/change-proposals${suffix}`;
+}
+
+function materialsUiPath(context, suffix = "") {
+  return `/projects/${encodeURIComponent(context.project.id)}/modules/materials${suffix}`;
+}
+
 function uiDate(value) {
   if (!value) return "待补充";
   const date = new Date(value);
@@ -396,8 +408,12 @@ function bytes(value) {
 
 function locatorLabel(evidence = {}) {
   const location = evidence.location ?? {};
-  if (Number.isInteger(location.page)) return evidence.kind === "slide" ? `第 ${location.page} 张幻灯片` : `第 ${location.page} 页`;
+  if (Number.isInteger(location.slide)) return `第 ${location.slide} 张幻灯片${Number.isInteger(location.paragraph) ? ` · 第 ${location.paragraph} 段` : ""}`;
+  if (Number.isInteger(location.page)) return `第 ${location.page} 页`;
   if (Number.isInteger(location.paragraph)) return `第 ${location.paragraph} 段${location.heading ? ` · ${location.heading}` : ""}`;
+  if (Number.isInteger(location.line)) return `第 ${location.line} 行`;
+  if (location.type === "manual" && location.field) return `人工材料 · ${location.field === "title" ? "标题" : location.field === "body" ? "正文" : safeText(location.field)}`;
+  if (location.type === "json" && location.pointer) return `JSON · ${safeText(location.pointer)}`;
   if (location.sheet || location.range) return `${safeText(location.sheet, "工作表")} · ${safeText(location.table, "表 1")} · ${safeText(location.range, "范围待确认")}`;
   if (Number.isInteger(location.image)) return `图 ${location.image}${location.region ? ` · ${location.region}` : ""}`;
   if (Number.isInteger(evidence.ordinal)) return `第 ${evidence.ordinal + 1} 段`;
@@ -406,8 +422,9 @@ function locatorLabel(evidence = {}) {
 
 function localTabs(context, view) {
   const qaLabel = context.presentation.kind === "campaign" ? "战情问答" : "项目问答";
+  const proposalLabel = context.presentation.kind === "campaign" ? "作战更新提案" : "项目更新提案";
   const base = `/projects/${encodeURIComponent(context.project.id)}/modules/materials`;
-  const tabs = [["ledger", "材料台账"], ["qa", qaLabel]].map(([value, label]) => el("a", {
+  const tabs = [["ledger", "材料台账"], ["qa", qaLabel], ["proposals", proposalLabel]].map(([value, label]) => el("a", {
     href: `${base}?view=${value}`, ariaCurrent: view === value ? "page" : null, text: label,
     onClick: event => { event.preventDefault(); context.navigate(`${base}?view=${value}`); }
   }));
@@ -437,15 +454,15 @@ function materialErrorMessage(error) {
   return copy[error?.code] ?? error?.message ?? "请求失败，请稍后重试";
 }
 
-function modalSheet({ title, eyebrow, project, returnFocus, className = "material-sheet", render }) {
+function modalSheet({ title, eyebrow, project, returnFocus, className = "material-sheet", closeLabel = "关闭上传面板", titleId = "material-sheet-title", render }) {
   const backdrop = el("div", { className: "sheet-backdrop material-sheet-backdrop" });
-  const panel = el("section", { className, role: "dialog", ariaModal: "true", ariaLabelledby: "material-sheet-title" });
+  const panel = el("section", { className, role: "dialog", ariaModal: "true", ariaLabelledby: titleId });
   let committing = false;
   const close = () => { if (committing) return; backdrop.remove(); returnFocus?.focus?.(); };
-  const closeButton = el("button", { type: "button", className: "dialog-close", ariaLabel: "关闭上传面板", text: "×", onClick: close });
+  const closeButton = el("button", { type: "button", className: "dialog-close", ariaLabel: closeLabel, text: "×", onClick: close });
   const body = el("div", { className: "material-sheet-body" });
   panel.append(el("header", { className: "sheet-header" }, [
-    el("div", {}, [el("span", { className: "eyebrow", text: eyebrow }), el("h2", { id: "material-sheet-title", text: title }), el("p", { text: `${project.name} · ${project.id}` })]), closeButton
+    el("div", {}, [el("span", { className: "eyebrow", text: eyebrow }), el("h2", { id: titleId, text: title }), el("p", { text: `${project.name} · ${project.id}` })]), closeButton
   ]), body);
   backdrop.append(panel); document.body.append(backdrop);
   const controls = { close, body, setCommitting(value) { committing = value; closeButton.disabled = value; } };
@@ -466,6 +483,151 @@ function templateSelect(templates, id = "material-update-template") {
     el("option", { value: "", text: "请选择更新模板" }),
     ...(templates ?? []).map(item => el("option", { value: item.id, text: `${item.label} · ${item.version}` }))
   ]);
+}
+
+function capability(envelope, ...names) {
+  const caps = envelope?.capabilities ?? envelope ?? {};
+  return names.some(name => caps[name] === true);
+}
+
+function updateTemplateKey(material = {}) {
+  const item = material.updateTemplate ?? material.updateTemplateSelection ?? {};
+  return item.id ? `${item.id}@${item.version ?? "1.0.0"}` : "";
+}
+
+function updateTemplateLabel(material = {}) {
+  const item = material.updateTemplate ?? material.updateTemplateSelection ?? {};
+  return item.label ? `${item.label} · ${item.version ?? "1.0.0"}` : "更新模板不可用";
+}
+
+function generationErrorMessage(error, resetTime = "配额重置") {
+  const copy = {
+    AI_PROVIDER_DISABLED: "更新生成当前未启用；材料、证据和已有提案仍可查看。",
+    GENERATION_PROVIDER_DISABLED: "更新生成当前未启用；材料、证据和已有提案仍可查看。",
+    base_version_conflict: "发布版本已变化，请核对新版本后重新创建任务。",
+    BASE_VERSION_CONFLICT: "发布版本已变化，请核对新版本后重新创建任务。",
+    GENERATION_QUOTA_EXHAUSTED: `本项目更新生成配额已用完，可在 ${resetTime} 后重试。`,
+    GENERATION_RATE_LIMITED: "生成请求过于频繁，请稍后重试。",
+    GENERATION_CONCURRENCY: "已有生成任务正在占用可用并发，请稍后重试。",
+    INVALID_GENERATION_MATERIALS: "所选材料状态已变化，请重新选择。"
+  };
+  return copy[error?.code] ?? error?.message ?? "无法创建生成任务，请稍后重试。";
+}
+
+function openGenerationSheet(context, originatingMaterial, returnFocus) {
+  const campaign = context.presentation.kind === "campaign";
+  modalSheet({
+    title: campaign ? "生成作战更新提案" : "生成项目更新提案",
+    eyebrow: campaign ? "STRUCTURED CAMPAIGN UPDATE" : "STRUCTURED PROJECT UPDATE",
+    project: context.project,
+    returnFocus,
+    className: "material-sheet generation-sheet",
+    closeLabel: "关闭生成面板",
+    titleId: "generation-sheet-title",
+    render: controls => {
+      const loading = el("section", { className: "generation-sheet-loading", ariaBusy: "true" }, [el("p", { text: "正在读取可用于生成的材料…" })]);
+      controls.body.replaceChildren(loading);
+      void (async () => {
+        try {
+          const [capabilityEnvelope, ledger] = await Promise.all([
+            context.api(generationPath(context, "/capabilities")),
+            context.api(materialPath(context))
+          ]);
+          const caps = capabilityEnvelope.capabilities ?? {};
+          const limits = capabilityEnvelope.limits ?? {};
+          const usage = capabilityEnvelope.usage ?? {};
+          const providerEnabled = capabilityEnvelope.provider?.enabled ?? capabilityEnvelope.providerEnabled ?? true;
+          const canCreate = capability(capabilityEnvelope, "create", "createTask", "createGenerationTask");
+          const sourceItems = capabilityEnvelope.eligibleMaterials ?? ledger.items ?? [];
+          const eligible = sourceItems.filter(item => item.status === "ready" && updateTemplateKey(item) && item.generation?.enabled !== false && item.generationEnabled !== false);
+          const selected = new Set();
+          if (originatingMaterial?.id && eligible.some(item => item.id === originatingMaterial.id)) selected.add(originatingMaterial.id);
+          const maxMaterials = Math.min(8, Number(limits.maxMaterialsPerTask ?? limits.maxMaterials ?? 8));
+          const maxEvidence = Number(limits.maxEvidenceBlocks ?? 48);
+          const error = el("p", { className: "form-error", role: "alert" });
+          const selection = el("fieldset", { className: "generation-materials" });
+          const selectionCount = el("strong", { className: "generation-selection-count" });
+          const summary = el("dl", { className: "generation-lock-summary" });
+          const create = el("button", { type: "submit", className: "primary-button", text: campaign ? "生成作战更新提案" : "生成项目更新提案" });
+          const cancel = el("button", { type: "button", className: "secondary-button", text: "关闭生成面板", onClick: controls.close });
+          const selectedItems = () => eligible.filter(item => selected.has(item.id));
+          const renderSelection = focusId => {
+            const activeTemplate = updateTemplateKey(selectedItems()[0]);
+            const rows = eligible.map(item => {
+              const inputId = `generation-material-${item.id}`;
+              const differentTemplate = Boolean(activeTemplate && !selected.has(item.id) && updateTemplateKey(item) !== activeTemplate);
+              const checkbox = el("input", {
+                id: inputId, type: "checkbox", checked: selected.has(item.id),
+                disabled: differentTemplate || (!selected.has(item.id) && selected.size >= maxMaterials),
+                onChange: () => {
+                  if (checkbox.checked) selected.add(item.id); else selected.delete(item.id);
+                  renderSelection(item.id);
+                }
+              });
+              return el("div", { className: `generation-material-row${differentTemplate ? " ineligible" : ""}`, dataset: { materialId: item.id } }, [
+                checkbox,
+                el("label", { htmlFor: inputId }, [el("strong", { text: safeText(item.name, item.displayName) }), el("small", { text: `${updateTemplateLabel(item)} · ${Number(item.evidenceCount ?? item.currentEvidenceCount ?? 0)} 个证据块` })]),
+                differentTemplate ? el("span", { text: "与已选材料模板不同" }) : null
+              ]);
+            });
+            selection.replaceChildren(el("legend", { text: "选择当前项目材料" }), ...rows);
+            const chosen = selectedItems();
+            const evidenceCount = chosen.reduce((sum, item) => sum + Number(item.evidenceCount ?? item.currentEvidenceCount ?? 0), 0);
+            const template = chosen[0];
+            selectionCount.textContent = `已选择 ${chosen.length}/${maxMaterials} 份材料`;
+            summary.replaceChildren(...[
+              ["发布基准", capabilityEnvelope.baseVersion ?? capabilityEnvelope.publishedVersion ?? context.version],
+              ["更新模板", template ? updateTemplateLabel(template) : "选择首份材料后锁定"],
+              ["提案 Schema", capabilityEnvelope.schemaVersion ?? "change-proposal-v1@1.0.0"],
+              ["证据块", `${Math.min(evidenceCount, maxEvidence)}/${maxEvidence}`],
+              ["今日剩余", `${usage.remainingToday ?? usage.generationRemainingToday ?? "—"} 次`],
+              ["重置时间", uiDate(usage.resetTime ?? capabilityEnvelope.resetTime)]
+            ].flatMap(([term, value]) => [el("dt", { text: term }), el("dd", { text: String(value) })]));
+            create.disabled = !canCreate || !providerEnabled || chosen.length < 1 || evidenceCount < 1 || evidenceCount > maxEvidence;
+            if (focusId) selection.querySelector(`[data-material-id="${CSS.escape(focusId)}"] input`)?.focus();
+          };
+          const form = el("form", { className: "material-form generation-form", onSubmit: async event => {
+            event.preventDefault();
+            const materialIds = [...selected];
+            if (!materialIds.length) { error.textContent = "请至少选择一份可用于生成的材料。"; return; }
+            error.textContent = ""; controls.setCommitting(true); create.disabled = cancel.disabled = true; create.textContent = "正在创建生成任务…";
+            try {
+              const response = await context.api(generationPath(context), {
+                method: "POST", mutation: true,
+                body: { materialIds, idempotencyKey: crypto.randomUUID() }
+              });
+              const task = response.task ?? response;
+              if (!task.id) throw new Error("服务器未返回生成任务标识");
+              controls.setCommitting(false); controls.close();
+              context.showToast("生成任务已创建");
+              context.navigate(materialsUiPath(context, `/generation-tasks/${encodeURIComponent(task.id)}`));
+            } catch (requestError) {
+              error.textContent = generationErrorMessage(requestError, uiDate(usage.resetTime ?? capabilityEnvelope.resetTime));
+              controls.setCommitting(false); cancel.disabled = false; create.textContent = campaign ? "生成作战更新提案" : "生成项目更新提案"; renderSelection();
+            }
+          } }, [
+            el("p", { className: "material-boundary", text: "AI 只生成带来源的结构化建议；不会修改项目草稿或发布版本。" }),
+            el("p", { className: "generation-limit-copy", text: `每个任务最多 ${maxMaterials} 份同项目、同模板材料；服务端最多锁定 ${maxEvidence} 个当前证据块。` }),
+            ...(providerEnabled ? [] : [el("p", { className: "generation-provider-disabled", role: "status", text: "更新生成当前未启用；材料、证据和已有提案仍可查看。" })]),
+            selectionCount, selection, summary, error,
+            el("footer", { className: "sheet-actions" }, [cancel, create])
+          ]);
+          controls.body.replaceChildren(eligible.length ? form : el("section", { className: "module-empty material-empty" }, [
+            el("h3", { text: "暂无可用于生成的材料" }),
+            el("p", { text: "材料必须证据已就绪、已选择版本化更新模板，并获授权用于生成。" }),
+            el("button", { type: "button", className: "secondary-button", text: "关闭生成面板", onClick: controls.close })
+          ]));
+          if (eligible.length) renderSelection();
+        } catch (error) {
+          if (error.message === "AUTHENTICATION_REQUIRED") { controls.close(); return; }
+          controls.body.replaceChildren(el("section", { className: "error-panel", role: "alert" }, [
+            el("h3", { text: "无法加载生成条件" }), el("p", { text: generationErrorMessage(error) }),
+            el("button", { type: "button", className: "secondary-button", text: "关闭生成面板", onClick: controls.close })
+          ]));
+        }
+      })();
+    }
+  });
 }
 
 function openManualSheet(context, catalog, refresh, returnFocus) {
@@ -494,7 +656,7 @@ function openManualSheet(context, catalog, refresh, returnFocus) {
       ]),
       el("div", { className: "field" }, [el("label", { htmlFor: "manual-body", text: "正文（纯文本）" }), body]),
       el("div", { className: "field" }, [el("label", { htmlFor: "manual-note", text: "备注（可选）" }), note, remaining]),
-      el("p", { className: "material-boundary", text: "本阶段仅记录更新意图并形成证据；不会生成变更提案，也不会修改项目草稿或发布版本。" }), error,
+      el("p", { className: "material-boundary", text: "材料归档后可按版本化模板生成带来源的结构化提案；不会直接修改项目草稿或发布版本。" }), error,
       el("footer", { className: "sheet-actions" }, [el("button", { type: "button", className: "secondary-button", text: "关闭", onClick: controls.close }), submit])
     ]);
     controls.body.append(form);
@@ -542,7 +704,7 @@ function openUploadSheet(context, ledger, refresh, returnFocus) {
       el("div", { className: "quota-compact", text: `单文件 ${bytes(ledger.limits.maxFileBytes)} · 项目 ${ledger.usage.materials}/${ledger.limits.maxMaterials} 项 · 并发 ${ledger.limits.maxConcurrentUploads}` }), drop,
       el("div", { className: "form-grid" }, [el("div", { className: "field" }, [el("label", { htmlFor: "upload-category", text: "材料分类" }), el("select", { id: "upload-category", name: "category" }, ["会议纪要", "计划", "汇报", "表格/数据", "成果文件", "图片", "其他"].map(label => el("option", { text: label, value: label })))]), el("div", { className: "field" }, [el("label", { htmlFor: "upload-update-template", text: "更新模板" }), template])]),
       el("div", { className: "field" }, [el("label", { htmlFor: "upload-note", text: "材料备注（可选）" }), note, remaining]),
-      el("p", { className: "material-boundary", text: "本阶段仅记录更新意图并形成证据；不会生成变更提案，也不会修改项目草稿或发布版本。" }), queue, error,
+      el("p", { className: "material-boundary", text: "材料归档后可按版本化模板生成带来源的结构化提案；不会直接修改项目草稿或发布版本。" }), queue, error,
       el("footer", { className: "sheet-actions" }, [el("button", { type: "button", className: "secondary-button", text: "关闭上传面板", onClick: controls.close }), submit])
     ]);
     controls.body.append(form);
@@ -604,7 +766,7 @@ function materialTable(context, items, caps, refresh) {
 }
 
 function detailMetadata(material) {
-  return definitionList([["材料类型", material.extension || material.sourceKind], ["处理状态", materialStatus[material.status] ?? material.status], ["更新模板", material.updateTemplate?.label ?? "未选择更新模板"], ["上传者 / 时间", `${safeText(material.uploadedBy)} · ${uiDate(material.createdAt)}`], ["原始大小", bytes(material.size)], ["SHA-256", safeText(material.sha256)], ["证据块", `${material.evidenceCount ?? 0} 个`], ["问答授权", material.qa?.enabled ? "已授权问答" : "未授权问答"]], "material-detail-meta");
+  return definitionList([["材料类型", material.extension || material.sourceKind], ["处理状态", materialStatus[material.status] ?? material.status], ["更新模板", material.updateTemplate?.label ?? "未选择更新模板"], ["上传者 / 时间", `${safeText(material.uploadedBy)} · ${uiDate(material.createdAt)}`], ["原始大小", bytes(material.size)], ["SHA-256", safeText(material.sha256)], ["证据块", `${material.evidenceCount ?? 0} 个`], ["问答授权", material.qa?.enabled ? "已授权问答" : "未授权问答"], ["生成授权", material.generation?.enabled ? "已授权生成" : "未授权生成"]], "material-detail-meta");
 }
 
 function renderMaterialDetail(context, root) {
@@ -618,15 +780,17 @@ function renderMaterialDetail(context, root) {
       const selectedId = context.query.get("evidence"); const selected = items.find(item => item.id === selectedId) ?? items[0];
       const index = items.length ? el("div", { className: "evidence-index" }, items.map(item => el("a", { href: `${base}?evidence=${encodeURIComponent(item.id)}`, className: selected?.id === item.id ? "selected" : "", ariaCurrent: selected?.id === item.id ? "location" : null, onClick: event => { event.preventDefault(); context.navigate(`${base}?evidence=${encodeURIComponent(item.id)}`); } }, [el("strong", { text: locatorLabel(item) }), el("span", { text: safeText(item.summary, item.text?.slice(0, 100)) }), el("small", { text: item.id })]))) : el("section", { className: "module-empty" }, [el("h2", { text: "该材料尚未形成可定位证据" }), el("p", { text: material.status === "failed" ? "材料处理失败，可在权限允许时重试处理。" : "材料可能仍在预处理，证据就绪后会显示在这里。" })]);
       const select = el("select", { className: "mobile-evidence-select", ariaLabel: "选择证据位置" }, items.map(item => el("option", { value: item.id, text: locatorLabel(item) }))); if (selected) select.value = selected.id; select.addEventListener("change", () => context.navigate(`${base}?evidence=${encodeURIComponent(select.value)}`));
-      const preview = selected ? el("article", { className: "evidence-preview", ariaLive: "polite" }, [el("span", { className: "eyebrow", text: "EVIDENCE LOCATOR" }), el("h2", { text: locatorLabel(selected) }), el("p", { className: "evidence-id", text: `证据块 ${selected.id}` }), el("blockquote", { text: safeText(selected.summary, selected.text) }), el("details", {}, [el("summary", { text: "查看提取文本" }), el("pre", { text: safeText(selected.text) })]), el("p", { className: "locator-note", text: selected.location?.region || selected.location?.range ? "定位信息来自预处理结果" : "未提供精确区域" })]) : el("div", { className: "evidence-preview empty-preview", text: "选择证据位置后查看可追溯文本。" });
+      const preview = selected ? el("article", { className: "evidence-preview", ariaLive: "polite" }, [el("span", { className: "eyebrow", text: "EVIDENCE LOCATOR" }), el("h2", { text: locatorLabel(selected) }), el("p", { className: "evidence-id", text: `证据块 ${selected.id}` }), el("blockquote", { text: safeText(selected.summary, selected.text) }), el("details", {}, [el("summary", { text: "查看提取文本" }), el("pre", { text: safeText(selected.text) })]), el("p", { className: "locator-note", text: locatorLabel(selected) === "未提供精确区域" ? "未提供精确区域" : "定位信息来自预处理结果" })]) : el("div", { className: "evidence-preview empty-preview", text: "选择证据位置后查看可追溯文本。" });
       const controls = [];
       if (caps.selectUpdateTemplate) {
         const template = templateSelect(catalog.updateTemplates, "detail-update-template"); template.value = material.updateTemplate?.id ?? "";
         controls.push(el("form", { className: "metadata-control", onSubmit: async event => { event.preventDefault(); await context.api(materialPath(context, `/${id}/update-template`), { method: "PATCH", mutation: true, body: { id: template.value, version: "1.0.0" } }); context.showToast("更新模板已记录"); await load(); } }, [el("label", { htmlFor: "detail-update-template", text: "材料用途" }), template, el("button", { type: "submit", className: "secondary-button", text: "保存材料用途" })]));
       }
       if (caps.manageQa) controls.push(el("button", { type: "button", className: "secondary-button", text: material.qa?.enabled ? "取消问答授权" : "授权用于问答", onClick: async () => { await context.api(materialPath(context, `/${id}/qa`), { method: "PATCH", mutation: true, body: { enabled: !material.qa?.enabled, audience: "project_members" } }); context.showToast(material.qa?.enabled ? "已取消问答授权" : "已授权用于问答"); await load(); } }));
+      if (caps.manageGeneration) controls.push(el("button", { type: "button", className: "secondary-button", text: material.generation?.enabled ? "取消生成授权" : "授权用于生成", onClick: async () => { await context.api(materialPath(context, `/${id}/generation`), { method: "PATCH", mutation: true, body: { enabled: !material.generation?.enabled } }); context.showToast(material.generation?.enabled ? "已取消生成授权" : "已授权用于生成"); await load(); } }));
+      if (caps.createGenerationTask && material.status === "ready" && material.updateTemplate && material.generation?.enabled && Number(material.evidenceCount) > 0) controls.push(el("button", { type: "button", className: "primary-button", text: context.presentation.kind === "campaign" ? "生成作战更新提案" : "生成项目更新提案", onClick: event => openGenerationSheet(context, material, event.currentTarget) }));
       if (caps.retry && ["failed", "dependency_missing"].includes(material.status)) controls.push(el("button", { type: "button", className: "secondary-button", text: "重试处理", onClick: async () => { await context.api(materialPath(context, `/${id}/retry`), { method: "POST", mutation: true }); context.showToast("材料已进入重试队列"); await load(); } }));
-      root.replaceChildren(el("a", { className: "back-link", href: `/projects/${encodeURIComponent(context.project.id)}/modules/materials?view=ledger`, text: "← 返回材料台账", onClick: event => { event.preventDefault(); context.navigate(event.currentTarget.getAttribute("href")); } }), el("section", { className: "materials-detail-card" }, [el("header", { className: "material-detail-heading" }, [el("div", {}, [el("span", { className: "eyebrow", text: "MATERIAL EVIDENCE" }), el("h1", { text: material.name })]), el("span", { className: `material-status status-${material.status}`, text: materialStatus[material.status] ?? material.status })]), detailMetadata(material), controls.length ? el("div", { className: "material-detail-controls" }, controls) : null, el("div", { className: "evidence-layout" }, [el("aside", { ariaLabel: "证据位置索引" }, [index]), select, preview]) ]));
+      root.replaceChildren(el("a", { className: "back-link", href: `/projects/${encodeURIComponent(context.project.id)}/modules/materials?view=ledger`, text: "← 返回材料台账", onClick: event => { event.preventDefault(); context.navigate(event.currentTarget.getAttribute("href")); } }), el("section", { className: "materials-detail-card" }, [el("header", { className: "material-detail-heading" }, [el("div", {}, [el("span", { className: "eyebrow", text: "MATERIAL EVIDENCE" }), el("h1", { text: material.name })]), el("span", { className: `material-status status-${material.status}`, text: materialStatus[material.status] ?? material.status })]), detailMetadata(material), el("p", { className: "material-boundary", text: "AI 只生成带来源的结构化建议；不会修改项目草稿或发布版本。" }), controls.length ? el("div", { className: "material-detail-controls" }, controls) : null, el("div", { className: "evidence-layout" }, [el("aside", { ariaLabel: "证据位置索引" }, [index]), select, preview]) ]));
     } catch (error) {
       if (error.message === "AUTHENTICATION_REQUIRED") return;
       root.replaceChildren(el("section", { className: "module-error error-panel", role: "alert" }, [el("h1", { text: error.status === 404 ? "材料不存在或你无权访问" : "无法加载材料详情" }), el("p", { text: materialErrorMessage(error) }), el("button", { type: "button", className: "secondary-button", text: "返回材料台账", onClick: () => context.navigate(`/projects/${encodeURIComponent(context.project.id)}/modules/materials?view=ledger`) })]));
@@ -679,11 +843,90 @@ function renderQa(context, root) {
   void load();
 }
 
+const generationStateLabels = Object.freeze({ queued: "等待生成资源", retrieving_evidence: "锁定并整理证据", generating: "生成结构化增量", repairing: "修复结构输出", validating: "执行服务端校验", succeeded: "结构化提案已生成", failed_retryable: "生成暂时失败，可重试", failed_terminal: "生成失败，未创建提案", stale: "发布基准已变化" });
+const semanticLabels = Object.freeze({ fact: "事实 fact", plan: "计划 plan", suggestion: "建议 suggestion", unknown: "待确认 unknown" });
+const operationLabels = Object.freeze({ create: "新增建议", update: "更新建议", delete: "删除建议" });
+
+function taskHref(context, id) { return materialsUiPath(context, `/generation-tasks/${encodeURIComponent(id)}`); }
+function proposalHref(context, id, changeId = "") { const query = changeId ? `?change=${encodeURIComponent(changeId)}` : ""; return materialsUiPath(context, `/proposals/${encodeURIComponent(id)}${query}`); }
+function linkTo(context, href, text, className = "") { return el("a", { href, className, text, onClick: event => { event.preventDefault(); context.navigate(href); } }); }
+
+function generationUsage(task) {
+  const attempts = task.attempts ?? []; const input = attempts.reduce((sum,item)=>sum+Number(item.inputTokens??0),0), output = attempts.reduce((sum,item)=>sum+Number(item.outputTokens??0),0);
+  const priced = attempts.filter(item=>item.costStatus==="priced"); const cost = priced.reduce((sum,item)=>sum+Number(item.costMicros??0),0);
+  return { attempts: attempts.length, tokens: input + output, cost: priced.length ? `${priced[0].currency ?? ""} ${(cost/1_000_000).toFixed(6)}`.trim() : "未配置单价，仅记录 Token" };
+}
+
+function renderProposalWorkspace(context, root) {
+  const campaign = context.presentation.kind === "campaign";
+  const load = async () => { root.setAttribute("aria-busy","true"); try {
+    const [proposalResponse, taskResponse, envelope] = await Promise.all([context.api(proposalPath(context)),context.api(generationPath(context)),context.api(generationPath(context,"/capabilities"))]);
+    const proposals=proposalResponse.items??[],tasks=taskResponse.items??[],caps=envelope.capabilities??{};
+    const create=caps.create?el("button",{type:"button",className:"primary-button",text:campaign?"生成作战更新提案":"生成项目更新提案",onClick:event=>openGenerationSheet(context,null,event.currentTarget)}):null;
+    const running=tasks.filter(item=>!["succeeded","failed_retryable","failed_terminal","stale"].includes(item.state)).length;
+    const retryable=tasks.filter(item=>item.state==="failed_retryable").length;
+    const stale=tasks.filter(item=>item.state==="stale").length;
+    const proposalCards=proposals.map(item=>el("article",{className:"proposal-row"},[
+      el("div",{},[el("span",{className:"eyebrow",text:"VALIDATED CHANGE PROPOSAL"}),el("h3",{text:`提案 ${item.proposalId}`}),el("p",{text:item.summary})]),
+      definitionList([["基准版本",item.baseVersionLabel??item.baseVersionId],["模板",`${item.template?.id??"—"} · ${item.template?.version??"—"}`],["建议变更",`${item.changes?.length??0} 项`],["状态",item.status==="pending"?"待后续审核":"基准版本已过期"]]),
+      linkTo(context,proposalHref(context,item.proposalId),"查看结构化提案","secondary-button")
+    ]));
+    const taskCards=tasks.map(item=>{const usage=generationUsage(item);return el("article",{className:"generation-task-row"},[
+      el("div",{},[el("strong",{text:`任务 ${item.id}`}),el("span",{className:`generation-state state-${item.state}`,text:generationStateLabels[item.state]??item.state}),el("small",{text:`${item.template?.id??"—"} · ${item.baseVersionLabel??item.baseVersionId} · ${uiDate(item.createdAt)}`})]),
+      el("div",{className:"generation-usage",text:`${usage.attempts} 次调用 · ${usage.tokens} Token · ${usage.cost}`}),linkTo(context,taskHref(context,item.id),"查看任务","secondary-button")]);});
+    root.replaceChildren(localTabs(context,"proposals"),el("section",{className:"materials-workspace-card proposal-workspace"},[
+      el("header",{className:"proposal-workspace-header"},[el("div",{},[el("span",{className:"eyebrow",text:campaign?"BATTLE CHANGE PROPOSALS":"PROJECT CHANGE PROPOSALS"}),el("h2",{text:campaign?"作战更新提案":"项目更新提案"}),el("p",{text:"提案只包含服务端校验后的结构化增量，尚未写入草稿，也未发布。"})]),create]),
+      el("div",{className:"material-summary-grid"},[summaryCard("结构化提案",proposals.length,"仅已通过校验"),summaryCard("处理中任务",running,"不会阻塞项目浏览"),summaryCard("可重试失败",retryable,"保留原任务记录"),summaryCard("基准已过期",stale,"不会自动改用新版本")]),
+      el("p",{className:"material-boundary",text:"AI 只生成带来源的结构化建议；不会修改项目草稿或发布版本。"}),
+      el("section",{className:"proposal-list"},[el("h3",{text:"更新提案"}),...(proposalCards.length?proposalCards:[el("div",{className:"module-empty"},[el("h3",{text:"尚未生成结构化更新提案"}),el("p",{text:campaign?"从已就绪材料生成带来源的作战增量；不会修改草稿或发布状态。":"从已就绪材料生成带来源的项目增量；不会修改草稿或发布状态。"})])])]),
+      el("section",{className:"generation-task-list"},[el("h3",{text:"生成任务"}),...(taskCards.length?taskCards:[el("p",{className:"empty-source",text:"尚无生成任务。"})])])
+    ]));
+  }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(localTabs(context,"proposals"),el("section",{className:"module-error error-panel",role:"alert"},[el("h2",{text:"无法加载更新提案"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"primary-button",text:"重新加载提案",onClick:load})]));}finally{root.setAttribute("aria-busy","false");}};void load();
+}
+
+function renderGenerationTaskDetail(context, root) {
+  const load=async()=>{root.setAttribute("aria-busy","true");try{const response=await context.api(generationPath(context,`/${encodeURIComponent(context.generationTaskId)}`));const task=response.task,usage=generationUsage(task);const steps=["queued","retrieving_evidence","generating","repairing","validating","succeeded"];const reached=steps.indexOf(task.state);const timeline=el("ol",{className:"generation-timeline"},steps.map((state,index)=>el("li",{className:index<=reached?"complete":""},[el("strong",{text:generationStateLabels[state]}),el("span",{text:index<reached||task.state==="succeeded"?"已完成":index===reached?"当前步骤":"等待"})])));
+      const attempts=(task.attempts??[]).map(item=>el("tr",{},[el("td",{text:String(item.attemptNumber)}),el("td",{text:item.kind}),el("td",{text:item.outcome}),el("td",{text:`${item.inputTokens+item.outputTokens}`}),el("td",{text:item.costStatus==="priced"?`${item.currency??""} ${(Number(item.costMicros)/1_000_000).toFixed(6)}`:"未配置单价，仅记录 Token"}),el("td",{text:item.resultCode??"—"})]));
+      const actions=[];if(task.proposalId)actions.push(linkTo(context,proposalHref(context,task.proposalId),"查看结构化提案","primary-button"));if(response.capabilities?.retry&&["failed_retryable","stale"].includes(task.state))actions.push(el("button",{type:"button",className:"secondary-button",text:task.state==="stale"?"基于当前版本创建新任务":"重试生成",onClick:async()=>{const result=await context.api(generationPath(context,`/${encodeURIComponent(task.id)}/retry`),{method:"POST",mutation:true,body:{idempotencyKey:crypto.randomUUID()}});context.navigate(taskHref(context,result.task.id));}}));
+      root.replaceChildren(localTabs(context,"proposals"),linkTo(context,materialsUiPath(context,"?view=proposals"),"← 返回更新提案","back-link"),el("section",{className:"materials-detail-card generation-task-detail"},[
+        el("header",{className:"material-detail-heading"},[el("div",{},[el("span",{className:"eyebrow",text:"GENERATION TASK"}),el("h1",{text:`生成任务 ${task.id}`})]),el("span",{className:`generation-state state-${task.state}`,text:generationStateLabels[task.state]??task.state})]),
+        el("p",{className:"material-boundary",text:task.state==="stale"?"发布版本已变化；此任务不会自动改用新版本。":"更新生成只创建结构化建议，不会修改项目草稿或发布版本。"}),
+        el("div",{className:"generation-detail-layout"},[el("section",{},[el("h2",{text:"任务进程"}),timeline]),el("aside",{className:"generation-context-card"},[el("h2",{text:"锁定上下文"}),definitionList([["项目",task.projectId],["发布基准",`${task.baseVersionLabel} · ${task.baseVersionId}`],["模板",`${task.template.id} · ${task.template.version}`],["Schema",task.schemaVersion],["材料",`${task.materials.length} 份`],["证据",`${task.evidence.length} 块`],["Token",usage.tokens],["成本",usage.cost]])])]),
+        task.errorCode?el("p",{className:"form-error",role:"alert",text:task.state==="failed_retryable"?"更新生成暂时失败，未影响项目数据。":"模型输出未通过结构校验，未创建提案。"}):null,
+        actions.length?el("div",{className:"material-detail-controls"},actions):null,
+        attempts.length?el("div",{className:"table-scroll",tabIndex:0,role:"region",ariaLabel:"生成尝试与用量"},[el("table",{className:"module-table generation-attempt-table"},[el("caption",{text:"生成尝试、Token 与成本"}),el("thead",{},[el("tr",{},["次数","类型","结果","Token","成本","结果码"].map(label=>el("th",{scope:"col",text:label})))]),el("tbody",{},attempts)])]):null
+      ]));
+    }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h1",{text:error.status===404?"生成任务不存在或你无权访问":"无法加载生成任务"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"secondary-button",text:"返回更新提案",onClick:()=>context.navigate(materialsUiPath(context,"?view=proposals"))})]));}finally{root.setAttribute("aria-busy","false");}};void load();
+}
+
+function valueText(value){return typeof value==="string"?value:JSON.stringify(value);}
+function renderProposalDetail(context, root) {
+  const load=async()=>{root.setAttribute("aria-busy","true");try{const response=await context.api(proposalPath(context,`/${encodeURIComponent(context.proposalId)}`));const proposal=response.proposal;const selectedId=context.query.get("change");const selected=proposal.changes.find(item=>item.changeId===selectedId)??proposal.changes[0];const base=proposalHref(context,proposal.proposalId);const index=el("nav",{className:"proposal-change-index",ariaLabel:"建议变更索引"},proposal.changes.map(item=>linkTo(context,proposalHref(context,proposal.proposalId,item.changeId),`${operationLabels[item.operation]} · ${item.targetId}`,item.changeId===selected.changeId?"selected":"")));
+      const fields=Object.entries(selected.patch).flatMap(([key,value])=>[el("dt",{text:key}),el("dd",{text:valueText(value)})]);const evidence=selected.evidence??[];
+      const evidenceList=evidence.length?el("ol",{className:"proposal-evidence-list"},evidence.map(item=>{const href=materialsUiPath(context,`/${encodeURIComponent(item.materialId)}?evidence=${encodeURIComponent(item.evidenceId)}`);return el("li",{},[linkTo(context,href,`${item.materialName??item.materialId} · ${locatorLabel(item)}`),el("small",{text:item.evidenceId})]);})):el("p",{className:"form-error",text:"该项没有直接证据引用。"});
+      const warnings=[...(proposal.warnings??[]),...(selected.warnings??[])];
+      root.replaceChildren(localTabs(context,"proposals"),linkTo(context,materialsUiPath(context,"?view=proposals"),"← 返回更新提案","back-link"),el("section",{className:"materials-detail-card proposal-detail"},[
+        el("header",{className:"material-detail-heading"},[el("div",{},[el("span",{className:"eyebrow",text:"VALIDATED CHANGE PROPOSAL"}),el("h1",{text:`结构化提案 ${proposal.proposalId}`})]),el("span",{className:"generation-state state-succeeded",text:"结构校验通过"})]),
+        el("p",{className:"material-boundary",text:`这是相对于发布版本 ${proposal.baseVersionLabel??proposal.baseVersionId} 的结构化建议；尚未写入草稿，也未发布。`}),
+        el("section",{className:"validation-summary"},[el("h2",{text:"服务端校验结果"}),definitionList([["Schema / 字段","通过"],["项目 / 来源归属","通过"],["发布基准 / 目标","通过"],["高影响字段证据","通过"],["日期 / 依赖 DAG","通过"],["重复 / 冲突","通过"],["变更数量",`${proposal.changes.length} 项`],["校验时间",uiDate(proposal.validation?.validatedAt)]])]),
+        el("div",{className:"proposal-detail-layout"},[index,el("article",{className:"proposal-change-card",ariaLive:"polite"},[
+          el("header",{},[el("span",{className:"eyebrow",text:selected.module}),el("h2",{text:`${operationLabels[selected.operation]} · ${selected.targetId}`})]),
+          definitionList([["changeId",selected.changeId],["语义类型",semanticLabels[selected.semanticType]??selected.semanticType],["置信度",`${selected.confidence>=.8?"高":selected.confidence>=.6?"中":"低"}（${selected.confidence.toFixed(2)}）`],["提示",["unknown","suggestion"].includes(selected.semanticType)?"不可视为已确认事实":"必须结合证据审核"]]),
+          el("h3",{text:"结构化字段"}),el("dl",{className:"proposal-patch-fields"},fields),el("h3",{text:"引用证据"}),evidenceList,
+          warnings.length?el("section",{className:"proposal-warnings"},[el("h3",{text:"警告"}),el("ul",{},[...new Set(warnings)].map(code=>el("li",{text:code})))]):el("p",{className:"validation-pass",text:"该项没有额外警告。"})
+        ])])
+      ]));
+    }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h1",{text:error.status===404?"更新提案不存在或你无权访问":"无法加载更新提案"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"secondary-button",text:"返回更新提案",onClick:()=>context.navigate(materialsUiPath(context,"?view=proposals"))})]));}finally{root.setAttribute("aria-busy","false");}};void load();
+}
+
 export function renderMaterials(context) {
   void phaseThreeMaterialsBoundaryCopy;
   const root = el("div", { className: "materials-module", ariaBusy: "true" }, [el("section", { className: "module-skeleton skeleton-rows", ariaHidden: "true" }, [el("i"), el("i"), el("i")])]);
-  if (context.materialId) renderMaterialDetail(context, root);
+  if (context.generationTaskId) renderGenerationTaskDetail(context, root);
+  else if (context.proposalId) renderProposalDetail(context, root);
+  else if (context.materialId) renderMaterialDetail(context, root);
   else if (context.query.get("view") === "qa") renderQa(context, root);
+  else if (context.query.get("view") === "proposals") renderProposalWorkspace(context, root);
   else renderLedger(context, root);
   return root;
 }

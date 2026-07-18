@@ -86,7 +86,7 @@ function iconButton(label, text, onClick, className = "ghost-button") {
 }
 
 function safeIntendedPath(pathname = location.pathname) {
-  return /^\/projects(?:\/[a-z0-9][a-z0-9._-]{2,63}(?:\/modules\/(?:overview|roadmap|units|task-network|gantt|outcomes|risks|metrics|materials)(?:\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127})?)?)?$/.test(pathname) ? `${pathname}${location.search}` : "/projects";
+  return /^\/projects(?:\/[a-z0-9][a-z0-9._-]{2,63}(?:\/modules\/(?:overview|roadmap|units|task-network|gantt|outcomes|risks|metrics|materials)(?:\/(?:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}|(?:generation-tasks|proposals)\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}))?)?)?$/.test(pathname) ? `${pathname}${location.search}` : "/projects";
 }
 
 function formatDate(value) {
@@ -503,7 +503,7 @@ function projectNotFound(projectId) {
   app.replaceChildren(appFrame(panel));
 }
 
-async function renderProject(projectId, requestedType = "overview", materialId = "") {
+async function renderProject(projectId, requestedType = "overview", materialId = "", materialRoute = {}) {
   const definition = getClientModule(requestedType);
   if (!definition) { projectNotFound(projectId); return; }
   const requestId = ++state.routeRequest;
@@ -554,7 +554,8 @@ async function renderProject(projectId, requestedType = "overview", materialId =
           query: new URLSearchParams(location.search), navigate, version: manifest.version,
           updatedAt: formatDate(snapshot.updatedAt || project.updatedAt), roleLabel: roleLabels[project.role] ?? project.role,
           templateLabel: templateLabels[project.templateId] ?? project.templateId,
-          materialId, api, showToast, session: state.session
+          materialId, generationTaskId: materialRoute.generationTaskId ?? "", proposalId: materialRoute.proposalId ?? "",
+          api, showToast, session: state.session
         });
         slot.replaceChildren(rendered);
         document.title = `${project.name} · ${module.title}`;
@@ -848,6 +849,16 @@ async function renderRoute() {
   const materialMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/modules\/materials\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,127})$/);
   if (materialMatch) {
     await renderProject(materialMatch[1], "materials", materialMatch[2]);
+    return;
+  }
+  const generationTaskMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/modules\/materials\/generation-tasks\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,127})$/);
+  if (generationTaskMatch) {
+    await renderProject(generationTaskMatch[1], "materials", "", { generationTaskId: generationTaskMatch[2] });
+    return;
+  }
+  const proposalMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/modules\/materials\/proposals\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,127})$/);
+  if (proposalMatch) {
+    await renderProject(proposalMatch[1], "materials", "", { proposalId: proposalMatch[2] });
     return;
   }
   navigate("/projects", { replace: true });

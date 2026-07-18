@@ -16,7 +16,7 @@ test("materials use canonical project-scoped ledger, detail, evidence and chat A
   assert.match(renderers, /"x-file-name": encodeURIComponent\(file\.name\)/);
   assert.match(renderers, /method: "(?:POST|PATCH)", mutation: true/);
   assert.match(app, /modules\\\/materials\\\/\(\[a-zA-Z0-9\]/);
-  assert.match(app, /materialId, api, showToast, session/);
+  assert.match(app, /materialId, generationTaskId: materialRoute\.generationTaskId/);
 });
 
 test("campaign and standard workspaces share a fixed renderer with resolved terminology", () => {
@@ -42,11 +42,11 @@ test("ledger exposes server-authoritative quotas, gates, persistent states and r
   assert.doesNotMatch(renderers, /200\s*\*\s*1024|300\s*\*\s*1024|maxMaterials\s*:\s*100/);
 });
 
-test("intake sheets are accessible, bounded and stop at metadata intent", () => {
+test("intake sheets are accessible, bounded and preserve the proposal-only boundary", () => {
   for (const copy of [
     "选择文件", "选择或拖入文件到当前项目", "松开以上传到当前项目", "更新模板", "材料备注",
     "填写人工材料", "来源 / 发生日期", "贡献人", "正文（纯文本）", "归档人工材料",
-    "本阶段仅记录更新意图并形成证据；不会生成变更提案，也不会修改项目草稿或发布版本。",
+    "材料归档后可按版本化模板生成带来源的结构化提案；不会直接修改项目草稿或发布版本。",
     "开始上传", "正在上传…", "关闭上传面板"
   ]) assert.match(renderers, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(renderers, /role: "dialog", ariaModal: "true"/);
@@ -54,7 +54,7 @@ test("intake sheets are accessible, bounded and stop at metadata intent", () => 
   assert.match(renderers, /event\.key !== "Tab"/);
   assert.match(renderers, /maxLength: 500/);
   assert.match(renderers, /maxLength: 1000/);
-  assert.doesNotMatch(renderers, /createProposal|change-proposals|merge-draft|publish-version|model selector|prompt editor/i);
+  assert.doesNotMatch(renderers, /merge-draft|publish-version|model selector|prompt editor/i);
 });
 
 test("detail and Q&A preserve exact evidence locators, citations and honest refusal states", () => {

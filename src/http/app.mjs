@@ -1,6 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { createAuthService, GENERIC_LOGIN_ERROR } from "../services/auth-service.mjs";
 import { createProjectService, ProjectServiceError } from "../services/project-service.mjs";
+import { createModuleService, ModuleServiceError } from "../modules/module-service.mjs";
 import { createProjectRepository } from "../repositories/project-repository.mjs";
 import { clearSessionCookie, sessionCookie, sessionTokenFromRequest } from "../security/sessions.mjs";
 import { createStaticHandler, securityHeaders } from "./static.mjs";
@@ -72,6 +73,7 @@ export function createApp(options) {
   const auth = options.authService ?? createAuthService(database, options.authOptions);
   const projects = createProjectRepository(database);
   const projectService = options.projectService ?? createProjectService(database, options.projectOptions);
+  const moduleService = options.moduleService ?? createModuleService(database);
   const handleStatic = createStaticHandler(options.publicDirectory ?? defaultPublicDirectory);
   const secureCookies = options.secureCookies ?? false;
   const now = options.now ?? (() => Date.now());
@@ -168,6 +170,37 @@ export function createApp(options) {
         return respond(response, 201, { project });
       }
 
+      if (segments[0] === "api" && segments[1] === "projects" && segments[4] === "modules" &&
+          segments.length === 5 && request.method === "GET") {
+        const [, , projectId, layer] = segments;
+        if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
+        if (layer !== "public" && layer !== "draft") throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
+        const principal = requirePrincipal(request);
+        const payload = moduleService.listModules(principal, projectId, layer);
+        projects.recordRecentAccess(principal.id, projectId, new Date(now()).toISOString());
+        return respond(response, 200, payload);
+      }
+
+      if (segments[0] === "api" && segments[1] === "projects" && segments[4] === "modules" &&
+          segments.length === 6 && request.method === "GET") {
+        const [, , projectId, layer, , moduleType] = segments;
+        if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
+        if (layer !== "public" && layer !== "draft") throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
+        const principal = requirePrincipal(request);
+        const payload = moduleService.getModule(principal, projectId, layer, moduleType);
+        projects.recordRecentAccess(principal.id, projectId, new Date(now()).toISOString());
+        return respond(response, 200, payload);
+      }
+
+      if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "draft" &&
+          segments[4] === "modules" && segments.length === 5 && request.method === "PATCH") {
+        const projectId = segments[2];
+        if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
+        const principal = requirePrincipal(request);
+        requireCsrf(request, principal);
+        return respond(response, 200, moduleService.updateDraftModules(principal, projectId, await readJson(request)));
+      }
+
       if (segments[0] === "api" && segments[1] === "projects" && segments.length === 4 && request.method === "GET") {
         const [, , projectId, layer] = segments;
         if (layer !== "public" && layer !== "draft") throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
@@ -203,7 +236,7 @@ export function createApp(options) {
       if (await handleStatic(request, response, url)) return;
       throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
     } catch (error) {
-      const known = error instanceof HttpError || error instanceof ProjectServiceError;
+      const known = error instanceof HttpError || error instanceof ProjectServiceError || error instanceof ModuleServiceError;
       if (!known) console.error("Request failed", error);
       return respond(response, known ? error.status : 500, {
         error: known ? error.message : "服务器处理请求时发生错误",

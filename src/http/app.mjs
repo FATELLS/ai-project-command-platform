@@ -2,8 +2,12 @@ import { fileURLToPath } from "node:url";
 import { createAuthService, GENERIC_LOGIN_ERROR } from "../services/auth-service.mjs";
 import { createProjectService, ProjectServiceError } from "../services/project-service.mjs";
 import { createModuleService, ModuleServiceError } from "../modules/module-service.mjs";
+import { AiServiceError } from "../ai/errors.mjs";
+import { MaterialGateError } from "../materials/policy.mjs";
 import { createProjectRepository } from "../repositories/project-repository.mjs";
 import { clearSessionCookie, sessionCookie, sessionTokenFromRequest } from "../security/sessions.mjs";
+import { createChatService } from "../services/chat-service.mjs";
+import { createMaterialService, MaterialServiceError } from "../services/material-service.mjs";
 import { createStaticHandler, securityHeaders } from "./static.mjs";
 
 const projectIdPattern = /^[a-z0-9][a-z0-9._-]{2,63}$/;
@@ -74,6 +78,8 @@ export function createApp(options) {
   const projects = createProjectRepository(database);
   const projectService = options.projectService ?? createProjectService(database, options.projectOptions);
   const moduleService = options.moduleService ?? createModuleService(database);
+  const materialService = options.materialService ?? createMaterialService(database, options.materialOptions);
+  const chatService = options.chatService ?? createChatService(database, options.chatOptions);
   const handleStatic = createStaticHandler(options.publicDirectory ?? defaultPublicDirectory);
   const secureCookies = options.secureCookies ?? false;
   const now = options.now ?? (() => Date.now());
@@ -170,6 +176,68 @@ export function createApp(options) {
         return respond(response, 201, { project });
       }
 
+      if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "materials") {
+        const projectId = segments[2];
+        if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
+        const principal = requirePrincipal(request);
+        if (segments.length === 4 && request.method === "GET") return respond(response, 200, materialService.list(principal, projectId));
+        if (segments.length === 5 && segments[4] === "capabilities" && request.method === "GET") return respond(response, 200, materialService.capabilities(principal, projectId));
+        if (segments.length === 5 && segments[4] === "manual" && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 201, await materialService.createManual(principal, projectId, await readJson(request, 32 * 1024)));
+        }
+        if (segments.length === 5 && segments[4] === "upload" && request.method === "POST") {
+          requireCsrf(request, principal);
+          let filename;
+          try { filename = decodeURIComponent(String(request.headers["x-file-name"] ?? "")); }
+          catch { throw new HttpError(400, "INVALID_FILENAME", "文件名无效"); }
+          if (!filename) throw new HttpError(400, "INVALID_FILENAME", "文件名无效");
+          const receipt = await materialService.upload(principal, projectId, {
+            filename,
+            mime: request.headers["content-type"],
+            contentLength: Number(request.headers["content-length"] ?? NaN),
+            source: request
+          });
+          return respond(response, 202, { material: receipt });
+        }
+        if (segments.length === 6 && segments[4] === "evidence" && segments[5] === "search" && request.method === "GET") {
+          return respond(response, 200, materialService.searchEvidence(principal, projectId, url.searchParams.get("q") ?? ""));
+        }
+        const materialId = segments[4];
+        if (segments.length === 5 && request.method === "GET") return respond(response, 200, materialService.detail(principal, projectId, materialId));
+        if (segments.length === 6 && segments[5] === "update-template" && request.method === "PATCH") {
+          requireCsrf(request, principal);
+          return respond(response, 200, materialService.setUpdateTemplate(principal, projectId, materialId, await readJson(request, 8 * 1024)));
+        }
+        if (segments.length === 6 && segments[5] === "qa" && request.method === "PATCH") {
+          requireCsrf(request, principal);
+          return respond(response, 200, materialService.setQa(principal, projectId, materialId, await readJson(request, 8 * 1024)));
+        }
+        if (segments.length === 6 && segments[5] === "retry" && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 202, materialService.retry(principal, projectId, materialId));
+        }
+        if (segments.length === 6 && segments[5] === "evidence" && request.method === "GET") return respond(response, 200, materialService.listEvidence(principal, projectId, materialId));
+        if (segments.length === 7 && segments[5] === "evidence" && request.method === "GET") return respond(response, 200, materialService.getEvidence(principal, projectId, materialId, segments[6]));
+        throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
+      }
+
+      if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "chat") {
+        const projectId = segments[2];
+        if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
+        const principal = requirePrincipal(request);
+        if (segments.length === 5 && segments[4] === "quota" && request.method === "GET") {
+          const envelope = materialService.capabilities(principal, projectId);
+          return respond(response, 200, { limits: { perMinute: envelope.limits.maxChatPerMinute, perDay: envelope.limits.maxChatPerDay }, usage: { today: envelope.usage.chatToday, remainingToday: envelope.usage.chatRemainingToday } });
+        }
+        if (segments.length === 4 && request.method === "POST") {
+          requireCsrf(request, principal);
+          const body = await readJson(request, 8 * 1024);
+          return respond(response, 200, await chatService.answer(principal, { projectId, question: body.question }));
+        }
+        throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
+      }
+
       if (segments[0] === "api" && segments[1] === "projects" && segments[4] === "modules" &&
           segments.length === 5 && request.method === "GET") {
         const [, , projectId, layer] = segments;
@@ -236,7 +304,12 @@ export function createApp(options) {
       if (await handleStatic(request, response, url)) return;
       throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
     } catch (error) {
-      const known = error instanceof HttpError || error instanceof ProjectServiceError || error instanceof ModuleServiceError;
+      if (error instanceof MaterialGateError && !error.status) {
+        error.status = error.code === "file_too_large" ? 413
+          : ["upload_rate_limited", "upload_concurrency_limited"].includes(error.code) ? 429
+            : ["duplicate_material", "project_capacity_limit", "project_material_limit"].includes(error.code) ? 409 : 400;
+      }
+      const known = error instanceof HttpError || error instanceof ProjectServiceError || error instanceof ModuleServiceError || error instanceof MaterialServiceError || error instanceof AiServiceError || error instanceof MaterialGateError;
       if (!known) console.error("Request failed", error);
       return respond(response, known ? error.status : 500, {
         error: known ? error.message : "服务器处理请求时发生错误",

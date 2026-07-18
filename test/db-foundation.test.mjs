@@ -15,12 +15,12 @@ test("fresh and repeated migrations are deterministic", () => {
   const directory = mkdtempSync(join(tmpdir(), "platform-db-"));
   const database = openDatabase(join(directory, "platform.sqlite"));
   try {
-    assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql"]);
+    assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql", "004_materials_evidence.sql"]);
     assert.deepEqual(applyMigrations(database), []);
     assert.equal(database.prepare("PRAGMA foreign_keys").get().foreign_keys, 1);
     assert.equal(database.prepare("PRAGMA journal_mode").get().journal_mode, "wal");
     const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(row => row.name);
-    for (const table of ["projects", "project_versions", "project_units", "project_tasks", "task_links", "project_risks", "project_metrics", "change_proposals"]) {
+    for (const table of ["projects", "project_versions", "project_units", "project_tasks", "task_links", "project_risks", "project_metrics", "change_proposals", "project_materials", "material_artifacts", "material_jobs", "evidence_blocks", "material_qa_grants", "material_upload_attempts", "ai_usage_events"]) {
       assert.ok(tables.includes(table), `missing table ${table}`);
     }
     assert.ok(database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_project_modules_position'").get());
@@ -28,6 +28,51 @@ test("fresh and repeated migrations are deterministic", () => {
   } finally {
     database.close();
   }
+});
+
+test("004 material and evidence relations reject cross-project joins and keep FTS synchronized", () => {
+  const database = openDatabase(":memory:");
+  try {
+    applyMigrations(database);
+    const at = "2026-07-18T00:00:00.000Z";
+    database.prepare("INSERT INTO users (id, display_name, status, created_at, updated_at) VALUES (?, ?, 'active', ?, ?)").run("owner", "Owner", at, at);
+    for (const id of ["project-a", "project-b"]) database.prepare(`
+      INSERT INTO projects (id, name, template_id, template_version, created_at, updated_at)
+      VALUES (?, ?, 'standard-project-v1', '1.0.0', ?, ?)
+    `).run(id, id, at, at);
+    database.prepare(`
+      INSERT INTO project_materials (id, project_id, display_name, canonical_extension, canonical_mime, sha256, byte_size, created_by, created_at, updated_at)
+      VALUES ('material-00000001', 'project-a', 'a.txt', '.txt', 'text/plain', ?, 3, 'owner', ?, ?)
+    `).run("a".repeat(64), at, at);
+    assert.throws(() => database.prepare(`
+      INSERT INTO material_artifacts (id, project_id, material_id, kind, storage_key, byte_size, sha256, created_at)
+      VALUES ('artifact-00000001', 'project-b', 'material-00000001', 'original', 'bad', 3, ?, ?)
+    `).run("a".repeat(64), at), /FOREIGN KEY/);
+    database.prepare(`
+      INSERT INTO evidence_blocks (external_id, project_id, material_id, extraction_version, ordinal, kind, location_json, text, content_hash, created_at)
+      VALUES ('evidence-00000001', 'project-a', 'material-00000001', 1, 0, 'text', '{}', 'alpha evidence', ?, ?)
+    `).run("b".repeat(64), at);
+    assert.equal(database.prepare("SELECT count(*) AS count FROM evidence_fts WHERE evidence_fts MATCH 'alpha'").get().count, 1);
+    assert.throws(() => database.prepare(`
+      INSERT INTO evidence_blocks (external_id, project_id, material_id, extraction_version, ordinal, kind, location_json, text, content_hash, created_at)
+      VALUES ('evidence-00000002', 'project-b', 'material-00000001', 1, 0, 'text', '{}', 'bad', ?, ?)
+    `).run("c".repeat(64), at), /FOREIGN KEY/);
+    database.prepare("DELETE FROM evidence_blocks WHERE project_id = 'project-a'").run();
+    assert.equal(database.prepare("SELECT count(*) AS count FROM evidence_fts WHERE evidence_fts MATCH 'alpha'").get().count, 0);
+  } finally { database.close(); }
+});
+
+test("004 migration rolls back all material tables when FTS creation fails", () => {
+  const migrations = mkdtempSync(join(tmpdir(), "platform-004-rollback-"));
+  for (const name of ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql"]) copyFileSync(join(defaultMigrationsDir, name), join(migrations, name));
+  const sql = readFileSync(join(defaultMigrationsDir, "004_materials_evidence.sql"), "utf8").replace("tokenize='trigram'", "tokenize='missing-tokenizer'");
+  writeFileSync(join(migrations, "004_materials_evidence.sql"), sql);
+  const database = openDatabase(":memory:");
+  try {
+    assert.throws(() => applyMigrations(database, { migrationsDir: migrations }), /tokeniz/);
+    assert.equal(database.prepare("SELECT count(*) AS count FROM schema_migrations WHERE version = 4").get().count, 0);
+    assert.equal(database.prepare("SELECT count(*) AS count FROM sqlite_master WHERE name = 'project_materials'").get().count, 0);
+  } finally { database.close(); }
 });
 
 test("migration checksum changes are rejected", () => {

@@ -14,5 +14,9 @@
     "export:xugu": "node scripts/export-project.mjs --project xugu-agentic-group --stdout",
     "verify": "node scripts/verify.mjs",
     "test": "node --test"
+  },
+  "dependencies": {
+    "file-type": "22.0.1",
+    "yauzl": "3.4.0"
   }
 }

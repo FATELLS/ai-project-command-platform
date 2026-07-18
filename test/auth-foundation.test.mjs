@@ -18,11 +18,11 @@ function setup(options = {}) {
   return { database, service, applied };
 }
 
-test("migration 002 applies after unchanged migration 001 and repeats safely", () => {
+test("migrations apply after unchanged migration 001 and repeat safely", () => {
   const original001 = readFileSync(join(defaultMigrationsDir, "001_initial.sql"));
   const { database, applied } = setup();
   try {
-    assert.deepEqual(applied, ["001_initial.sql", "002_auth_project_access.sql"]);
+    assert.deepEqual(applied, ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql"]);
     assert.deepEqual(applyMigrations(database), []);
     assert.deepEqual(readFileSync(join(defaultMigrationsDir, "001_initial.sql")), original001);
     const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(row => row.name);

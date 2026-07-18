@@ -129,3 +129,12 @@
 - 完成确定性 envelope、项目/证据、模板/字段、目标、语义、日期、依赖 DAG、重复与版本冲突校验；仅完整通过的提案原子保存，任何路径均不写 draft/published。
 - 完成 Xugu/标准项目提案工作区、任务/提案详情、置信度/警告、精确来源回跳和无密钥诚实降级；未提前开放 Phase 6 动作。
 - 120 项自动化测试、15 个 Phase 5 浏览器用例、5 张哈希/尺寸机检截图和统一验证全部通过；参考 Xugu 应用未被修改。
+
+## 2026-07-18：Phase 6 规划启动
+
+状态：`accepted for planning`
+
+- 审核决定与 proposal item 分离保存；编辑值复用锁定证据 envelope 和确定性 validator。
+- 接受项通过 copy-on-write 新 draft version 事务合并，验证成功后才切换 draft pointer。
+- 发布从当前 draft 创建新 published 和新 draft 基线；回滚只允许当前发布版本的直接前驱。
+- 审核、合并、发布、回滚、备份恢复和导入导出均纳入项目权限、CSRF、追加审计与跨项目测试。

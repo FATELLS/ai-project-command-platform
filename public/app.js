@@ -181,11 +181,7 @@ function renderLogin() {
 
 function appFrame(mainContent, options = {}) {
   const user = state.session.user;
-  const rail = element("nav", { className: "global-rail", ariaLabel: "全局导航" }, [
-    element("div", { className: "brand-mark", ariaHidden: "true", text: "AI" }),
-    element("a", { className: "rail-link active", href: "/projects", text: "项目", onClick: event => { event.preventDefault(); navigate("/projects"); } }),
-    element("div", { className: "rail-spacer" }),
-    iconButton("退出登录", "退出", async () => {
+  const logout = async () => {
       try { await api("/api/logout", { method: "POST", mutation: true }); } catch (error) { if (error.message === "AUTHENTICATION_REQUIRED") return; }
       state.session = null;
       state.intendedPath = null;
@@ -193,17 +189,27 @@ function appFrame(mainContent, options = {}) {
       clearSensitiveView();
       history.replaceState({}, "", "/login");
       renderLogin();
-    }, "rail-button")
-  ]);
-  const topbarChildren = [element("span", { className: "topbar-title", text: options.topbarTitle ?? "项目作战管理平台" })];
-  if (options.switcher) topbarChildren.push(options.switcher);
-  topbarChildren.push(element("span", { className: "topbar-user", text: user.displayName }));
-  return element("div", { className: "app-shell" }, [
-    rail,
-    element("div", { className: "app-frame" }, [
-      element("header", { className: "topbar" }, topbarChildren),
-      element("main", { className: "content" }, [mainContent])
+    };
+  const brandLink = element("a", { className: "public-brand", href: "/projects", onClick: event => { event.preventDefault(); navigate("/projects"); } }, [
+    element("span", { className: "brand-symbol", ariaHidden: "true", text: "AI" }),
+    element("span", { className: "brand-title" }, [
+      element("strong", { text: "AI 项目作战管理平台" }),
+      element("small", { text: "AI PROJECT COMMAND PLATFORM" })
     ])
+  ]);
+  const navigation = element("nav", { className: "public-nav", ariaLabel: "全局导航" }, [
+    element("a", { className: options.projectMode ? "" : "active", href: "/projects", text: "项目作战台", onClick: event => { event.preventDefault(); navigate("/projects"); } }),
+    ...(options.projectMode ? [element("a", { className: "active", href: location.pathname, text: "项目总览" })] : []),
+    element("span", { className: "nav-future", text: "模块中心 · 即将开放" })
+  ]);
+  const actions = element("div", { className: "header-actions" }, [
+    ...(options.switcher ? [element("div", { className: "header-switcher" }, [element("span", { text: "当前项目" }), options.switcher])] : []),
+    element("span", { className: "update-time" }, [element("i", { ariaHidden: "true" }), element("span", { text: user.displayName })]),
+    iconButton("退出登录", "退出", logout, "admin-entry")
+  ]);
+  return element("div", { className: "public-app app-shell" }, [
+    element("header", { className: "public-header" }, [brandLink, navigation, actions]),
+    element("main", { className: "public-main content" }, [mainContent])
   ]);
 }
 
@@ -327,14 +333,19 @@ async function renderProjects() {
   ]);
   const refresh = () => load();
   const page = element("div", {}, [
-    element("header", { className: "page-head" }, [
+    element("header", { className: "page-head command-center-hero" }, [
       element("div", {}, [
         element("span", { className: "eyebrow", text: "PROJECT COMMAND CENTER" }),
         element("h1", { text: "项目作战台" }),
         element("p", { text: "查看获授权的项目，快速切换作战现场，并管理平台级项目生命周期。" })
       ]),
       element("div", { className: "head-actions" }, [
-        element("span", { className: "count-pill", id: "active-project-count", text: "正在载入项目" }),
+        element("div", { className: "command-orbit", ariaHidden: "true" }, [element("i"), element("b", { text: "PLAN" })]),
+        element("div", { className: "command-status" }, [
+          element("small", { text: "MULTI-PROJECT COMMAND" }),
+          element("strong", { text: "统一项目作战现场" }),
+          element("span", { className: "count-pill", id: "active-project-count", text: "正在载入项目" })
+        ]),
         ...(state.session.user.isPlatformAdmin ? [element("button", { type: "button", className: "primary-button", text: "新建项目", onClick: () => openCreateDialog(refresh) })] : [])
       ])
     ]),
@@ -408,6 +419,9 @@ async function renderProject(projectId) {
       api("/api/projects?status=active&sort=recent")
     ]);
     const { project, snapshot } = detail;
+    const currentStageLabel = snapshot.currentStage != null && !/^\d+$/.test(String(snapshot.currentStage))
+      ? String(snapshot.currentStage)
+      : snapshot.statusLabel || "待配置";
     state.projects = list.projects;
     document.title = `${project.name} · 项目概览`;
     const counts = [
@@ -417,7 +431,7 @@ async function renderProject(projectId) {
       [snapshot.companyWorkstreams?.length ?? 0, "公司级工作流"]
     ];
     const navigation = [["Overview", false], ["Units", true], ["Roadmap", true], ["Task Network", true], ["Gantt", true], ["Outcomes", true], ["Risks", true], ["Metrics", true], ["Materials", true]];
-    const projectNav = element("nav", { className: "project-nav", ariaLabel: "项目模块" }, [
+    const projectNav = element("nav", { className: "project-nav section-card", ariaLabel: "项目模块" }, [
       element("h2", { text: "项目模块" }),
       element("ul", {}, navigation.map(([label, future]) => element("li", { className: future ? "" : "active", ariaCurrent: future ? undefined : "page" }, [
         element("span", { text: label }),
@@ -430,16 +444,29 @@ async function renderProject(projectId) {
         element("span", { ariaHidden: "true", text: "/" }),
         element("span", { text: project.name })
       ]),
-      element("section", { className: "project-hero" }, [
-        element("div", { className: "hero-badges" }, [
-          element("span", { className: "badge active", text: "进行中" }),
-          element("span", { className: "badge role", text: roleLabels[project.role] ?? project.role }),
-          element("span", { className: "badge version", text: project.publishedVersion }),
-          element("span", { className: "badge archived", text: templateLabels[project.templateId] ?? project.templateId })
+      element("section", { className: "project-hero goal-hero" }, [
+        element("div", { className: "hero-copy goal-copy" }, [
+          element("span", { className: "single-goal", text: "OVERALL MISSION · 项目总目标" }),
+          element("h1", { text: project.name }),
+          element("div", { className: "project-id", text: project.id }),
+          element("p", { text: snapshot.summary || snapshot.goal || "暂无正式项目摘要" }),
+          element("div", { className: "hero-badges goal-tags" }, [
+            element("span", { className: "badge active", text: "进行中" }),
+            element("span", { className: "badge role", text: roleLabels[project.role] ?? project.role }),
+            element("span", { className: "badge version", text: project.publishedVersion }),
+            element("span", { className: "badge archived", text: templateLabels[project.templateId] ?? project.templateId })
+          ])
         ]),
-        element("h1", { text: project.name }),
-        element("div", { className: "project-id", text: project.id }),
-        element("p", { text: snapshot.summary || snapshot.goal || "暂无正式项目摘要" })
+        element("aside", { className: "overall-card campaign-status-card" }, [
+          element("div", { className: "planning-orbit", ariaHidden: "true" }, [element("i"), element("b", { text: "PLAN" })]),
+          element("div", { className: "overall-copy" }, [
+            element("small", { text: "CURRENT CAMPAIGN" }),
+            element("b", { text: currentStageLabel }),
+            element("span", { text: snapshot.statusLabel || "依据已发布项目事实推进当前行动" }),
+            element("div", { className: "planning-badge", text: snapshot.overallProgress == null ? "当前按正式材料推进 · 不虚构完成比例" : `正式完成率 ${snapshot.overallProgress}%` })
+          ]),
+          element("img", { src: "/assets/transformation-group-transparent-v2.png", alt: "项目联合指挥部" })
+        ])
       ]),
       element("section", { className: "fact-grid", ariaLabel: "项目事实计数" }, counts.map(([value, label]) => element("article", { className: "fact-card" }, [element("strong", { text: String(value) }), element("span", { text: label })]))),
       element("div", { className: "detail-grid" }, [
@@ -447,7 +474,7 @@ async function renderProject(projectId) {
           element("h2", { text: "当前状态" }),
           element("dl", { className: "detail-list" }, [
             element("dt", { text: "状态说明" }), element("dd", { text: snapshot.statusLabel || "暂无状态说明" }),
-            element("dt", { text: "当前阶段" }), element("dd", { text: snapshot.currentStage || "待配置" }),
+            element("dt", { text: "当前阶段" }), element("dd", { text: currentStageLabel }),
             element("dt", { text: "正式完成率" }), element("dd", { text: snapshot.overallProgress == null ? "暂无正式完成率" : `${snapshot.overallProgress}%` }),
             element("dt", { text: "更新时间" }), element("dd", { text: formatDate(snapshot.updatedAt || project.updatedAt) }),
             element("dt", { text: "发布版本" }), element("dd", { text: project.publishedVersion })
@@ -460,7 +487,7 @@ async function renderProject(projectId) {
       ])
     ]);
     const content = element("div", { className: "project-layout" }, [projectNav, overview]);
-    app.replaceChildren(appFrame(content, { topbarTitle: "项目概览", switcher: projectSwitcher(list.projects, project.id) }));
+    app.replaceChildren(appFrame(content, { projectMode: true, switcher: projectSwitcher(list.projects, project.id) }));
   } catch (error) {
     if (error.message === "AUTHENTICATION_REQUIRED") return;
     const notFound = error.status === 404;

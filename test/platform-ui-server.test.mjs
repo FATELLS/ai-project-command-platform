@@ -47,7 +47,7 @@ test("HTML is local, semantic, and contains no project facts before login", () =
   assert.doesNotMatch(html, /style="/);
 });
 
-test("CSS implements tokens, focus, reduced motion, and three responsive layouts", () => {
+test("CSS implements Xugu-aligned desktop frame, focus, and responsive fallbacks", () => {
   for (const token of ["--navy-950", "--blue-600", "--orange-600", "--green-600", "--shadow-card", "--radius-card"]) {
     assert.match(css, new RegExp(token));
   }
@@ -57,6 +57,11 @@ test("CSS implements tokens, focus, reduced motion, and three responsive layouts
   assert.match(css, /@media \(max-width: 767px\)/);
   assert.match(css, /grid-template-columns:\s*repeat\(3/);
   assert.match(css, /min-height:\s*40px/);
+  assert.match(css, /\.public-header\s*\{[^}]*height:\s*76px/);
+  assert.match(css, /global-background\.png/);
+  assert.match(css, /\.goal-hero\s*\{[^}]*grid-template-columns:\s*1\.25fr \.85fr/);
+  assert.match(css, /\.overall-card\s*\{[^}]*background:\s*linear-gradient/);
+  assert.doesNotMatch(css, /\.global-rail|grid-template-columns:\s*72px/);
   assert.doesNotMatch(css, /@import|url\(["']?https?:/);
 });
 
@@ -75,6 +80,10 @@ test("client contract keeps credentials in memory and renders server data throug
   assert.match(client, /pageshow/);
   assert.match(client, /history\.replaceState/);
   assert.match(client, /ariaModal/);
+  assert.match(client, /public-header/);
+  assert.match(client, /OVERALL MISSION · 项目总目标/);
+  assert.match(client, /CURRENT CAMPAIGN/);
+  assert.doesNotMatch(client, /global-rail/);
 });
 
 test("security headers, MIME types, and direct routes are deterministic", async () => {
@@ -96,6 +105,12 @@ test("security headers, MIME types, and direct routes are deterministic", async 
     const stylesheet = await fetch(`${context.baseUrl}/styles.css`);
     assert.match(stylesheet.headers.get("content-type"), /^text\/css/);
     assert.equal(await stylesheet.text(), css);
+    for (const asset of ["global-background.png", "brand-wave.png", "transformation-group-transparent-v2.png"]) {
+      const response = await fetch(`${context.baseUrl}/assets/${asset}`);
+      assert.equal(response.status, 200);
+      assert.equal(response.headers.get("content-type"), "image/png");
+      assert.ok((await response.arrayBuffer()).byteLength > 1_000);
+    }
     const protectedResponse = await fetch(`${context.baseUrl}/api/projects`);
     assert.equal(protectedResponse.status, 401);
     assert.doesNotMatch(JSON.stringify(await protectedResponse.json()), /虚谷|xugu-agentic-group|v4\.2/);

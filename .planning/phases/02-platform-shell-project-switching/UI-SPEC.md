@@ -6,7 +6,7 @@ Scope: login, authorized project home, search/filter/recent access, project admi
 
 ## Design intent
 
-The platform layer should feel like a calm command center for many projects, not a copy of one project's campaign map. It inherits the Xugu application's blue/white/warm-orange character, precise status language, rounded operational cards, and subtle command-grid texture. Project-specific campaign visuals begin only after entering a project.
+The platform layer is a multi-project extension of the stable Xugu command-map interface. Its desktop frame should remain recognizably consistent with Xugu: white top navigation, warm command background, left-mission/right-status hero, rounded section cards, blue structure, and warm-orange focus. Multi-project capabilities are added through the project entry, switcher, filters, and administration controls instead of introducing a separate SaaS visual shell.
 
 Phase 2 establishes navigation and information hierarchy. It does not implement the nine Phase 3 module renderers, task-network visualization, roadmap drawing, Gantt rendering, materials, AI proposals, or publishing.
 
@@ -34,7 +34,7 @@ Phase 2 establishes navigation and information hierarchy. It does not implement 
 ```
 
 - Font stack: `Inter`, `PingFang SC`, `Microsoft YaHei`, system sans-serif; no external font request.
-- Body text is 14-16px. Metadata never drops below 12px.
+- Body text is 14-16px. Compact bilingual command metadata is 9-12px; critical status and interactive labels remain at least 12px.
 - Typography uses only weights 500 and 700; body line-height is 1.6 and compact controls use 1.35.
 - Standard spacing scale is `4, 8, 16, 24, 32, 48, 64px`; component-specific values must be composed from this scale.
 - Approximate color allocation is 60% white/canvas surfaces, 30% navy/blue structure and navigation, and at most 10% orange/green attention accents.
@@ -45,29 +45,30 @@ Phase 2 establishes navigation and information hierarchy. It does not implement 
 
 Desktop at 1280px and above:
 
-- 72px fixed global rail in navy.
-- Rail contains product mark, Projects navigation, and user/logout control.
-- Main area uses a 72px top bar and a centered content canvas with max width 1480px.
-- Project pages add a 236px project navigation column inside the content area; global rail remains distinct.
+- 76px sticky white top navigation matching the Xugu public header.
+- Header contains the product mark, project entry/current overview, optional project switcher, signed-in identity, and logout.
+- Main area uses the Xugu warm command background and a centered content canvas with max width 1460px.
+- Project modules use a horizontal section tab card. No dark global sidebar or SaaS-style left rail is used.
+- Primary heroes use the Xugu left-mission/right-current-campaign structure.
 
 Tablet 768-1279px:
 
-- Global rail collapses to a 64px top bar.
-- Project navigation becomes a horizontal scrollable tab row.
+- White navigation compacts while retaining the product identity and current project switcher.
+- Project module navigation remains a horizontal scrollable tab row.
 - Project cards use two columns.
 
 Mobile below 768px:
 
 - Single column, 16px page gutters.
-- Navigation opens as a modal drawer with focus trapping.
+- The header retains brand, current project switcher, and logout; secondary navigation is omitted rather than dominating the small viewport.
 - Search/filter controls stack, cards become full width, and management tables become cards.
 
 ## Screen 1: Login
 
 Route: `/login`
 
-- Full-height two-panel layout on desktop; brand panel is 44%, form panel is 56%.
-- Brand panel: navy-to-blue background, small command-grid motif, product name, short value statement, and three trust statements: project isolation, evidence traceability, human-controlled publishing.
+- Warm command-background layout with a large mission panel and a compact white login card, using the same canvas and wave language as Xugu.
+- Mission panel: warm white surface, subtle command-grid motif, product name, short value statement, and three trust statements: project isolation, evidence traceability, human-controlled publishing.
 - Form panel: 420px maximum width, heading “登录项目作战平台”, username and password fields, submit button, environment note.
 - The login form is the screen's primary visual and keyboard focus anchor.
 - Submit label is exactly “登录平台”; the pending label is “正在登录…”.

@@ -25,6 +25,8 @@ Phase 2 goal is achieved. An authenticated user can see only authorized projects
 
 ## Browser acceptance
 
+The visual acceptance was rerun after the user-confirmed direction correction. Desktop now uses the stable Xugu frame instead of the superseded dark-rail SaaS shell: 76px white header, warm command canvas, left-mission/right-status hero, horizontal module card, and Xugu-style factual section cards.
+
 | Check | Result |
 |---|---|
 | First-run login and generic invalid credentials | PASS |
@@ -36,15 +38,15 @@ Phase 2 goal is achieved. An authenticated user can see only authorized projects
 | Direct project refresh stays authenticated | PASS |
 | Logout then Back exposes no project facts | PASS |
 | Active-session expiry clears facts and shows re-login message | PASS |
-| 1440×900 desktop | PASS |
+| Xugu-aligned desktop frame at 1280×720 | PASS |
 | 1024×768 tablet, two columns, no horizontal overflow | PASS |
 | 390×844 mobile, one column, no horizontal overflow | PASS |
 
-Evidence:
+Desktop visual evidence:
 
-- `.planning/evidence/phase2-login-desktop-1440x900.jpg`
-- `.planning/evidence/phase2-projects-tablet-1024x768.jpg`
-- `.planning/evidence/phase2-projects-mobile-390x844.jpg`
+- `.planning/evidence/phase2-xugu-reference-desktop-1440x900.jpg`
+- `.planning/evidence/phase2-xugu-aligned-projects-desktop-1280x720.jpg`
+- `.planning/evidence/phase2-xugu-aligned-detail-desktop-1280x720.jpg`
 
 ## Boundaries retained
 

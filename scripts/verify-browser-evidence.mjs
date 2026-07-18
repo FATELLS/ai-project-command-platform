@@ -7,11 +7,17 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const manifestPath = resolve(root, process.argv[2] ?? ".planning/evidence/phase3-browser-matrix.json");
-const requiredCases = [
+const phase3RequiredCases = [
   "xugu-overview", "xugu-roadmap", "xugu-task-network", "xugu-gantt", "xugu-outcomes",
   "standard-project", "two-project-switch", "draft-module-config", "viewer-permissions",
   "loading-error-empty", "tablet-responsive", "mobile-responsive", "keyboard-reduced-motion",
   "security-payload", "browser-console", "reference-integrity"
+];
+const phase4RequiredCases = [
+  "xugu-material-ledger", "standard-material-ledger", "material-upload-gates", "manual-material",
+  "evidence-navigation", "qa-citations", "qa-insufficient", "provider-disabled", "role-permissions",
+  "project-switch-clearing", "tablet-responsive", "mobile-responsive", "security-payload",
+  "browser-console", "reference-integrity"
 ];
 
 function sha256(bytes) {
@@ -46,11 +52,13 @@ function git(args, cwd) {
 
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 assert.equal(manifest.schemaVersion, "1.0.0");
-assert.equal(manifest.phase, "03-module-registry-project-templates");
+assert.ok(["03-module-registry-project-templates", "04-project-materials-evidence"].includes(manifest.phase), "unsupported browser evidence phase");
 assert.ok(manifest.evidence && typeof manifest.evidence === "object");
+const phaseNumber = manifest.phase.startsWith("03-") ? "3" : "4";
+const requiredCases = phaseNumber === "3" ? phase3RequiredCases : phase4RequiredCases;
 
 for (const [key, item] of Object.entries(manifest.evidence)) {
-  assert.match(item.file, /^\.planning\/evidence\/phase3-[a-z0-9-]+\.jpg$/, `${key} has an unsafe evidence path`);
+  assert.match(item.file, new RegExp(`^\\.planning/evidence/phase${phaseNumber}-[a-z0-9-]+\\.jpg$`), `${key} has an unsafe evidence path`);
   const bytes = await readFile(resolve(root, item.file));
   assert.equal(sha256(bytes), item.sha256, `${key} SHA-256 mismatch`);
   assert.deepEqual(jpegDimensions(bytes), { width: item.width, height: item.height }, `${key} dimensions mismatch`);

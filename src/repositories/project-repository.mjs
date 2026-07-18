@@ -1,7 +1,13 @@
+import { withTransaction } from "../db/database.mjs";
+
 const layers = new Set(["published", "draft"]);
 
 function parseJson(value) {
   return JSON.parse(value || "{}");
+}
+
+function parseNullableJson(value) {
+  return value === null || value === undefined ? null : JSON.parse(value);
 }
 
 function rows(database, table, versionId) {
@@ -108,6 +114,174 @@ export function createProjectRepository(database) {
       tasks,
       companyWorkstreams
     };
+  }
+
+  function getModuleVersionGraph(projectId, layer) {
+    if (!layers.has(layer)) throw new Error(`Unsupported project layer: ${layer}`);
+    const pointer = layer === "published" ? "published_version_id" : "draft_version_id";
+    const context = database.prepare(`
+      SELECT p.id AS projectId, p.template_id AS templateId, p.template_version AS templateVersion,
+             v.id AS versionId, v.version_label AS versionLabel, v.metadata_json AS metadataJson,
+             template.config_json AS templateConfigJson
+      FROM projects p
+      JOIN project_versions v ON v.id = p.${pointer} AND v.project_id = p.id AND v.layer = ?
+      JOIN templates template ON template.id = p.template_id AND template.version = p.template_version
+      WHERE p.id = ?
+    `).get(layer, projectId);
+    if (!context) return undefined;
+    const versionId = context.versionId;
+    const modules = database.prepare(`
+      SELECT external_id AS externalId, module_type AS type, position, enabled, data_json AS dataJson
+      FROM project_modules WHERE version_id = ? ORDER BY position, external_id
+    `).all(versionId).map(row => ({
+      externalId: row.externalId,
+      type: row.type,
+      position: row.position,
+      enabled: Boolean(row.enabled),
+      configuration: parseJson(row.dataJson)
+    }));
+    const units = database.prepare(`
+      SELECT external_id AS id, name, data_json AS dataJson
+      FROM project_units WHERE version_id = ? ORDER BY position
+    `).all(versionId).map(row => ({ ...parseJson(row.dataJson), id: row.id, name: row.name }));
+    const stages = database.prepare(`
+      SELECT external_id AS id, title, date_label AS dateLabel, data_json AS dataJson
+      FROM project_stages WHERE version_id = ? ORDER BY position
+    `).all(versionId).map(row => ({ ...parseJson(row.dataJson), id: row.id, title: row.title, dateLabel: row.dateLabel }));
+    const closures = database.prepare(`
+      SELECT external_id AS id, title, date_label AS dateLabel, data_json AS dataJson
+      FROM project_closures WHERE version_id = ? ORDER BY position
+    `).all(versionId).map(row => {
+      const data = parseJson(row.dataJson);
+      return {
+        id: row.id,
+        title: row.title,
+        dateLabel: row.dateLabel,
+        state: data.state ?? "",
+        between: data.between ?? [],
+        description: data.description ?? "",
+        result: data.result ?? "",
+        source: data.source ?? "",
+        previewAssets: data.previewImages ?? []
+      };
+    });
+    const dependencyRows = database.prepare(`
+      SELECT task_external_id AS taskId, depends_on_external_id AS dependencyId
+      FROM task_links WHERE version_id = ? ORDER BY task_external_id, position
+    `).all(versionId);
+    const dependencies = new Map();
+    for (const row of dependencyRows) {
+      const values = dependencies.get(row.taskId) ?? [];
+      values.push(row.dependencyId);
+      dependencies.set(row.taskId, values);
+    }
+    const tasks = database.prepare(`
+      SELECT external_id AS id, unit_external_id AS unitId, parent_external_id AS parentId,
+             title, start_date AS startDate, end_date AS endDate, progress, data_json AS dataJson
+      FROM project_tasks WHERE version_id = ? ORDER BY position
+    `).all(versionId).map(row => {
+      const data = parseJson(row.dataJson);
+      return {
+        id: row.id,
+        unitId: row.unitId,
+        parentId: row.parentId ?? "",
+        title: row.title,
+        startDate: row.startDate,
+        endDate: row.endDate,
+        progress: row.progress,
+        dependsOn: dependencies.get(row.id) ?? [],
+        owner: data.owner ?? "",
+        state: data.state ?? "",
+        expectedOutput: data.expectedOutput ?? ""
+      };
+    });
+    const workstreamTaskRows = database.prepare(`
+      SELECT workstream_external_id AS workstreamId, task_external_id AS taskId
+      FROM workstream_tasks WHERE version_id = ? ORDER BY workstream_external_id, position
+    `).all(versionId);
+    const workstreamTasks = new Map();
+    for (const row of workstreamTaskRows) {
+      const values = workstreamTasks.get(row.workstreamId) ?? [];
+      values.push(row.taskId);
+      workstreamTasks.set(row.workstreamId, values);
+    }
+    const workstreams = database.prepare(`
+      SELECT external_id AS id, title, data_json AS dataJson
+      FROM project_workstreams WHERE version_id = ? ORDER BY position
+    `).all(versionId).map(row => ({
+      id: row.id,
+      title: row.title,
+      description: parseJson(row.dataJson).description ?? "",
+      taskIds: workstreamTasks.get(row.id) ?? []
+    }));
+    const risks = database.prepare(`
+      SELECT external_id AS id, title, severity, status, owner, mitigation,
+             due_date AS dueDate, source
+      FROM project_risks WHERE version_id = ? ORDER BY position
+    `).all(versionId);
+    const metrics = database.prepare(`
+      SELECT external_id AS id, name, value_json AS valueJson, unit, status,
+             as_of AS asOf, target_json AS targetJson, source
+      FROM project_metrics WHERE version_id = ? ORDER BY position
+    `).all(versionId).map(row => ({
+      id: row.id,
+      name: row.name,
+      value: parseNullableJson(row.valueJson),
+      unit: row.unit,
+      status: row.status,
+      asOf: row.asOf,
+      target: parseNullableJson(row.targetJson),
+      source: row.source
+    }));
+    return {
+      projectId: context.projectId,
+      layer,
+      versionId,
+      versionLabel: context.versionLabel,
+      metadata: parseJson(context.metadataJson),
+      template: {
+        id: context.templateId,
+        version: context.templateVersion,
+        config: parseJson(context.templateConfigJson)
+      },
+      modules,
+      units,
+      stages,
+      closures,
+      tasks,
+      workstreams,
+      risks,
+      metrics
+    };
+  }
+
+  function replaceDraftModuleConfigurations(projectId, modules) {
+    return withTransaction(database, () => {
+      const version = resolveVersion(projectId, "draft");
+      if (!version) return undefined;
+      const existingCount = database.prepare(
+        "SELECT count(*) AS count FROM project_modules WHERE version_id = ?"
+      ).get(version.id).count;
+      if (existingCount !== modules.length) throw new Error("Draft module set is incomplete");
+      database.prepare("UPDATE project_modules SET position = position + 1000 WHERE version_id = ?").run(version.id);
+      const update = database.prepare(`
+        UPDATE project_modules
+        SET position = ?, enabled = ?, data_json = ?
+        WHERE version_id = ? AND external_id = ? AND module_type = ?
+      `);
+      for (const module of modules) {
+        const result = update.run(
+          module.position,
+          module.enabled ? 1 : 0,
+          JSON.stringify({ schemaVersion: module.schemaVersion, viewVariant: module.viewVariant }),
+          version.id,
+          module.type,
+          module.type
+        );
+        if (result.changes !== 1) throw new Error(`Draft module ${module.type} was not found`);
+      }
+      return getModuleVersionGraph(projectId, "draft");
+    });
   }
 
   function getLegacyFixture(projectId) {
@@ -246,6 +420,8 @@ export function createProjectRepository(database) {
     getProject,
     resolveVersion,
     getSnapshot,
+    getModuleVersionGraph,
+    replaceDraftModuleConfigurations,
     getLegacyFixture,
     countVersion,
     listAuthorizedProjects,

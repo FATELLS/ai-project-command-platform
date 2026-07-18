@@ -144,7 +144,7 @@ export function createProjectRepository(database) {
         : "CASE WHEN recent.last_accessed_at IS NULL THEN 1 ELSE 0 END, recent.last_accessed_at DESC, p.updated_at DESC";
     const rows = database.prepare(`
       SELECT p.id, p.name, p.template_id AS templateId, p.template_version AS templateVersion,
-             p.status, p.updated_at AS updatedAt,
+             p.status, p.updated_at AS updatedAt, p.terminology_json AS terminologyJson,
              published.version_label AS publishedVersion,
              CASE WHEN ? = 1 THEN 'platform_admin' ELSE membership.role END AS role,
              json_extract(published.metadata_json, '$.summary') AS summary,
@@ -170,12 +170,16 @@ export function createProjectRepository(database) {
       query,
       pattern,
       pattern
-    ).map(row => ({
-      ...row,
-      role: roleExpression(principal.isPlatformAdmin) ?? row.role,
-      summary: row.summary ?? "",
-      isRecent: Boolean(row.lastAccessedAt)
-    }));
+    ).map(row => {
+      const { terminologyJson, ...project } = row;
+      return {
+        ...project,
+        role: roleExpression(principal.isPlatformAdmin) ?? row.role,
+        terminology: parseJson(terminologyJson),
+        summary: row.summary ?? "",
+        isRecent: Boolean(row.lastAccessedAt)
+      };
+    });
     const recent = rows
       .filter(project => project.status === "active" && project.lastAccessedAt)
       .sort((left, right) => right.lastAccessedAt.localeCompare(left.lastAccessedAt))
@@ -192,7 +196,8 @@ export function createProjectRepository(database) {
   function getAuthorizedProject(principal, projectId, capability = "public") {
     const row = database.prepare(`
       SELECT p.id, p.name, p.template_id AS templateId, p.template_version AS templateVersion,
-             p.status, p.updated_at AS updatedAt,
+             p.status, p.updated_at AS updatedAt, p.theme_json AS themeJson,
+             p.terminology_json AS terminologyJson,
              published.version_label AS publishedVersion,
              CASE WHEN ? = 1 THEN 'platform_admin' ELSE membership.role END AS role
       FROM projects p
@@ -203,7 +208,8 @@ export function createProjectRepository(database) {
     if (!row) return undefined;
     const role = roleExpression(principal.isPlatformAdmin) ?? row.role;
     if (capability === "draft" && !["platform_admin", "project_admin", "project_editor"].includes(role)) return undefined;
-    return { ...row, role };
+    const { themeJson, terminologyJson, ...project } = row;
+    return { ...project, role, theme: parseJson(themeJson), terminology: parseJson(terminologyJson) };
   }
 
   function recordRecentAccess(userId, projectId, accessedAt) {

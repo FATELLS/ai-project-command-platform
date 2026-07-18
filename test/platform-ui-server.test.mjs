@@ -81,8 +81,12 @@ test("client contract keeps credentials in memory and renders server data throug
   assert.match(client, /history\.replaceState/);
   assert.match(client, /ariaModal/);
   assert.match(client, /public-header/);
-  assert.match(client, /OVERALL MISSION · 项目总目标/);
-  assert.match(client, /CURRENT CAMPAIGN/);
+  for (const projectCopy of [
+    "XUGU AGENTIC GROUP SCHEDULE", "OVERALL MISSION · 总作战目标", "CURRENT CAMPAIGN",
+    "STANDARD PROJECT SCHEDULE", "PROJECT OVERVIEW · 项目目标", "CURRENT STATUS"
+  ]) assert.match(client, new RegExp(projectCopy));
+  assert.match(client, /projectPresentation\(project\)/);
+  assert.match(client, /project\?\.name/);
   assert.doesNotMatch(client, /global-rail/);
 });
 

@@ -179,3 +179,14 @@
 - 修正战役路线 SVG 与文本替代列表，阶段节点均可点击/键盘触发并写入 `?stage=...` 深链；详情面板展示对应战役节点。
 - 浏览器验证点击“试点验证攻坚”后 URL 为 `/projects/xugu-agentic-group/modules/roadmap?stage=pilot`，详情切换为该节点。
 - `npm test` 与 `npm run verify` 均通过，参考 Xugu 应用保持只读未变。
+
+## 2026-07-20：战役路线图分支与列表修正
+
+状态：`accepted`
+
+- 用户指出路线图上多出两个小黄点、下方完整阶段列表不应展示，并要求考虑多作战单元多任务分支。
+- 移除路线主图中的闭环 marker，主路线只保留 6 个战役节点；闭环仍保留在成果/闭环数据中，不再冒充路线节点。
+- 移除可见阶段列表，改为点击路线节点后在下方显示节点详情。
+- 在节点详情中按战役时间窗口推断并展示作战单元分支任务；分支任务可点击并写入 `task` 深链，详情显示负责人、日期、状态、预期产出和任务网络跳转。
+- 浏览器验证 `stage=launch` 下无 `.closure-marker`、无 `.stage-alternative`，分支任务按作战单元显示；点击“财务数据治理与安全分类”后 URL 为 `?stage=launch&task=finance-data-security` 并显示任务详情。
+- `npm run verify` 通过，参考 Xugu 应用保持只读未变。

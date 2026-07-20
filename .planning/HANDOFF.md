@@ -26,6 +26,7 @@
 - 已有平台用户与项目成员管理 API、发布中心成员/审计只读区、一致 SQLite 备份和校验后离线恢复脚本、显式模板项目导入和脱敏导出。
 - 已有材料关键内容 readiness 诊断、作战单元新增/归档/退出生命周期校验、统一 request/trace ID、脱敏堆栈错误事件、诊断包 API 和产品内测试中心。
 - `campaign-map-v1@1.0.0` 与 `standard-project-v1@1.0.0` 共用九类固定渲染器；标准验收夹具为 3 团队、7 任务、4 里程碑、2 工作流。
+- Xugu 战役路线图主图的作战单元分支胶囊不是装饰：它们必须保持可点击、可键盘触发、`unit` 深链、选中态和下方对应分支高亮置顶。
 - 默认数据库为 `data/platform.sqlite`，测试与统一验证只使用临时目录。
 - 参考项目位于 `../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console/`，必须继续只读。
 

@@ -12,6 +12,8 @@ import { createProposalService, ProposalServiceError } from "../services/proposa
 import { createReviewService, ReviewServiceError } from "../review/review-service.mjs";
 import { createReleaseService } from "../release/release-service.mjs";
 import { createMemberService, MemberServiceError } from "../services/member-service.mjs";
+import { createObservabilityService, createRequestId } from "../operations/observability.mjs";
+import { createProductTestService } from "../operations/product-test-service.mjs";
 import { createStaticHandler, securityHeaders } from "./static.mjs";
 
 const projectIdPattern = /^[a-z0-9][a-z0-9._-]{2,63}$/;
@@ -26,8 +28,11 @@ class HttpError extends Error {
 }
 
 function respond(response, status, body, headers = {}) {
+  const requestId = response.__requestId;
+  response.__finishTrace?.(status);
   response.writeHead(status, {
     ...securityHeaders,
+    ...(requestId ? { "x-request-id": requestId } : {}),
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
     ...headers
@@ -88,6 +93,8 @@ export function createApp(options) {
   const reviewService = options.reviewService ?? createReviewService(database, options.reviewOptions);
   const releaseService = options.releaseService ?? createReleaseService(database, options.releaseOptions);
   const memberService = options.memberService ?? createMemberService(database, options.memberOptions);
+  const observability = options.observabilityService ?? createObservabilityService(database, options.observabilityOptions);
+  const productTests = options.productTestService ?? createProductTestService(database, options.productTestOptions);
   const handleStatic = createStaticHandler(options.publicDirectory ?? defaultPublicDirectory);
   const secureCookies = options.secureCookies ?? false;
   const now = options.now ?? (() => Date.now());
@@ -121,6 +128,15 @@ export function createApp(options) {
     }
   }
 
+  function requireDiagnosticsAccess(principal, projectId = "") {
+    if (principal.isPlatformAdmin) return { role: "platform_admin" };
+    if (projectId) {
+      const row = database.prepare("SELECT role FROM project_members WHERE project_id=? AND user_id=?").get(projectId, principal.id);
+      if (row?.role === "project_admin") return { role: row.role };
+    }
+    throw new HttpError(404, "DIAGNOSTICS_NOT_FOUND", "诊断信息不存在或你无权访问");
+  }
+
   function projectRead(request, response, projectId, layer) {
     if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
     const principal = requirePrincipal(request);
@@ -133,9 +149,26 @@ export function createApp(options) {
   }
 
   return async function handleRequest(request, response) {
+    const requestId = createRequestId(request.headers["x-request-id"]);
+    response.__requestId = requestId;
+    response.__finishTrace = status => {
+      if (response.__traceFinished || !traceId) return;
+      response.__traceFinished = true;
+      observability.finishTrace(traceId, status >= 500 ? "failed" : "succeeded", { status, durationMs: Math.max(0, now() - traceStartedAt) });
+    };
+    let principalForError = null;
+    let traceId = null;
+    const traceStartedAt = now();
     try {
       const url = new URL(request.url, "http://platform.local");
       const segments = pathSegments(url.pathname);
+      const tracedProjectId = segments[0] === "api" && segments[1] === "projects" ? segments[2] : null;
+      traceId = observability.startTrace({
+        requestId,
+        projectId: projectIdPattern.test(tracedProjectId ?? "") ? tracedProjectId : null,
+        operation: `${request.method} ${url.pathname}`,
+        metadata: { query: url.search ? "present" : "empty" }
+      });
 
       if (request.method === "GET" && url.pathname === "/health") {
         return respond(response, 200, { status: "ok" });
@@ -178,7 +211,7 @@ export function createApp(options) {
       }
 
       if (segments[0] === "api" && segments[1] === "users") {
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         if (segments.length === 2 && request.method === "GET") return respond(response, 200, memberService.listUsers(principal));
         if (segments.length === 2 && request.method === "POST") {
           requireCsrf(request, principal);
@@ -192,7 +225,7 @@ export function createApp(options) {
       }
 
       if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "members") {
-        const projectId = segments[2], principal = requirePrincipal(request);
+        const projectId = segments[2], principal = requirePrincipal(request); principalForError = principal;
         if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
         if (segments.length === 4 && request.method === "GET") return respond(response, 200, memberService.listMembers(principal, projectId));
         if (segments.length === 5 && request.method === "PUT") {
@@ -207,7 +240,7 @@ export function createApp(options) {
       }
 
       if (request.method === "POST" && url.pathname === "/api/projects") {
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         requireCsrf(request, principal);
         const project = projectService.createProject(principal, await readJson(request));
         return respond(response, 201, { project });
@@ -216,7 +249,7 @@ export function createApp(options) {
       if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "materials") {
         const projectId = segments[2];
         if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         if (segments.length === 4 && request.method === "GET") return respond(response, 200, materialService.list(principal, projectId));
         if (segments.length === 5 && segments[4] === "capabilities" && request.method === "GET") return respond(response, 200, materialService.capabilities(principal, projectId));
         if (segments.length === 5 && segments[4] === "manual" && request.method === "POST") {
@@ -266,7 +299,7 @@ export function createApp(options) {
       if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "generation-tasks") {
         const projectId = segments[2];
         if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         if (segments.length === 5 && segments[4] === "capabilities" && request.method === "GET") return respond(response, 200, proposalService.capabilities(principal, projectId));
         if (segments.length === 4 && request.method === "GET") return respond(response, 200, proposalService.listJobs(principal, projectId));
         if (segments.length === 4 && request.method === "POST") {
@@ -285,7 +318,7 @@ export function createApp(options) {
       if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "change-proposals") {
         const projectId = segments[2];
         if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         if (segments.length === 4 && request.method === "GET") return respond(response, 200, proposalService.listProposals(principal, projectId));
         if (segments.length === 5 && request.method === "GET") return respond(response, 200, proposalService.getProposal(principal, projectId, segments[4]));
         if (segments.length === 6 && segments[5] === "review" && request.method === "GET") return respond(response, 200, reviewService.getReview(principal, projectId, segments[4]));
@@ -307,7 +340,7 @@ export function createApp(options) {
       if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "release") {
         const projectId = segments[2];
         if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         if (segments.length === 5 && segments[4] === "preview" && request.method === "GET") return respond(response, 200, releaseService.preview(principal, projectId));
         if (segments.length === 5 && segments[4] === "history" && request.method === "GET") return respond(response, 200, releaseService.history(principal, projectId));
         if (segments.length === 5 && segments[4] === "audit" && request.method === "GET") return respond(response, 200, releaseService.auditLog(principal, projectId, url.searchParams.get("limit")));
@@ -325,7 +358,7 @@ export function createApp(options) {
       if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "chat") {
         const projectId = segments[2];
         if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         if (segments.length === 5 && segments[4] === "quota" && request.method === "GET") {
           const envelope = materialService.capabilities(principal, projectId);
           return respond(response, 200, { limits: { perMinute: envelope.limits.maxChatPerMinute, perDay: envelope.limits.maxChatPerDay }, usage: { today: envelope.usage.chatToday, remainingToday: envelope.usage.chatRemainingToday } });
@@ -343,7 +376,7 @@ export function createApp(options) {
         const [, , projectId, layer] = segments;
         if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
         if (layer !== "public" && layer !== "draft") throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         const payload = moduleService.listModules(principal, projectId, layer);
         projects.recordRecentAccess(principal.id, projectId, new Date(now()).toISOString());
         return respond(response, 200, payload);
@@ -354,7 +387,7 @@ export function createApp(options) {
         const [, , projectId, layer, , moduleType] = segments;
         if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
         if (layer !== "public" && layer !== "draft") throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         const payload = moduleService.getModule(principal, projectId, layer, moduleType);
         projects.recordRecentAccess(principal.id, projectId, new Date(now()).toISOString());
         return respond(response, 200, payload);
@@ -364,26 +397,26 @@ export function createApp(options) {
           segments[4] === "modules" && segments.length === 5 && request.method === "PATCH") {
         const projectId = segments[2];
         if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         requireCsrf(request, principal);
         return respond(response, 200, moduleService.updateDraftModules(principal, projectId, await readJson(request)));
       }
 
-      if (segments[0] === "api" && segments[1] === "projects" && segments.length === 4 && request.method === "GET") {
+      if (segments[0] === "api" && segments[1] === "projects" && segments.length === 4 && request.method === "GET" && segments[3] !== "test-runs") {
         const [, , projectId, layer] = segments;
         if (layer !== "public" && layer !== "draft") throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
         return projectRead(request, response, projectId, layer);
       }
 
       if (segments[0] === "api" && segments[1] === "projects" && segments.length === 3 && request.method === "PATCH") {
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         requireCsrf(request, principal);
         const project = projectService.editProject(principal, segments[2], await readJson(request));
         return respond(response, 200, { project });
       }
 
       if (segments[0] === "api" && segments[1] === "projects" && segments.length === 4 && request.method === "POST" && ["archive", "restore"].includes(segments[3])) {
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         requireCsrf(request, principal);
         const project = segments[3] === "archive"
           ? projectService.archiveProject(principal, segments[2])
@@ -392,7 +425,7 @@ export function createApp(options) {
       }
 
       if (request.method === "GET" && url.pathname === "/api/public") {
-        const principal = requirePrincipal(request);
+        const principal = requirePrincipal(request); principalForError = principal;
         const project = projects.getAuthorizedProject(principal, compatibilityProjectId, "public");
         if (!project) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
         const snapshot = projects.getSnapshot(compatibilityProjectId, "published");
@@ -400,8 +433,50 @@ export function createApp(options) {
         return respond(response, 200, snapshot);
       }
 
+      if (segments[0] === "api" && segments[1] === "diagnostics" && segments[2] === "errors") {
+        const principal = requirePrincipal(request); principalForError = principal;
+        const projectId = url.searchParams.get("projectId") ?? "";
+        requireDiagnosticsAccess(principal, projectId);
+        if (segments.length === 3 && request.method === "GET") return respond(response, 200, { items: observability.listErrors({ projectId, limit: url.searchParams.get("limit") }) });
+        if (segments.length === 4 && request.method === "GET") {
+          const event = observability.getError(segments[3]);
+          if (!event) throw new HttpError(404, "ERROR_EVENT_NOT_FOUND", "错误事件不存在或你无权访问");
+          if (event.projectId) requireDiagnosticsAccess(principal, event.projectId);
+          return respond(response, 200, { event });
+        }
+        if (segments.length === 5 && segments[4] === "bundle" && request.method === "GET") {
+          const bundle = observability.bundle(segments[3]);
+          if (!bundle) throw new HttpError(404, "ERROR_EVENT_NOT_FOUND", "错误事件不存在或你无权访问");
+          if (bundle.error.projectId) requireDiagnosticsAccess(principal, bundle.error.projectId);
+          return respond(response, 200, { bundle });
+        }
+        throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
+      }
+
+      if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "test-runs") {
+        const projectId = segments[2];
+        if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
+        const principal = requirePrincipal(request); principalForError = principal;
+        requireDiagnosticsAccess(principal, projectId);
+        if (segments.length === 4 && request.method === "GET") return respond(response, 200, productTests.list(principal, projectId));
+        if (segments.length === 4 && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 201, productTests.run(principal, projectId, { ...(await readJson(request, 4 * 1024)), requestId }));
+        }
+        if (segments.length === 5 && request.method === "GET") {
+          const run = productTests.getRun(principal, segments[4]);
+          if (!run || run.run.projectId !== projectId) throw new HttpError(404, "TEST_RUN_NOT_FOUND", "测试运行不存在或你无权访问");
+          return respond(response, 200, run);
+        }
+        throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
+      }
+
+      if (options.enableSyntheticErrors && request.method === "GET" && url.pathname === "/api/_test/boom") {
+        throw new Error("Synthetic failure with cookie=secret-token and prompt should be redacted");
+      }
+
       if (url.pathname.startsWith("/api/")) throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
-      if (await handleStatic(request, response, url)) return;
+      if (await handleStatic(request, response, url)) { observability.finishTrace(traceId, "succeeded", { durationMs: Math.max(0, now() - traceStartedAt) }); return; }
       throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
     } catch (error) {
       if (error instanceof MaterialGateError && !error.status) {
@@ -409,12 +484,46 @@ export function createApp(options) {
           : ["upload_rate_limited", "upload_concurrency_limited"].includes(error.code) ? 429
             : ["duplicate_material", "project_capacity_limit", "project_material_limit"].includes(error.code) ? 409 : 400;
       }
-      const known = error instanceof HttpError || error instanceof ProjectServiceError || error instanceof ModuleServiceError || error instanceof MaterialServiceError || error instanceof ProposalServiceError || error instanceof ReviewServiceError || error instanceof MemberServiceError || error instanceof AiServiceError || error instanceof MaterialGateError;
+      const known = error instanceof HttpError || error instanceof ProjectServiceError || error instanceof ModuleServiceError || error instanceof MaterialServiceError || error instanceof ProposalServiceError || error instanceof ReviewServiceError || error instanceof MemberServiceError || error instanceof AiServiceError || error instanceof MaterialGateError || (Number.isInteger(error?.status) && typeof error?.code === "string");
+      const status = known ? error.status : 500;
+      const code = known ? error.code : "INTERNAL_ERROR";
+      if (traceId && !response.__traceFinished) {
+        response.__traceFinished = true;
+        observability.finishTrace(traceId, status >= 500 ? "failed" : "succeeded", { status, code, durationMs: Math.max(0, now() - traceStartedAt) });
+      }
+      let errorEvent;
+      if (status >= 500) {
+        try {
+          errorEvent = observability.recordError({
+            requestId,
+            traceId,
+            projectId: (() => { try { const url = new URL(request.url, "http://platform.local"); return inferProjectFromPath(url.pathname); } catch { return null; } })(),
+            userId: principalForError?.id ?? null,
+            method: request.method,
+            route: request.url,
+            status,
+            code,
+            message: known ? error.message : "服务器处理请求时发生错误",
+            error,
+            context: { known }
+          });
+        } catch (recordError) {
+          console.error("Could not record error event", recordError);
+        }
+      }
       if (!known) console.error("Request failed", error);
-      return respond(response, known ? error.status : 500, {
+      return respond(response, status, {
         error: known ? error.message : "服务器处理请求时发生错误",
-        code: known ? error.code : "INTERNAL_ERROR"
+        code,
+        requestId,
+        errorEventId: errorEvent?.id
       });
     }
   };
+}
+
+function inferProjectFromPath(pathname) {
+  const match = String(pathname ?? "").match(/^\/api\/projects\/([^/]+)/);
+  if (!match) return null;
+  try { return decodeURIComponent(match[1]); } catch { return null; }
 }

@@ -84,15 +84,17 @@ export function renderUnits(context) {
   for (const task of context.snapshot?.tasks ?? []) taskCounts.set(task.groupId, (taskCounts.get(task.groupId) ?? 0) + 1);
   const selectedId = context.query.get("unit");
   const selected = units.find(unit => unit.id === selectedId);
+  const lifecycle = unit => unit.status === "archived" ? "已归档" : unit.status === "exited" ? "已退出" : "活跃";
   const grid = el("div", { className: "unit-grid" }, units.map(unit => el("article", { className: `unit-card${selected?.id === unit.id ? " selected" : ""}` }, [
     el("div", { className: "unit-card-top" }, [
       el("span", { className: "unit-mark", ariaHidden: "true", text: safeText(unit.short, unit.name.slice(0, 1)) }),
-      el("span", { className: "count-pill", text: `${taskCounts.get(unit.id) ?? 0} ${context.presentation.task}` })
+      el("span", { className: "count-pill", text: `${taskCounts.get(unit.id) ?? 0} ${context.presentation.task}` }),
+      el("span", { className: `unit-lifecycle unit-${unit.status ?? "active"}`, text: lifecycle(unit) })
     ]),
     el("h3", { text: unit.name }),
     el("p", { className: "unit-owner", text: safeText(unit.owner, "负责人待确认") }),
     el("p", { text: safeText(unit.objective, "目标待补充") }),
-    definitionList([["当前工作", unit.currentWork], ["预期产出", unit.expectedOutput], ["来源", unit.source]]),
+    definitionList([["当前工作", unit.currentWork], ["预期产出", unit.expectedOutput], ["生命周期", `${lifecycle(unit)}${unit.effectiveDate ? ` · ${formatDay(unit.effectiveDate)}` : ""}`], ["原因", unit.lifecycleReason], ["来源", unit.source]]),
     el("button", { type: "button", className: "secondary-button", text: `查看${context.presentation.unit}详情`, onClick: () => setQuery(context.navigate, { unit: unit.id }) })
   ])));
   return el("section", { className: "module-primary-card" }, [
@@ -100,7 +102,7 @@ export function renderUnits(context) {
     grid,
     selected ? el("aside", { className: "selection-detail", tabIndex: -1 }, [
       el("h3", { text: selected.name }),
-      definitionList([["负责人", selected.owner], ["目标", selected.objective], ["当前工作", selected.currentWork], ["预期产出", selected.expectedOutput], ["来源", selected.source]]),
+      definitionList([["负责人", selected.owner], ["目标", selected.objective], ["当前工作", selected.currentWork], ["预期产出", selected.expectedOutput], ["生命周期", `${lifecycle(selected)}${selected.effectiveDate ? ` · ${formatDay(selected.effectiveDate)}` : ""}`], ["原因", selected.lifecycleReason], ["来源", selected.source]]),
       el("div", { className: "detail-actions" }, [
         el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/task-network?unit=${encodeURIComponent(selected.id)}`, text: "查看任务网络" }),
         el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/gantt?unit=${encodeURIComponent(selected.id)}`, text: "查看甘特" })
@@ -430,6 +432,7 @@ function localTabs(context, view) {
   const base = `/projects/${encodeURIComponent(context.project.id)}/modules/materials`;
   const entries = [["ledger", "材料台账"], ["qa", qaLabel], ["proposals", proposalLabel]];
   if (["platform_admin", "project_admin", "project_editor"].includes(context.project.role)) entries.push(["release", context.presentation.kind === "campaign" ? "审核与发布" : "审核发布中心"]);
+  if (["platform_admin", "project_admin"].includes(context.project.role)) entries.push(["operations", "运维自检"]);
   const tabs = entries.map(([value, label]) => el("a", {
     href: `${base}?view=${value}`, ariaCurrent: view === value ? "page" : null, text: label,
     onClick: event => { event.preventDefault(); context.navigate(`${base}?view=${value}`); }
@@ -458,6 +461,19 @@ function materialErrorMessage(error) {
     zip_bomb: "文件展开后超过安全限制，已停止处理。请压缩内容或拆分文件后重试。"
   };
   return copy[error?.code] ?? error?.message ?? "请求失败，请稍后重试";
+}
+
+const readinessLabels = Object.freeze({ ready: "关键内容充分", warning: "可生成但需复核", blocked: "关键内容缺失" });
+function readinessText(material = {}) {
+  const readiness = material.readiness;
+  if (!material.updateTemplate) return "未选择模板";
+  if (!readiness) return "待诊断";
+  return readinessLabels[readiness.status] ?? readiness.status;
+}
+function readinessNode(material = {}) {
+  const readiness = material.readiness;
+  if (!readiness) return el("span", { className: "readiness-pill", text: readinessText(material) });
+  return el("span", { className: `readiness-pill readiness-${readiness.status}`, title: readiness.suggestion, text: readinessText(material) });
 }
 
 function modalSheet({ title, eyebrow, project, returnFocus, className = "material-sheet", closeLabel = "关闭上传面板", titleId = "material-sheet-title", render }) {
@@ -545,7 +561,7 @@ function openGenerationSheet(context, originatingMaterial, returnFocus) {
           const providerEnabled = capabilityEnvelope.provider?.enabled ?? capabilityEnvelope.providerEnabled ?? true;
           const canCreate = capability(capabilityEnvelope, "create", "createTask", "createGenerationTask");
           const sourceItems = capabilityEnvelope.eligibleMaterials ?? ledger.items ?? [];
-          const eligible = sourceItems.filter(item => item.status === "ready" && updateTemplateKey(item) && item.generation?.enabled !== false && item.generationEnabled !== false);
+          const eligible = sourceItems.filter(item => item.status === "ready" && updateTemplateKey(item) && item.generation?.enabled !== false && item.generationEnabled !== false && item.readiness?.status !== "blocked");
           const selected = new Set();
           if (originatingMaterial?.id && eligible.some(item => item.id === originatingMaterial.id)) selected.add(originatingMaterial.id);
           const maxMaterials = Math.min(8, Number(limits.maxMaterialsPerTask ?? limits.maxMaterials ?? 8));
@@ -572,7 +588,7 @@ function openGenerationSheet(context, originatingMaterial, returnFocus) {
               });
               return el("div", { className: `generation-material-row${differentTemplate ? " ineligible" : ""}`, dataset: { materialId: item.id } }, [
                 checkbox,
-                el("label", { htmlFor: inputId }, [el("strong", { text: safeText(item.name, item.displayName) }), el("small", { text: `${updateTemplateLabel(item)} · ${Number(item.evidenceCount ?? item.currentEvidenceCount ?? 0)} 个证据块` })]),
+                el("label", { htmlFor: inputId }, [el("strong", { text: safeText(item.name, item.displayName) }), el("small", { text: `${updateTemplateLabel(item)} · ${Number(item.evidenceCount ?? item.currentEvidenceCount ?? 0)} 个证据块 · ${readinessText(item)}` })]),
                 differentTemplate ? el("span", { text: "与已选材料模板不同" }) : null
               ]);
             });
@@ -620,7 +636,7 @@ function openGenerationSheet(context, originatingMaterial, returnFocus) {
           ]);
           controls.body.replaceChildren(eligible.length ? form : el("section", { className: "module-empty material-empty" }, [
             el("h3", { text: "暂无可用于生成的材料" }),
-            el("p", { text: "材料必须证据已就绪、已选择版本化更新模板，并获授权用于生成。" }),
+            el("p", { text: "材料必须证据已就绪、已选择版本化更新模板、关键内容不缺失，并获授权用于生成。" }),
             el("button", { type: "button", className: "secondary-button", text: "关闭生成面板", onClick: controls.close })
           ]));
           if (eligible.length) renderSelection();
@@ -766,13 +782,13 @@ function materialTable(context, items, caps, refresh) {
     const link = el("a", { href: detailLink(item), text: item.name, onClick: event => { event.preventDefault(); context.navigate(detailLink(item)); } });
     const actions = [el("a", { className: "secondary-button", href: detailLink(item), text: "查看材料", onClick: event => { event.preventDefault(); context.navigate(detailLink(item)); } })];
     if (caps.retry && ["failed", "dependency_missing"].includes(item.status)) actions.push(el("button", { type: "button", className: "ghost-button", text: "重试处理", onClick: async () => { await context.api(materialPath(context, `/${encodeURIComponent(item.id)}/retry`), { method: "POST", mutation: true }); context.showToast("材料已进入重试队列"); await refresh(); } }));
-    return el("tr", {}, [el("th", { scope: "row" }, [link, el("small", { text: item.extension || item.sourceKind || "待补充" })]), el("td", { text: item.updateTemplate?.label ?? "未选择更新模板" }), el("td", {}, [el("span", { className: `material-status status-${item.status}`, text: materialStatus[item.status] ?? item.status })]), el("td", {}, item.evidenceCount > 0 ? [el("a", { href: detailLink(item), text: `${item.evidenceCount} 个证据块`, onClick: event => { event.preventDefault(); context.navigate(detailLink(item)); } })] : [el("span", { text: "0 个证据块" })]), el("td", { text: item.qa?.enabled ? "已授权问答" : item.status === "ready" ? "未授权问答" : "不可用于问答" }), el("td", {}, [el("span", { text: safeText(item.uploadedBy) }), el("small", { text: uiDate(item.createdAt) })]), el("td", { text: bytes(item.size) }), el("td", {}, [el("div", { className: "row-actions" }, actions)])]);
+    return el("tr", {}, [el("th", { scope: "row" }, [link, el("small", { text: item.extension || item.sourceKind || "待补充" })]), el("td", { text: item.updateTemplate?.label ?? "未选择更新模板" }), el("td", {}, [readinessNode(item)]), el("td", {}, [el("span", { className: `material-status status-${item.status}`, text: materialStatus[item.status] ?? item.status })]), el("td", {}, item.evidenceCount > 0 ? [el("a", { href: detailLink(item), text: `${item.evidenceCount} 个证据块`, onClick: event => { event.preventDefault(); context.navigate(detailLink(item)); } })] : [el("span", { text: "0 个证据块" })]), el("td", { text: item.qa?.enabled ? "已授权问答" : item.status === "ready" ? "未授权问答" : "不可用于问答" }), el("td", {}, [el("span", { text: safeText(item.uploadedBy) }), el("small", { text: uiDate(item.createdAt) })]), el("td", { text: bytes(item.size) }), el("td", {}, [el("div", { className: "row-actions" }, actions)])]);
   }));
-  return el("div", { className: "table-scroll material-table-scroll", tabIndex: 0, role: "region", ariaLabel: "材料台账，可水平滚动" }, [el("table", { className: "module-table material-table" }, [el("caption", { text: "当前项目材料台账" }), el("thead", {}, [el("tr", {}, ["材料", "类型 / 模板", "处理状态", "证据块", "问答授权", "上传者 / 时间", "大小", "操作"].map(label => el("th", { scope: "col", text: label })))]), tbody])]);
+  return el("div", { className: "table-scroll material-table-scroll", tabIndex: 0, role: "region", ariaLabel: "材料台账，可水平滚动" }, [el("table", { className: "module-table material-table" }, [el("caption", { text: "当前项目材料台账" }), el("thead", {}, [el("tr", {}, ["材料", "类型 / 模板", "关键内容", "处理状态", "证据块", "问答授权", "上传者 / 时间", "大小", "操作"].map(label => el("th", { scope: "col", text: label })))]), tbody])]);
 }
 
 function detailMetadata(material) {
-  return definitionList([["材料类型", material.extension || material.sourceKind], ["处理状态", materialStatus[material.status] ?? material.status], ["更新模板", material.updateTemplate?.label ?? "未选择更新模板"], ["上传者 / 时间", `${safeText(material.uploadedBy)} · ${uiDate(material.createdAt)}`], ["原始大小", bytes(material.size)], ["SHA-256", safeText(material.sha256)], ["证据块", `${material.evidenceCount ?? 0} 个`], ["问答授权", material.qa?.enabled ? "已授权问答" : "未授权问答"], ["生成授权", material.generation?.enabled ? "已授权生成" : "未授权生成"]], "material-detail-meta");
+  return definitionList([["材料类型", material.extension || material.sourceKind], ["处理状态", materialStatus[material.status] ?? material.status], ["更新模板", material.updateTemplate?.label ?? "未选择更新模板"], ["关键内容", readinessText(material)], ["上传者 / 时间", `${safeText(material.uploadedBy)} · ${uiDate(material.createdAt)}`], ["原始大小", bytes(material.size)], ["SHA-256", safeText(material.sha256)], ["证据块", `${material.evidenceCount ?? 0} 个`], ["问答授权", material.qa?.enabled ? "已授权问答" : "未授权问答"], ["生成授权", material.generation?.enabled ? "已授权生成" : "未授权生成"]], "material-detail-meta");
 }
 
 function renderMaterialDetail(context, root) {
@@ -794,9 +810,10 @@ function renderMaterialDetail(context, root) {
       }
       if (caps.manageQa) controls.push(el("button", { type: "button", className: "secondary-button", text: material.qa?.enabled ? "取消问答授权" : "授权用于问答", onClick: async () => { await context.api(materialPath(context, `/${id}/qa`), { method: "PATCH", mutation: true, body: { enabled: !material.qa?.enabled, audience: "project_members" } }); context.showToast(material.qa?.enabled ? "已取消问答授权" : "已授权用于问答"); await load(); } }));
       if (caps.manageGeneration) controls.push(el("button", { type: "button", className: "secondary-button", text: material.generation?.enabled ? "取消生成授权" : "授权用于生成", onClick: async () => { await context.api(materialPath(context, `/${id}/generation`), { method: "PATCH", mutation: true, body: { enabled: !material.generation?.enabled } }); context.showToast(material.generation?.enabled ? "已取消生成授权" : "已授权用于生成"); await load(); } }));
-      if (caps.createGenerationTask && material.status === "ready" && material.updateTemplate && material.generation?.enabled && Number(material.evidenceCount) > 0) controls.push(el("button", { type: "button", className: "primary-button", text: context.presentation.kind === "campaign" ? "生成作战更新提案" : "生成项目更新提案", onClick: event => openGenerationSheet(context, material, event.currentTarget) }));
+      if (caps.createGenerationTask && material.status === "ready" && material.updateTemplate && material.generation?.enabled && Number(material.evidenceCount) > 0 && material.readiness?.status !== "blocked") controls.push(el("button", { type: "button", className: "primary-button", text: context.presentation.kind === "campaign" ? "生成作战更新提案" : "生成项目更新提案", onClick: event => openGenerationSheet(context, material, event.currentTarget) }));
       if (caps.retry && ["failed", "dependency_missing"].includes(material.status)) controls.push(el("button", { type: "button", className: "secondary-button", text: "重试处理", onClick: async () => { await context.api(materialPath(context, `/${id}/retry`), { method: "POST", mutation: true }); context.showToast("材料已进入重试队列"); await load(); } }));
-      root.replaceChildren(el("a", { className: "back-link", href: `/projects/${encodeURIComponent(context.project.id)}/modules/materials?view=ledger`, text: "← 返回材料台账", onClick: event => { event.preventDefault(); context.navigate(event.currentTarget.getAttribute("href")); } }), el("section", { className: "materials-detail-card" }, [el("header", { className: "material-detail-heading" }, [el("div", {}, [el("span", { className: "eyebrow", text: "MATERIAL EVIDENCE" }), el("h1", { text: material.name })]), el("span", { className: `material-status status-${material.status}`, text: materialStatus[material.status] ?? material.status })]), detailMetadata(material), el("p", { className: "material-boundary", text: "AI 只生成带来源的结构化建议；不会修改项目草稿或发布版本。" }), controls.length ? el("div", { className: "material-detail-controls" }, controls) : null, el("div", { className: "evidence-layout" }, [el("aside", { ariaLabel: "证据位置索引" }, [index]), select, preview]) ]));
+      const readiness = material.readiness;
+      root.replaceChildren(el("a", { className: "back-link", href: `/projects/${encodeURIComponent(context.project.id)}/modules/materials?view=ledger`, text: "← 返回材料台账", onClick: event => { event.preventDefault(); context.navigate(event.currentTarget.getAttribute("href")); } }), el("section", { className: "materials-detail-card" }, [el("header", { className: "material-detail-heading" }, [el("div", {}, [el("span", { className: "eyebrow", text: "MATERIAL EVIDENCE" }), el("h1", { text: material.name })]), el("span", { className: `material-status status-${material.status}`, text: materialStatus[material.status] ?? material.status })]), detailMetadata(material), readiness ? el("section", { className: `readiness-panel readiness-${readiness.status}` }, [el("h2", { text: readinessText(material) }), el("p", { text: readiness.suggestion }), readiness.missing?.length ? el("ul", {}, readiness.missing.map(item => el("li", { text: `缺失：${item.label}` }))) : null, readiness.warnings?.length ? el("ul", {}, readiness.warnings.map(item => el("li", { text: `建议补充：${item.label}` }))) : null]) : null, el("p", { className: "material-boundary", text: "AI 只生成带来源的结构化建议；不会修改项目草稿或发布版本。" }), controls.length ? el("div", { className: "material-detail-controls" }, controls) : null, el("div", { className: "evidence-layout" }, [el("aside", { ariaLabel: "证据位置索引" }, [index]), select, preview]) ]));
     } catch (error) {
       if (error.message === "AUTHENTICATION_REQUIRED") return;
       root.replaceChildren(el("section", { className: "module-error error-panel", role: "alert" }, [el("h1", { text: error.status === 404 ? "材料不存在或你无权访问" : "无法加载材料详情" }), el("p", { text: materialErrorMessage(error) }), el("button", { type: "button", className: "secondary-button", text: "返回材料台账", onClick: () => context.navigate(`/projects/${encodeURIComponent(context.project.id)}/modules/materials?view=ledger`) })]));
@@ -1030,6 +1047,54 @@ function renderReleaseCenter(context,root){
   }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(localTabs(context,"release"),el("section",{className:"module-error error-panel",role:"alert"},[el("h2",{text:"无法加载审核发布中心"}),el("p",{text:error.message}),el("button",{type:"button",className:"primary-button",text:"重新加载",onClick:load})]));}finally{root.setAttribute("aria-busy","false");}};void load();
 }
 
+function renderOperationsCenter(context, root) {
+  const testPath = `/api/projects/${encodeURIComponent(context.project.id)}/test-runs`;
+  const diagnosticsPath = `/api/diagnostics/errors?projectId=${encodeURIComponent(context.project.id)}`;
+  const load = async () => {
+    root.setAttribute("aria-busy", "true");
+    try {
+      const [runs, errors] = await Promise.all([
+        context.api(testPath).catch(error => ({ error })),
+        context.api(diagnosticsPath).catch(error => ({ error, items: [] }))
+      ]);
+      const runButton = el("button", { type: "button", className: "primary-button", text: "运行核心自检", onClick: async event => {
+        event.currentTarget.disabled = true;
+        try {
+          const result = await context.api(testPath, { method: "POST", mutation: true, body: { suiteId: "core" } });
+          context.showToast(`自检完成：${result.run.status}`);
+          await load();
+        } catch (error) {
+          context.showToast(error.message);
+          event.currentTarget.disabled = false;
+        }
+      } });
+      const runItems = (runs.items ?? []).map(item => el("article", { className: "diagnostic-row" }, [
+        el("div", {}, [el("strong", { text: `${item.suiteId} · ${item.status}` }), el("span", { text: `${item.summary?.passed ?? 0}/${item.summary?.total ?? 0} 通过 · ${uiDate(item.createdAt)}` })]),
+        linkTo(context, `${materialsUiPath(context, "?view=operations")}&run=${encodeURIComponent(item.id)}`, "查看记录", "secondary-button")
+      ]));
+      const errorItems = (errors.items ?? []).map(item => el("article", { className: "diagnostic-row" }, [
+        el("div", {}, [el("strong", { text: `${item.code} · ${item.status}` }), el("span", { text: `${item.requestId} · ${uiDate(item.createdAt)}` })]),
+        el("button", { type: "button", className: "secondary-button", text: "复制报障信息", onClick: async () => {
+          const bundle = await context.api(`/api/diagnostics/errors/${encodeURIComponent(item.id)}/bundle`);
+          await navigator.clipboard?.writeText?.(JSON.stringify(bundle.bundle, null, 2));
+          context.showToast("诊断包已复制");
+        } })
+      ]));
+      root.replaceChildren(localTabs(context, "operations"), el("section", { className: "materials-workspace-card diagnostics-center" }, [
+        el("header", { className: "proposal-workspace-header" }, [el("div", {}, [el("span", { className: "eyebrow", text: "OPERATIONS & TEST CENTER" }), el("h2", { text: "运维自检" }), el("p", { text: "管理员可运行安全自检，并用 requestId 查询脱敏错误堆栈和关联上下文。" })]), runButton]),
+        el("div", { className: "release-operations-grid" }, [
+          el("section", {}, [el("h3", { text: "产品内测试运行" }), runItems.length ? el("div", { className: "diagnostic-list" }, runItems) : el("p", { className: "empty-source", text: "尚无测试运行记录。" })]),
+          el("section", {}, [el("h3", { text: "最近错误事件" }), errorItems.length ? el("div", { className: "diagnostic-list" }, errorItems) : el("p", { className: "empty-source", text: "当前项目暂无记录的 5xx 错误。" })])
+        ])
+      ]));
+    } catch (error) {
+      if (error.message === "AUTHENTICATION_REQUIRED") return;
+      root.replaceChildren(localTabs(context, "operations"), el("section", { className: "module-error error-panel", role: "alert" }, [el("h2", { text: "无法加载运维自检" }), el("p", { text: error.message }), el("button", { type: "button", className: "primary-button", text: "重新加载", onClick: load })]));
+    } finally { root.setAttribute("aria-busy", "false"); }
+  };
+  void load();
+}
+
 export function renderMaterials(context) {
   void phaseThreeMaterialsBoundaryCopy;
   const root = el("div", { className: "materials-module", ariaBusy: "true" }, [el("section", { className: "module-skeleton skeleton-rows", ariaHidden: "true" }, [el("i"), el("i"), el("i")])]);
@@ -1039,6 +1104,7 @@ export function renderMaterials(context) {
   else if (context.query.get("view") === "qa") renderQa(context, root);
   else if (context.query.get("view") === "proposals") renderProposalWorkspace(context, root);
   else if (context.query.get("view") === "release") renderReleaseCenter(context, root);
+  else if (context.query.get("view") === "operations") renderOperationsCenter(context, root);
   else renderLedger(context, root);
   return root;
 }

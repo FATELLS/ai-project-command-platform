@@ -79,6 +79,13 @@ const required = [
   ".planning/phases/06-review-publish-operations/06-05-PLAN.md",
   ".planning/phases/06-review-publish-operations/PLAN-REVIEW.md",
   ".planning/phases/06-review-publish-operations/VERIFICATION.md",
+  ".planning/phases/07-release-hardening-material-readiness/CONTEXT.md",
+  ".planning/phases/07-release-hardening-material-readiness/07-VALIDATION.md",
+  ".planning/phases/07-release-hardening-material-readiness/07-01-PLAN.md",
+  ".planning/phases/07-release-hardening-material-readiness/07-02-PLAN.md",
+  ".planning/phases/07-release-hardening-material-readiness/07-03-PLAN.md",
+  ".planning/phases/07-release-hardening-material-readiness/07-04-PLAN.md",
+  ".planning/phases/07-release-hardening-material-readiness/VERIFICATION.md",
   ".planning/evidence/phase3-browser-matrix.json",
   ".planning/evidence/phase3-xugu-modules-desktop-1440x900.jpg",
   ".planning/evidence/phase3-standard-modules-desktop-1440x900.jpg",
@@ -92,6 +99,7 @@ const required = [
   "src/db/migrations/004_materials_evidence.sql",
   "src/db/migrations/005_structured_change_proposals.sql",
   "src/db/migrations/006_review_publish_operations.sql",
+  "src/db/migrations/007_release_hardening_readiness_observability.sql",
   "fixtures/evals/change-proposal-cases.json",
   "src/materials/policy.mjs",
   "src/materials/storage.mjs",
@@ -99,6 +107,7 @@ const required = [
   "src/materials/ingest-service.mjs",
   "src/materials/processing-service.mjs",
   "src/materials/evidence-service.mjs",
+  "src/materials/readiness-service.mjs",
   "src/materials/extractors/index.mjs",
   "src/ai/retriever.mjs",
   "src/ai/prompt-builder.mjs",
@@ -126,6 +135,8 @@ const required = [
   "src/release/release-service.mjs",
   "src/versions/version-store.mjs",
   "src/operations/database-backup.mjs",
+  "src/operations/observability.mjs",
+  "src/operations/product-test-service.mjs",
   "src/templates/catalog.mjs",
   "src/templates/template-validator.mjs",
   "src/modules/registry.mjs",
@@ -171,6 +182,9 @@ const required = [
   ,"test/member-service.test.mjs"
   ,"test/database-backup.test.mjs"
   ,"test/phase6-eval.test.mjs"
+  ,"test/material-readiness.test.mjs"
+  ,"test/unit-lifecycle-validator.test.mjs"
+  ,"test/observability-product-test.test.mjs"
 ];
 
 function run(command, args, options = {}) {
@@ -228,6 +242,7 @@ for (const file of [
   "src/materials/ingest-service.mjs",
   "src/materials/processing-service.mjs",
   "src/materials/evidence-service.mjs",
+  "src/materials/readiness-service.mjs",
   "src/materials/extractors/common.mjs",
   "src/materials/extractors/text.mjs",
   "src/materials/extractors/ooxml.mjs",
@@ -270,6 +285,8 @@ for (const file of [
   "src/release/release-service.mjs",
   "src/versions/version-store.mjs",
   "src/operations/database-backup.mjs",
+  "src/operations/observability.mjs",
+  "src/operations/product-test-service.mjs",
   "scripts/seed-project-fixture.mjs",
   "scripts/run-phase5-browser-fixture.mjs",
   "scripts/run-phase6-browser-fixture.mjs",
@@ -327,7 +344,7 @@ const runtimeDir = await mkdtemp(join(tmpdir(), "platform-verify-"));
 const database = openDatabase(join(runtimeDir, "platform.sqlite"));
 let server;
 try {
-  assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql", "004_materials_evidence.sql", "005_structured_change_proposals.sql", "006_review_publish_operations.sql"]);
+  assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql", "004_materials_evidence.sql", "005_structured_change_proposals.sql", "006_review_publish_operations.sql", "007_release_hardening_readiness_observability.sql"]);
   assert.deepEqual(applyMigrations(database), []);
   const imported = importLegacyProject(database, fixture, {
     projectId: "xugu-agentic-group",
@@ -392,4 +409,4 @@ try {
 }
 
 assert.deepEqual(await referenceSnapshot(), referenceBefore, "read-only Xugu reference project changed during verification");
-console.log("Verification passed: Phase 6 human review, copy-on-write merge, controlled publish/rollback, roles, audit, backup, project isolation, browser evidence, Xugu equivalence, and source read-only checks are valid.");
+console.log("Verification passed: Phase 7 material readiness, unit lifecycle gates, diagnostics, product self-tests, Phase 6 review/publish, project isolation, browser evidence, Xugu equivalence, and source read-only checks are valid.");

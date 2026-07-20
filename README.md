@@ -4,7 +4,7 @@
 
 ## 当前结果
 
-Phase 1–6 已完成：
+Phase 1–7 已完成：
 
 - Node.js + SQLite 项目域、规范化版本图与可校验迁移；
 - scrypt 密码、HttpOnly 会话、CSRF、空闲/绝对过期和登录限流；
@@ -20,9 +20,12 @@ Phase 1–6 已完成：
 - 六类更新模板、锁定发布基准/材料/证据的生成任务和严格 `ChangeProposal`；
 - 逐项/整模块人工审核、字段重新校验、copy-on-write 草稿合并、发布预览、人工发布和直接前驱回滚；
 - 完整角色 API、追加审计、SQLite 一致备份/离线恢复和项目导入导出；
-- 138 项自动化测试、Phase 3–6 共 63 个浏览器阻断用例和 19 张 SHA-256/尺寸机检证据。
+- 材料关键内容 `ready / warning / blocked` 诊断，关键缺失会阻止生成，非关键缺失以 warning 进入上下文；
+- 作战单元/团队新增、归档、退出生命周期提案，归档/退出必须带证据、生效日期、原因且不得留下未关闭任务；
+- `x-request-id`、operation trace、脱敏错误事件、管理员诊断包和产品内“运维自检”中心；
+- 144 项自动化测试、Phase 3–6 共 63 个浏览器阻断用例、19 张 SHA-256/尺寸机检证据和 Phase 7 本机浏览器抽查。
 
-首版单服务器内部试用闭环已经完成。LLM 仍只能生成带来源的结构化提案，不能审核、合并、发布、回滚或生成页面代码。
+首版单服务器发布前硬化闭环已经完成。LLM 仍只能生成带来源的结构化提案，不能审核、合并、发布、回滚或生成页面代码。
 
 ## 环境
 
@@ -71,6 +74,12 @@ GET    /api/projects/:projectId/release/preview
 POST   /api/projects/:projectId/release/publish
 POST   /api/projects/:projectId/release/rollback
 GET    /api/projects/:projectId/release/audit
+GET    /api/diagnostics/errors
+GET    /api/diagnostics/errors/:errorId
+GET    /api/diagnostics/errors/:errorId/bundle
+GET    /api/projects/:projectId/test-runs
+POST   /api/projects/:projectId/test-runs
+GET    /api/projects/:projectId/test-runs/:runId
 GET    /api/projects/:projectId/members
 PUT    /api/projects/:projectId/members/:userId
 DELETE /api/projects/:projectId/members/:userId
@@ -82,7 +91,7 @@ POST   /api/projects/:projectId/restore
 GET    /api/public
 ```
 
-除健康检查和登录外均需要有效会话；写操作要求 CSRF 以及对应角色。项目生命周期写操作要求平台管理员；草稿模块配置允许项目编辑者及以上角色。未授权与不存在项目使用相同 404，避免泄露项目存在性。
+除健康检查和登录外均需要有效会话；写操作要求 CSRF 以及对应角色。项目生命周期写操作要求平台管理员；草稿模块配置允许项目编辑者及以上角色；诊断和产品自检仅平台管理员或授权项目管理员可见。未授权与不存在项目使用相同 404，避免泄露项目存在性。
 
 ## 数据与验证
 
@@ -95,7 +104,7 @@ npm run restore -- --input /secure/path/platform-backup.sqlite
 npm run verify
 ```
 
-统一验证使用临时数据库运行全部测试、迁移、Xugu 语义等价导入/导出、认证/模块 API、静态安全头、浏览器证据哈希/尺寸和敏感文件检查，并确认参考项目的 HEAD、Git 状态和种子哈希未变。
+统一验证使用临时数据库运行全部测试、迁移、Xugu 语义等价导入/导出、认证/模块/材料/提案/诊断/自检 API、静态安全头、浏览器证据哈希/尺寸和敏感文件检查，并确认参考项目的 HEAD、Git 状态和种子哈希未变。
 
 ## 项目原则
 

@@ -17,5 +17,7 @@ export function validateReviewGraph(graph) {
   }
   const tasks=new Map(graph.tasks.map(item=>[item.id,item]));
   for(const task of graph.tasks)for(const link of [task.parentId,...task.dependsOn].filter(Boolean)){const target=tasks.get(link);if(target&&target.unitId!==task.unitId)throw new ReviewGraphError("TASK_LINK_CROSS_UNIT","任务依赖必须位于同一团队或作战单元",{id:task.id,link});}
+  const units=new Map(graph.units.map(item=>[item.id,item]));
+  for(const task of graph.tasks){const unit=units.get(task.unitId);if(["archived","exited"].includes(unit?.status)&&!(Number(task.progress)>=100||["done","completed","complete","closed","archived","exited","已完成","完成","关闭","已关闭","归档","已归档"].includes(normalized(task.state))))throw new ReviewGraphError("UNIT_HAS_ACTIVE_TASKS","归档或退出的作战单元不能保留未完成任务",{id:task.id,unitId:task.unitId});}
   return graph;
 }

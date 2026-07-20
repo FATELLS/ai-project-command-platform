@@ -6,6 +6,8 @@ const semantics = new Set(["fact", "plan", "suggestion", "unknown"]);
 const operations = new Set(["create", "update", "delete"]);
 const highImpactDefaults = new Set(["progress", "completion", "status", "state", "owner", "startDate", "endDate", "dueDate", "asOf", "value", "target", "result", "source"]);
 const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+const unitStatuses = new Set(["active", "archived", "exited"]);
+const closedTaskStates = new Set(["done", "completed", "complete", "closed", "archived", "exited", "已完成", "完成", "关闭", "已关闭", "归档", "已归档"]);
 
 function fail(code, message, details) { throw proposalError(code, message, 422, details); }
 function equalArrays(left, right) { return left.length === right.length && left.every((item, index) => item === right[index]); }
@@ -32,16 +34,29 @@ function targetMap(context, module) {
   return new Map();
 }
 function validateDates(patch, changeId) {
-  for (const field of ["startDate", "endDate", "dueDate", "asOf", "date"]) {
+  for (const field of ["startDate", "endDate", "dueDate", "asOf", "date", "effectiveDate"]) {
     if (patch[field] !== undefined && patch[field] !== null && patch[field] !== "" && (typeof patch[field] !== "string" || !isoDate.test(patch[field]))) fail("INVALID_DATE", "提案包含无效日期", { changeId, field });
   }
   if (patch.startDate && patch.endDate && patch.startDate > patch.endDate) fail("INVALID_DATE_RANGE", "任务开始日期晚于结束日期", { changeId });
 }
+function isOpenTask(task) {
+  const state = normalized(task.state);
+  if (closedTaskStates.has(state)) return false;
+  if (Number(task.progress) >= 100) return false;
+  return true;
+}
 function validateTaskGraph(context, changes) {
-  const units = new Set(context.published.units.map(item => item.id));
+  const units = new Map(context.published.units.map(item => [item.id, { ...item, status: item.status ?? "active" }]));
   for (const change of changes.filter(item => item.module === "units")) {
-    if (change.operation === "delete") units.delete(change.targetId);
-    else if (change.operation === "create") units.add(change.targetId);
+    if (change.operation === "delete") fail("UNIT_DELETE_NOT_ALLOWED", "作战单元不能物理删除", { changeId: change.changeId });
+    const existing = units.get(change.targetId) ?? { id: change.targetId, status: "active" };
+    const next = { ...existing, ...change.patch, id: change.targetId };
+    if (next.status && !unitStatuses.has(next.status)) fail("UNIT_STATUS_INVALID", "作战单元生命周期状态无效", { changeId: change.changeId, status: next.status });
+    if (["archived", "exited"].includes(next.status)) {
+      if (!next.effectiveDate || !next.lifecycleReason) fail("UNIT_LIFECYCLE_REQUIRED", "作战单元归档或退出必须包含生效日期和原因", { changeId: change.changeId });
+      if (!Array.isArray(change.evidenceIds) || change.evidenceIds.length < 1) fail("EVIDENCE_REQUIRED", "作战单元生命周期变化必须引用证据", { changeId: change.changeId });
+    }
+    units.set(change.targetId, next);
   }
   const tasks = new Map(context.published.tasks.map(item => [item.id, structuredClone(item)]));
   for (const change of changes.filter(item => ["task-network", "gantt"].includes(item.module))) {
@@ -58,6 +73,7 @@ function validateTaskGraph(context, changes) {
     if (name) names.set(name, task.id);
     const unit = task.unitId;
     if (!unit || !units.has(unit)) fail("TASK_UNIT_NOT_FOUND", "任务所属团队或作战单元不存在", { targetId: task.id, unitId: unit ?? null });
+    if (["archived", "exited"].includes(units.get(unit)?.status) && isOpenTask(task)) fail("UNIT_HAS_ACTIVE_TASKS", "归档或退出的作战单元不能保留未完成任务", { targetId: task.id, unitId: unit });
     const links = [...new Set([task.parentId, ...(task.dependsOn ?? [])].filter(Boolean))];
     for (const link of links) {
       const linked = tasks.get(link);

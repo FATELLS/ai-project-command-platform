@@ -61,6 +61,8 @@ test("overview, units, roadmap, network, gantt and outcomes are DTO-driven with 
   assert.match(renderers, /stage-branch-map/);
   assert.match(renderers, /stage-task-chip/);
   assert.match(renderers, /route-branch-summary/);
+  assert.match(renderers, /data-unit-id/);
+  assert.match(renderers, /aria-pressed/);
   assert.match(renderers, /unit-card-detail/);
   assert.match(renderers, /inline-task-detail/);
   assert.match(renderers, /点击\$\{context\.presentation\.stage\}可切换/);
@@ -93,6 +95,9 @@ test("responsive and accessibility CSS keeps local scrolling and Xugu frame", ()
     /\.public-header\s*\{[^}]*height:\s*76px/,
     /\.public-header\s*\{[^}]*padding-inline:\s*32px/,
     /\.visual-scroll[^}]*overflow:\s*auto/,
+    /\.branch-chip\s*\{[^}]*cursor:\s*pointer/,
+    /\.branch-chip\.selected rect/,
+    /\.stage-branch-lane\.selected/,
     /\.module-config-sheet/,
     /@media \(max-width: 1279px\)/,
     /@media \(max-width: 767px\)/,

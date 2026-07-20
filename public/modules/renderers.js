@@ -203,9 +203,9 @@ export function renderUnits(context) {
   ]);
 }
 
-function roadmapSvg(context, stages, selectedStageId, branchGroups = []) {
+function roadmapSvg(context, stages, selectedStageId, branchGroups = [], selectedUnitId = "") {
   const width = Math.max(760, stages.length * 180 + 80);
-  const height = context.module.viewVariant === "campaign-network" ? 340 : 260;
+  const height = context.module.viewVariant === "campaign-network" ? 390 : 290;
   const svg = svgEl("svg", { class: "roadmap-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-labelledby": "roadmap-svg-title roadmap-svg-desc" });
   svg.append(svgEl("title", { id: "roadmap-svg-title" }, []), svgEl("desc", { id: "roadmap-svg-desc" }, []));
   svg.querySelector("title").textContent = `${context.module.title}可视化`;
@@ -239,28 +239,40 @@ function roadmapSvg(context, stages, selectedStageId, branchGroups = []) {
   if (selectedPoint && branchGroups.length) {
     const visibleBranches = branchGroups.slice(0, 6);
     const hiddenCount = Math.max(0, branchGroups.length - visibleBranches.length);
-    const chipWidth = 112, chipHeight = 34, gap = 8;
+    const chipWidth = 88, chipHeight = 30, gap = 10;
     const totalWidth = visibleBranches.length * chipWidth + (visibleBranches.length - 1) * gap;
     const startX = Math.max(20, Math.min(width - totalWidth - 20, selectedPoint.x - totalWidth / 2));
-    const branchY = selectedPoint.y > 145 ? 52 : 244;
-    const hubY = selectedPoint.y > 145 ? selectedPoint.y - 48 : selectedPoint.y + 48;
+    const branchesAbove = selectedPoint.y > 145;
+    const branchY = branchesAbove ? 38 : 292;
+    const railY = branchY + chipHeight / 2;
+    const elbowX = Math.max(84, Math.min(width - 84, selectedPoint.x + (selectedPoint.x > width / 2 ? -74 : 74)));
+    const nodeExitY = selectedPoint.y + (branchesAbove ? -34 : 34);
+    const hubY = branchesAbove ? Math.min(selectedPoint.y - 58, railY) : Math.max(selectedPoint.y + 100, railY - 38);
     const summary = svgEl("g", { class: "route-branch-summary", "aria-label": `${safeText(stages[selectedIndex].title)}包含${branchGroups.length}个${context.presentation.unit}分支` });
-    summary.append(svgEl("path", { d: `M ${selectedPoint.x},${selectedPoint.y} C ${selectedPoint.x},${hubY} ${selectedPoint.x},${hubY} ${selectedPoint.x},${branchY + chipHeight / 2}`, class: "branch-spine", fill: "none" }));
+    summary.append(svgEl("path", { d: `M ${selectedPoint.x},${nodeExitY} C ${selectedPoint.x},${hubY} ${elbowX},${hubY} ${elbowX},${railY}`, class: "branch-spine", fill: "none" }));
     visibleBranches.forEach((group, index) => {
       const x = startX + index * (chipWidth + gap);
+      const y = branchY + (index % 2 ? 18 : 0);
       const centerX = x + chipWidth / 2;
-      summary.append(svgEl("path", { d: `M ${selectedPoint.x},${branchY + chipHeight / 2} L ${centerX},${branchY + chipHeight / 2}`, class: "branch-line", fill: "none" }));
-      const chip = svgEl("g", { class: "branch-chip" });
-      chip.append(svgEl("rect", { x, y: branchY, width: chipWidth, height: chipHeight, rx: 12 }));
-      const label = svgEl("text", { x: x + 12, y: branchY + 21, class: "branch-label" });
-      label.textContent = safeText(group.unitName).replace(/作战单元$/, "").slice(0, 7);
-      const count = svgEl("text", { x: x + chipWidth - 12, y: branchY + 21, "text-anchor": "end", class: "branch-count" });
+      summary.append(svgEl("path", { d: `M ${elbowX},${railY} C ${elbowX},${y + chipHeight / 2} ${centerX},${railY} ${centerX},${y + chipHeight / 2}`, class: "branch-line", fill: "none" }));
+      const chip = svgEl("g", {
+        class: `branch-chip${group.unitId === selectedUnitId ? " selected" : ""}`,
+        tabindex: "0",
+        role: "button",
+        "aria-pressed": group.unitId === selectedUnitId ? "true" : "false",
+        "aria-label": `${group.unitName}，${group.tasks.length} 个${context.presentation.task}`,
+        "data-unit-id": group.unitId
+      });
+      chip.append(svgEl("rect", { x, y, width: chipWidth, height: chipHeight, rx: 15 }));
+      const label = svgEl("text", { x: x + 11, y: y + 19, class: "branch-label" });
+      label.textContent = safeText(group.unitName).replace(/作战单元$/, "").slice(0, 5);
+      const count = svgEl("text", { x: x + chipWidth - 10, y: y + 19, "text-anchor": "end", class: "branch-count" });
       count.textContent = `${group.tasks.length}`;
       chip.append(label, count);
       summary.append(chip);
     });
     if (hiddenCount) {
-      const more = svgEl("text", { x: startX + totalWidth + 8, y: branchY + 22, class: "branch-more" });
+      const more = svgEl("text", { x: startX + totalWidth + 8, y: branchY + 21, class: "branch-more" });
       more.textContent = `+${hiddenCount}`;
       summary.append(more);
     }
@@ -275,22 +287,28 @@ export function renderRoadmap(context) {
   const requestedStageId = context.query.get("stage");
   const selectedStage = stages.find(item => item.id === requestedStageId) ?? stages.find(item => item.id === context.data.currentStageId) ?? stages[0];
   const branchGroups = stageBranchGroups(context, selectedStage);
+  const selectedUnitId = context.query.get("unit");
   const branchTasks = branchGroups.flatMap(group => group.tasks.map(task => ({ ...task, unitName: group.unitName })));
   const selectedTask = branchTasks.find(task => task.id === context.query.get("task"));
-  const visual = roadmapSvg(context, stages, selectedStage.id, branchGroups);
+  const visual = roadmapSvg(context, stages, selectedStage.id, branchGroups, selectedUnitId);
   visual.addEventListener("click", event => {
     const stageId = event.target.closest?.("[data-stage-id]")?.dataset.stageId;
-    if (stageId) setQuery(context.navigate, { stage: stageId, task: "" });
+    const unitId = event.target.closest?.("[data-unit-id]")?.dataset.unitId;
+    if (unitId) { setQuery(context.navigate, { stage: selectedStage.id, unit: unitId, task: "" }); return; }
+    if (stageId) setQuery(context.navigate, { stage: stageId, unit: "", task: "" });
   });
   visual.addEventListener("keydown", event => {
     if (!["Enter", " "].includes(event.key)) return;
     const stageId = event.target.closest?.("[data-stage-id]")?.dataset.stageId;
-    if (stageId) { event.preventDefault(); setQuery(context.navigate, { stage: stageId, task: "" }); }
+    const unitId = event.target.closest?.("[data-unit-id]")?.dataset.unitId;
+    if (unitId) { event.preventDefault(); setQuery(context.navigate, { stage: selectedStage.id, unit: unitId, task: "" }); return; }
+    if (stageId) { event.preventDefault(); setQuery(context.navigate, { stage: stageId, unit: "", task: "" }); }
   });
   const stageAssets = Array.isArray(selectedStage.previewAssets) ? selectedStage.previewAssets : [];
+  const orderedBranchGroups = selectedUnitId ? [...branchGroups].sort((left, right) => (right.unitId === selectedUnitId) - (left.unitId === selectedUnitId)) : branchGroups;
   const branchMap = branchGroups.length ? el("section", { className: "stage-branch-map", ariaLabel: `${selectedStage.title}作战分支` }, [
     el("header", {}, [el("span", { className: "eyebrow", text: "BRANCHES" }), el("h3", { text: `${context.presentation.unit}分支任务` })]),
-    el("div", { className: "stage-branch-lanes" }, branchGroups.map(group => el("article", { className: "stage-branch-lane" }, [
+    el("div", { className: "stage-branch-lanes" }, orderedBranchGroups.map(group => el("article", { className: `stage-branch-lane${group.unitId === selectedUnitId ? " selected" : ""}` }, [
       el("h4", { text: group.unitName }),
       el("div", { className: "stage-task-chips" }, group.tasks.map(task => el("div", { className: `stage-task-item${task.id === selectedTask?.id ? " selected" : ""}` }, [
         el("button", {

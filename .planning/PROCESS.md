@@ -169,3 +169,13 @@
 - 新增材料 readiness、作战单元生命周期、observability/product-test 三组回归测试，并把迁移 007 纳入数据库、备份和统一验证清单。
 - `npm test` 144 项通过；`npm run verify` 通过语法、自动化测试、Phase 3–6 浏览器证据、迁移、隔离、Xugu 等价和参考只读校验。
 - 本机浏览器抽查确认可登录、进入 `xugu-agentic-group` Materials 模块，并在“运维自检”运行 `core · passed`、`5/5 通过`。
+
+## 2026-07-20：战役路线图节点交互修正
+
+状态：`accepted`
+
+- 用户指出 Xugu 战役路线图不能降级为不可点击的普通可配置模块，需要保持路线图表达，并能切换到具体战役节点。
+- 修正 Roadmap DTO，传出阶段预览标题、说明和本地预览资源；固定 renderer 仍只读取受控项目数据，不执行项目代码。
+- 修正战役路线 SVG 与文本替代列表，阶段节点均可点击/键盘触发并写入 `?stage=...` 深链；详情面板展示对应战役节点。
+- 浏览器验证点击“试点验证攻坚”后 URL 为 `/projects/xugu-agentic-group/modules/roadmap?stage=pilot`，详情切换为该节点。
+- `npm test` 与 `npm run verify` 均通过，参考 Xugu 应用保持只读未变。

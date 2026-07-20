@@ -125,6 +125,8 @@ test("repository and service return isolated same-version manifests and DTOs", (
     const standard = service.getModule(principal, "standard-project-sample", "public", "roadmap");
     assert.deepEqual([xugu.version, xugu.module.viewVariant], ["v4.2", "campaign-network"]);
     assert.deepEqual([standard.version, standard.module.viewVariant], ["v1.3", "linear-roadmap"]);
+    assert.equal(xugu.data.stages.find(stage => stage.id === "launch").previewAssets.length, 1);
+    assert.match(xugu.data.stages.find(stage => stage.id === "launch").previewTitle, /首批场景/);
     assert.equal(JSON.stringify(standard).includes("虚谷"), false);
   } finally { database.close(); }
 });
@@ -243,4 +245,3 @@ test("populated standard module API is data-driven and compatibility public snap
     assert.equal((await request(context, "/api/projects/standard-project-sample/public/modules", { session: admin })).response.status, 404);
   } finally { await context.close(); }
 });
-

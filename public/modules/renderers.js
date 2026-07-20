@@ -31,6 +31,54 @@ function routePath(points) {
   }, `M ${points[0].x},${points[0].y}`);
 }
 
+function isoDate(year, month, day) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function parseStageWindow(label = "") {
+  const text = String(label).replace(/\s+/g, " ").trim();
+  const range = text.match(/(\d{4})[.-](\d{1,2})[.-](\d{1,2})\s*[–-]\s*(?:(\d{4})[.-])?(\d{1,2})[.-](\d{1,2})/);
+  if (range) return { start: isoDate(range[1], range[2], range[3]), end: isoDate(range[4] ?? range[1], range[5], range[6]) };
+  const exact = text.match(/(\d{4})[.-](\d{1,2})[.-](\d{1,2})/);
+  if (exact) return { start: isoDate(exact[1], exact[2], exact[3]), end: isoDate(exact[1], exact[2], exact[3]) };
+  const monthStart = text.match(/(\d{4})[.-](\d{1,2})\s*起/);
+  if (monthStart) return { start: isoDate(monthStart[1], monthStart[2], 1), end: "" };
+  const quarter = text.match(/(\d{4})\s*Q([1-4])/i);
+  if (quarter) {
+    const startMonth = (Number(quarter[2]) - 1) * 3 + 1;
+    return { start: isoDate(quarter[1], startMonth, 1), end: isoDate(quarter[1], startMonth + 2, new Date(Number(quarter[1]), startMonth + 2, 0).getDate()) };
+  }
+  const half = text.match(/(\d{4})\s*H([12])/i);
+  if (half) return half[2] === "1" ? { start: `${half[1]}-01-01`, end: `${half[1]}-06-30` } : { start: `${half[1]}-07-01`, end: `${half[1]}-12-31` };
+  return { start: "", end: "" };
+}
+
+function overlapsWindow(task, window) {
+  if (!window.start && !window.end) return false;
+  const start = task.startDate || task.endDate || "";
+  const end = task.endDate || task.startDate || "";
+  if (!start && !end) return false;
+  return (!window.end || start <= window.end) && (!window.start || end >= window.start);
+}
+
+function stageBranchGroups(context, stage) {
+  const window = parseStageWindow(stage.dateLabel);
+  const units = new Map((context.snapshot?.groups ?? []).map(unit => [unit.id, unit.name]));
+  const grouped = new Map();
+  for (const task of context.snapshot?.tasks ?? []) {
+    if (!overlapsWindow(task, window)) continue;
+    const unitId = task.groupId ?? task.unitId ?? "unknown";
+    const items = grouped.get(unitId) ?? [];
+    items.push(task);
+    grouped.set(unitId, items);
+  }
+  return [...grouped.entries()].map(([unitId, tasks]) => ({
+    unitId,
+    unitName: units.get(unitId) ?? unitId,
+    tasks: tasks.sort((left, right) => safeText(left.startDate, "9999").localeCompare(safeText(right.startDate, "9999")) || safeText(left.title).localeCompare(safeText(right.title)))
+  })).sort((left, right) => left.unitName.localeCompare(right.unitName, "zh-CN"));
+}
+
 export function renderOverview(context) {
   const { data, project, presentation, snapshot } = context;
   const facts = new Map((data.facts ?? []).map(fact => [fact.id, fact.value]));
@@ -120,7 +168,7 @@ export function renderUnits(context) {
   ]);
 }
 
-function roadmapSvg(context, stages, closures, selectedStageId) {
+function roadmapSvg(context, stages, selectedStageId) {
   const width = Math.max(760, stages.length * 180 + 80);
   const height = context.module.viewVariant === "campaign-network" ? 310 : 230;
   const svg = svgEl("svg", { class: "roadmap-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-labelledby": "roadmap-svg-title roadmap-svg-desc" });
@@ -151,46 +199,50 @@ function roadmapSvg(context, stages, closures, selectedStageId) {
     group.append(number, label, date);
     svg.append(group);
   });
-  closures.forEach((closure, index) => {
-    const referenced = closure.between.map(id => stages.findIndex(stage => stage.id === id)).filter(value => value >= 0);
-    const stageIndex = referenced.length ? referenced.reduce((sum, value) => sum + value, 0) / referenced.length : index;
-    const x = stages.length <= 1 ? width / 2 : 70 + stageIndex * ((width - 140) / (stages.length - 1));
-    const marker = svgEl("g", { class: "closure-marker", tabindex: "0", role: "button", "aria-label": `${closure.title}，${statusText(closure.state)}`, "data-closure-id": closure.id });
-    marker.append(svgEl("rect", { x: x - 10, y: 28, width: 20, height: 20, rx: 4 }), svgEl("rect", { x: x - 20, y: 18, width: 40, height: 40, class: "route-hit" }));
-    svg.append(marker);
-  });
   return svg;
 }
 
 export function renderRoadmap(context) {
   const stages = Array.isArray(context.data.stages) ? context.data.stages : [];
-  const closures = Array.isArray(context.data.closures) ? context.data.closures : [];
   if (!stages.length) return emptyState(context.module.emptyState);
   const requestedStageId = context.query.get("stage");
   const selectedStage = stages.find(item => item.id === requestedStageId) ?? stages.find(item => item.id === context.data.currentStageId) ?? stages[0];
-  const selectedClosureId = context.query.get("closure");
-  const selectedClosure = closures.find(item => item.id === selectedClosureId);
-  const visual = roadmapSvg(context, stages, closures, selectedStage.id);
+  const branchGroups = stageBranchGroups(context, selectedStage);
+  const branchTasks = branchGroups.flatMap(group => group.tasks.map(task => ({ ...task, unitName: group.unitName })));
+  const selectedTask = branchTasks.find(task => task.id === context.query.get("task"));
+  const visual = roadmapSvg(context, stages, selectedStage.id);
   visual.addEventListener("click", event => {
     const stageId = event.target.closest?.("[data-stage-id]")?.dataset.stageId;
-    if (stageId) { setQuery(context.navigate, { stage: stageId, closure: "" }); return; }
-    const closureId = event.target.closest?.("[data-closure-id]")?.dataset.closureId;
-    if (closureId) setQuery(context.navigate, { closure: closureId });
+    if (stageId) setQuery(context.navigate, { stage: stageId, task: "" });
   });
   visual.addEventListener("keydown", event => {
     if (!["Enter", " "].includes(event.key)) return;
     const stageId = event.target.closest?.("[data-stage-id]")?.dataset.stageId;
-    const closureId = event.target.closest?.("[data-closure-id]")?.dataset.closureId;
-    if (stageId) { event.preventDefault(); setQuery(context.navigate, { stage: stageId, closure: "" }); return; }
-    if (closureId) { event.preventDefault(); setQuery(context.navigate, { closure: closureId }); }
+    if (stageId) { event.preventDefault(); setQuery(context.navigate, { stage: stageId, task: "" }); }
   });
-  const ordered = el("ol", { className: "stage-alternative", ariaLabel: `${context.module.title}文本列表` }, stages.map((stage, index) => el("li", { className: `${stateClass(stage.state, stage.id === context.data.currentStageId)}${stage.id === selectedStage.id ? " selected" : ""}` }, [
-    el("button", { type: "button", className: "stage-select", ariaPressed: stage.id === selectedStage.id ? "true" : "false", onClick: () => setQuery(context.navigate, { stage: stage.id, closure: "" }) }, [
-      el("span", { className: "stage-sequence", text: String(index + 1) }),
-      el("span", { className: "stage-copy" }, [el("strong", { text: stage.title }), el("small", { text: `${safeText(stage.dateLabel, "日期待确认")} · ${statusText(stage.state)}` }), el("span", { text: safeText(stage.description, "暂无阶段说明") })])
-    ])
-  ])));
   const stageAssets = Array.isArray(selectedStage.previewAssets) ? selectedStage.previewAssets : [];
+  const taskDetail = selectedTask ? el("article", { className: "stage-task-detail" }, [
+    el("span", { className: "eyebrow", text: `${selectedTask.unitName} · ${context.presentation.task}` }),
+    el("h3", { text: selectedTask.title }),
+    definitionList([["状态", selectedTask.state], ["负责人", selectedTask.owner], ["开始", selectedTask.startDate], ["结束", selectedTask.endDate], ["进度", Number.isFinite(selectedTask.progress) ? `${selectedTask.progress}%` : ""], ["预期产出", selectedTask.expectedOutput], ["来源", selectedTask.source]]),
+    el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/task-network?task=${encodeURIComponent(selectedTask.id)}`, text: "在任务网络中查看" })
+  ]) : el("article", { className: "stage-task-detail empty-preview" }, [
+    el("h3", { text: `选择${context.presentation.task}查看详情` }),
+    el("p", { text: `点击上方路线节点后，可在这里继续选择该阶段内各${context.presentation.unit}的${context.presentation.task}。` })
+  ]);
+  const branchMap = branchGroups.length ? el("section", { className: "stage-branch-map", ariaLabel: `${selectedStage.title}作战分支` }, [
+    el("header", {}, [el("span", { className: "eyebrow", text: "BRANCHES" }), el("h3", { text: `${context.presentation.unit}分支任务` })]),
+    el("div", { className: "stage-branch-lanes" }, branchGroups.map(group => el("article", { className: "stage-branch-lane" }, [
+      el("h4", { text: group.unitName }),
+      el("div", { className: "stage-task-chips" }, group.tasks.map(task => el("button", {
+        type: "button",
+        className: `stage-task-chip${task.id === selectedTask?.id ? " selected" : ""}`,
+        ariaPressed: task.id === selectedTask?.id ? "true" : "false",
+        onClick: () => setQuery(context.navigate, { stage: selectedStage.id, task: task.id })
+      }, [el("strong", { text: task.title }), el("small", { text: `${safeText(task.startDate, "待排期")} → ${safeText(task.endDate, "待确认")} · ${statusText(task.state)}` })])))
+    ]))),
+    taskDetail
+  ]) : el("section", { className: "stage-branch-map empty-preview" }, [el("h3", { text: `暂无映射到该${context.presentation.stage}的分支任务` }), el("p", { text: "当前发布数据未提供可按时间窗口归入该节点的任务；后续材料可通过提案补充任务日期或更明确的阶段归属。" })]);
   const stageDetail = el("section", { className: "selection-detail stage-node-detail", tabIndex: -1 }, [
     el("div", { className: "stage-node-copy" }, [
       el("span", { className: `badge ${["complete", "current"].includes(stateClass(selectedStage.state, selectedStage.id === context.data.currentStageId)) ? "active" : "archived"}`, text: statusText(selectedStage.state) }),
@@ -203,21 +255,15 @@ export function renderRoadmap(context) {
       stageAssets.length ? el("div", { className: "stage-preview-grid" }, stageAssets.map((asset, index) => el("button", { type: "button", className: "stage-preview-thumb", onClick: event => openLightbox(context, stageAssets, index, event.currentTarget) }, [
         el("img", { src: asset.startsWith("/") ? asset : `/${asset.replace(/^\.\//, "")}`, alt: `${selectedStage.title}预览 ${index + 1}` })
       ]))) : el("small", { text: "无本地预览" })
-    ])
+    ]),
+    branchMap
   ]);
   return el("div", {}, [
     el("section", { className: "module-primary-card" }, [
       cardHeading(context.module.viewVariant === "campaign-network" ? "CAMPAIGN ROUTE" : "LINEAR ROADMAP", context.module.title, `点击${context.presentation.stage}可切换到对应节点详情；路线几何由当前发布数据计算。`),
-      localScroller(`${context.module.title}路线图，可水平滚动`, visual), ordered
+      localScroller(`${context.module.title}路线图，可水平滚动`, visual)
     ]),
-    stageDetail,
-    selectedClosure ? el("section", { className: "selection-detail outcome-detail" }, [
-      el("span", { className: "badge active", text: statusText(selectedClosure.state) }), el("h2", { text: selectedClosure.title }),
-      definitionList([["日期", selectedClosure.dateLabel], ["说明", selectedClosure.description], ["结果", selectedClosure.result], ["来源", selectedClosure.source]])
-    ]) : null,
-    context.data.workstreams?.length ? el("section", { className: "workstream-grid" }, context.data.workstreams.map(stream => el("article", { className: "workstream-card" }, [
-      el("span", { className: "eyebrow", text: context.presentation.workstream }), el("h3", { text: stream.title }), el("p", { text: safeText(stream.description) }), el("small", { text: `${stream.taskIds?.length ?? 0} 个关联${context.presentation.task}` })
-    ]))) : null
+    stageDetail
   ]);
 }
 

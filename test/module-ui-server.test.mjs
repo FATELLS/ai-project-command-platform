@@ -58,7 +58,10 @@ test("overview, units, roadmap, network, gantt and outcomes are DTO-driven with 
   assert.match(renderers, /previewAssets/);
   assert.match(renderers, /data-stage-id/);
   assert.match(renderers, /stage-node-detail/);
+  assert.match(renderers, /stage-branch-map/);
+  assert.match(renderers, /stage-task-chip/);
   assert.match(renderers, /点击\$\{context\.presentation\.stage\}可切换/);
+  assert.doesNotMatch(renderers, /data-closure-id/);
 });
 
 test("risks, metrics and materials preserve exact empty and Phase 4 boundary copy", () => {

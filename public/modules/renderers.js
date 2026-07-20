@@ -79,6 +79,48 @@ function stageBranchGroups(context, stage) {
   })).sort((left, right) => left.unitName.localeCompare(right.unitName, "zh-CN"));
 }
 
+function taskInlineDetail(context, task, unitName = "") {
+  if (!task) return null;
+  return el("article", { className: "inline-task-detail" }, [
+    el("span", { className: "eyebrow", text: `${unitName ? `${unitName} · ` : ""}${context.presentation.task}` }),
+    el("h4", { text: task.title }),
+    definitionList([["状态", task.state], ["负责人", task.owner], ["开始", task.startDate], ["结束", task.endDate], ["进度", Number.isFinite(task.progress) ? `${task.progress}%` : ""], ["预期产出", task.expectedOutput], ["来源", task.source]]),
+    el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/task-network?task=${encodeURIComponent(task.id)}`, text: "在任务网络中查看" })
+  ]);
+}
+
+function unitRouteDetail(context, unit) {
+  const unitTasks = (context.snapshot?.tasks ?? []).filter(task => task.groupId === unit.id);
+  const selectedTask = unitTasks.find(task => task.id === context.query.get("task"));
+  const stages = context.snapshot?.stages ?? [];
+  const lanes = stages.map(stage => {
+    const stageLike = { ...stage, dateLabel: stage.dateLabel ?? stage.date };
+    return { stage: stageLike, tasks: unitTasks.filter(task => overlapsWindow(task, parseStageWindow(stageLike.dateLabel))) };
+  }).filter(item => item.tasks.length);
+  return el("section", { className: "unit-card-detail", tabIndex: -1 }, [
+    el("header", {}, [el("span", { className: "eyebrow", text: "UNIT ROUTE" }), el("h4", { text: `${unit.name}路线与节点` })]),
+    lanes.length ? el("div", { className: "unit-route-lanes" }, lanes.map(({ stage, tasks }) => el("article", { className: "unit-route-node" }, [
+      el("div", { className: "unit-route-head" }, [
+        el("strong", { text: stage.title }),
+        el("small", { text: `${safeText(stage.dateLabel, "日期待确认")} · ${tasks.length} ${context.presentation.task}` })
+      ]),
+      el("div", { className: "unit-route-tasks" }, tasks.map(task => el("div", { className: `unit-route-task${task.id === selectedTask?.id ? " selected" : ""}` }, [
+        el("button", {
+          type: "button",
+          className: "stage-task-chip",
+          ariaPressed: task.id === selectedTask?.id ? "true" : "false",
+          onClick: () => setQuery(context.navigate, { unit: unit.id, task: task.id })
+        }, [el("strong", { text: task.title }), el("small", { text: `${safeText(task.startDate, "待排期")} → ${safeText(task.endDate, "待确认")} · ${statusText(task.state)}` })]),
+        task.id === selectedTask?.id ? taskInlineDetail(context, task, unit.name) : null
+      ])))
+    ]))) : el("p", { className: "empty-source", text: `当前发布数据还没有能按时间窗口归入${unit.name}的路线任务。` }),
+    el("div", { className: "detail-actions" }, [
+      el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/task-network?unit=${encodeURIComponent(unit.id)}`, text: "查看任务网络" }),
+      el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/gantt?unit=${encodeURIComponent(unit.id)}`, text: "查看甘特" })
+    ])
+  ]);
+}
+
 export function renderOverview(context) {
   const { data, project, presentation, snapshot } = context;
   const facts = new Map((data.facts ?? []).map(fact => [fact.id, fact.value]));
@@ -152,25 +194,18 @@ export function renderUnits(context) {
     el("p", { className: "unit-owner", text: safeText(unit.owner, "负责人待确认") }),
     el("p", { text: safeText(unit.objective, "目标待补充") }),
     definitionList([["当前工作", unit.currentWork], ["预期产出", unit.expectedOutput], ["生命周期", `${lifecycle(unit)}${unit.effectiveDate ? ` · ${formatDay(unit.effectiveDate)}` : ""}`], ["原因", unit.lifecycleReason], ["来源", unit.source]]),
-    el("button", { type: "button", className: "secondary-button", text: `查看${context.presentation.unit}详情`, onClick: () => setQuery(context.navigate, { unit: unit.id }) })
+    el("button", { type: "button", className: "secondary-button", text: selected?.id === unit.id ? `收起${context.presentation.unit}详情` : `查看${context.presentation.unit}详情`, onClick: () => setQuery(context.navigate, { unit: selected?.id === unit.id ? "" : unit.id, task: "" }) }),
+    selected?.id === unit.id ? unitRouteDetail(context, unit) : null
   ])));
   return el("section", { className: "module-primary-card" }, [
     cardHeading("UNITS · FIXED REGISTRY", context.module.title, `${units.length} 个${context.presentation.unit}，全部来自当前发布版本。`),
-    grid,
-    selected ? el("aside", { className: "selection-detail", tabIndex: -1 }, [
-      el("h3", { text: selected.name }),
-      definitionList([["负责人", selected.owner], ["目标", selected.objective], ["当前工作", selected.currentWork], ["预期产出", selected.expectedOutput], ["生命周期", `${lifecycle(selected)}${selected.effectiveDate ? ` · ${formatDay(selected.effectiveDate)}` : ""}`], ["原因", selected.lifecycleReason], ["来源", selected.source]]),
-      el("div", { className: "detail-actions" }, [
-        el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/task-network?unit=${encodeURIComponent(selected.id)}`, text: "查看任务网络" }),
-        el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/gantt?unit=${encodeURIComponent(selected.id)}`, text: "查看甘特" })
-      ])
-    ]) : null
+    grid
   ]);
 }
 
-function roadmapSvg(context, stages, selectedStageId) {
+function roadmapSvg(context, stages, selectedStageId, branchGroups = []) {
   const width = Math.max(760, stages.length * 180 + 80);
-  const height = context.module.viewVariant === "campaign-network" ? 310 : 230;
+  const height = context.module.viewVariant === "campaign-network" ? 340 : 260;
   const svg = svgEl("svg", { class: "roadmap-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-labelledby": "roadmap-svg-title roadmap-svg-desc" });
   svg.append(svgEl("title", { id: "roadmap-svg-title" }, []), svgEl("desc", { id: "roadmap-svg-desc" }, []));
   svg.querySelector("title").textContent = `${context.module.title}可视化`;
@@ -199,6 +234,38 @@ function roadmapSvg(context, stages, selectedStageId) {
     group.append(number, label, date);
     svg.append(group);
   });
+  const selectedIndex = stages.findIndex(stage => stage.id === selectedStageId);
+  const selectedPoint = points[selectedIndex];
+  if (selectedPoint && branchGroups.length) {
+    const visibleBranches = branchGroups.slice(0, 6);
+    const hiddenCount = Math.max(0, branchGroups.length - visibleBranches.length);
+    const chipWidth = 112, chipHeight = 34, gap = 8;
+    const totalWidth = visibleBranches.length * chipWidth + (visibleBranches.length - 1) * gap;
+    const startX = Math.max(20, Math.min(width - totalWidth - 20, selectedPoint.x - totalWidth / 2));
+    const branchY = selectedPoint.y > 145 ? 52 : 244;
+    const hubY = selectedPoint.y > 145 ? selectedPoint.y - 48 : selectedPoint.y + 48;
+    const summary = svgEl("g", { class: "route-branch-summary", "aria-label": `${safeText(stages[selectedIndex].title)}包含${branchGroups.length}个${context.presentation.unit}分支` });
+    summary.append(svgEl("path", { d: `M ${selectedPoint.x},${selectedPoint.y} C ${selectedPoint.x},${hubY} ${selectedPoint.x},${hubY} ${selectedPoint.x},${branchY + chipHeight / 2}`, class: "branch-spine", fill: "none" }));
+    visibleBranches.forEach((group, index) => {
+      const x = startX + index * (chipWidth + gap);
+      const centerX = x + chipWidth / 2;
+      summary.append(svgEl("path", { d: `M ${selectedPoint.x},${branchY + chipHeight / 2} L ${centerX},${branchY + chipHeight / 2}`, class: "branch-line", fill: "none" }));
+      const chip = svgEl("g", { class: "branch-chip" });
+      chip.append(svgEl("rect", { x, y: branchY, width: chipWidth, height: chipHeight, rx: 12 }));
+      const label = svgEl("text", { x: x + 12, y: branchY + 21, class: "branch-label" });
+      label.textContent = safeText(group.unitName).replace(/作战单元$/, "").slice(0, 7);
+      const count = svgEl("text", { x: x + chipWidth - 12, y: branchY + 21, "text-anchor": "end", class: "branch-count" });
+      count.textContent = `${group.tasks.length}`;
+      chip.append(label, count);
+      summary.append(chip);
+    });
+    if (hiddenCount) {
+      const more = svgEl("text", { x: startX + totalWidth + 8, y: branchY + 22, class: "branch-more" });
+      more.textContent = `+${hiddenCount}`;
+      summary.append(more);
+    }
+    svg.append(summary);
+  }
   return svg;
 }
 
@@ -210,7 +277,7 @@ export function renderRoadmap(context) {
   const branchGroups = stageBranchGroups(context, selectedStage);
   const branchTasks = branchGroups.flatMap(group => group.tasks.map(task => ({ ...task, unitName: group.unitName })));
   const selectedTask = branchTasks.find(task => task.id === context.query.get("task"));
-  const visual = roadmapSvg(context, stages, selectedStage.id);
+  const visual = roadmapSvg(context, stages, selectedStage.id, branchGroups);
   visual.addEventListener("click", event => {
     const stageId = event.target.closest?.("[data-stage-id]")?.dataset.stageId;
     if (stageId) setQuery(context.navigate, { stage: stageId, task: "" });
@@ -221,27 +288,20 @@ export function renderRoadmap(context) {
     if (stageId) { event.preventDefault(); setQuery(context.navigate, { stage: stageId, task: "" }); }
   });
   const stageAssets = Array.isArray(selectedStage.previewAssets) ? selectedStage.previewAssets : [];
-  const taskDetail = selectedTask ? el("article", { className: "stage-task-detail" }, [
-    el("span", { className: "eyebrow", text: `${selectedTask.unitName} · ${context.presentation.task}` }),
-    el("h3", { text: selectedTask.title }),
-    definitionList([["状态", selectedTask.state], ["负责人", selectedTask.owner], ["开始", selectedTask.startDate], ["结束", selectedTask.endDate], ["进度", Number.isFinite(selectedTask.progress) ? `${selectedTask.progress}%` : ""], ["预期产出", selectedTask.expectedOutput], ["来源", selectedTask.source]]),
-    el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/task-network?task=${encodeURIComponent(selectedTask.id)}`, text: "在任务网络中查看" })
-  ]) : el("article", { className: "stage-task-detail empty-preview" }, [
-    el("h3", { text: `选择${context.presentation.task}查看详情` }),
-    el("p", { text: `点击上方路线节点后，可在这里继续选择该阶段内各${context.presentation.unit}的${context.presentation.task}。` })
-  ]);
   const branchMap = branchGroups.length ? el("section", { className: "stage-branch-map", ariaLabel: `${selectedStage.title}作战分支` }, [
     el("header", {}, [el("span", { className: "eyebrow", text: "BRANCHES" }), el("h3", { text: `${context.presentation.unit}分支任务` })]),
     el("div", { className: "stage-branch-lanes" }, branchGroups.map(group => el("article", { className: "stage-branch-lane" }, [
       el("h4", { text: group.unitName }),
-      el("div", { className: "stage-task-chips" }, group.tasks.map(task => el("button", {
-        type: "button",
-        className: `stage-task-chip${task.id === selectedTask?.id ? " selected" : ""}`,
-        ariaPressed: task.id === selectedTask?.id ? "true" : "false",
-        onClick: () => setQuery(context.navigate, { stage: selectedStage.id, task: task.id })
-      }, [el("strong", { text: task.title }), el("small", { text: `${safeText(task.startDate, "待排期")} → ${safeText(task.endDate, "待确认")} · ${statusText(task.state)}` })])))
-    ]))),
-    taskDetail
+      el("div", { className: "stage-task-chips" }, group.tasks.map(task => el("div", { className: `stage-task-item${task.id === selectedTask?.id ? " selected" : ""}` }, [
+        el("button", {
+          type: "button",
+          className: "stage-task-chip",
+          ariaPressed: task.id === selectedTask?.id ? "true" : "false",
+          onClick: () => setQuery(context.navigate, { stage: selectedStage.id, task: task.id })
+        }, [el("strong", { text: task.title }), el("small", { text: `${safeText(task.startDate, "待排期")} → ${safeText(task.endDate, "待确认")} · ${statusText(task.state)}` })]),
+        task.id === selectedTask?.id ? taskInlineDetail(context, task, group.unitName) : null
+      ])))
+    ])))
   ]) : el("section", { className: "stage-branch-map empty-preview" }, [el("h3", { text: `暂无映射到该${context.presentation.stage}的分支任务` }), el("p", { text: "当前发布数据未提供可按时间窗口归入该节点的任务；后续材料可通过提案补充任务日期或更明确的阶段归属。" })]);
   const stageDetail = el("section", { className: "selection-detail stage-node-detail", tabIndex: -1 }, [
     el("div", { className: "stage-node-copy" }, [

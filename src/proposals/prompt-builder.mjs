@@ -8,6 +8,7 @@ export function buildGenerationPrompt(context, template, options = {}) {
   const payload = {
     server_envelope: { projectId: context.projectId, baseVersionId: context.baseVersionId, baseVersionLabel: context.baseVersionLabel, template: { id: context.templateId, version: context.templateVersion }, materialIds: context.materials.map(item => item.id), schemaVersion: "change-proposal-v1@1.0.0" },
     template_constraints: { modules: template.modules, operations: template.operations, patchFields: template.patchFields, highImpactFields: template.highImpactFields },
+    material_readiness: context.materials.map(item => ({ materialId: item.id, readiness: item.readiness })),
     published_state: context.published,
     untrusted_evidence: evidenceEnvelope(context),
     validation_feedback: options.validationCodes ?? []

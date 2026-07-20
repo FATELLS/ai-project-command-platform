@@ -15,8 +15,10 @@ Node.js Application
   ├─ Auth / Project API
   ├─ Template & Module Registry
   ├─ Material & Evidence Pipeline
+  ├─ Material Readiness & Unit Lifecycle Gates
   ├─ Proposal Validation & Review
   ├─ Publish / Rollback / Audit
+  ├─ Diagnostics & Product Test Center
   └─ Project-scoped AI Gateway
           │
 SQLite
@@ -25,6 +27,9 @@ SQLite
   ├─ units / stages / tasks / modules
   ├─ materials / evidence_chunks
   ├─ generation_jobs / change_proposals
+  ├─ material_readiness_snapshots
+  ├─ operation_traces / error_events
+  ├─ product_test_runs / product_test_case_results
   └─ audit_events
 ```
 
@@ -78,6 +83,8 @@ POST   /api/projects/:projectId/rollback
 - 任务父子和前置依赖既经确定性图校验，也使用 SQLite 外键持久化。
 - `change_proposals`、`proposal_review_items`、`proposal_merges` 和 `publication_events` 分离保存模型建议、人工决定、草稿结果和版本事件。
 - 审核编辑复用锁定 generation context 和确定性 validator；任务所属单元、日期、证据、依赖和重复在保存决定前再次检查。
+- 材料 readiness 在生成前按模板检查关键内容覆盖；关键缺失在调用 provider 前阻断，warning 随生成上下文和任务材料快照持久化。
+- 作战单元生命周期为受控字段，支持 `active`、`archived`、`exited`；归档/退出要求生效日期、原因和证据，并校验未关闭任务引用。
 - 合并复制当前草稿为新版本，应用全部接受项并完成外键/完整图校验后才切换指针；事务失败不保留复制版本。
 - 发布复制当前草稿为新发布版本并创建新草稿基线；回滚只接受最新发布事件的直接前驱。AI 不拥有任何审核或版本动作。
 
@@ -91,3 +98,5 @@ POST   /api/projects/:projectId/rollback
 - 平台 UI 使用九类固定 renderer，并在 Materials 工作区内提供提案审核与发布中心；项目数据只能驱动受控字段和术语。
 - 平台/项目管理员、编辑者和查看者分别获得明确能力；用户/成员、审核、合并、发布与回滚动作写追加式审计。
 - SQLite 运行备份使用一致快照；恢复在应用离线时校验完整性、外键和迁移后替换，并保留恢复前备份。
+- HTTP 层为每个请求分配或延续 `requestId`，并记录 operation trace；未知 5xx 写入脱敏错误事件和堆栈指纹。
+- 诊断包和产品内自检运行记录按项目和角色隔离，只有平台管理员或授权项目管理员可查看。

@@ -571,6 +571,17 @@ body { overflow-x: clip; }
 .generation-material-row strong, .generation-material-row small { display: block; overflow-wrap: anywhere; }
 .generation-material-row small, .generation-material-row > span { color: var(--ink-600); font-size: 12px; }
 .generation-material-row.ineligible { opacity: .68; background: var(--canvas); }
+.readiness-pill, .unit-lifecycle { min-height: 26px; display: inline-flex; align-items: center; width: max-content; max-width: 100%; padding: 3px 8px; border-radius: 999px; color: var(--ink-600); background: var(--canvas); font-size: 12px; font-weight: 800; }
+.readiness-ready, .unit-active { color: #17663a; background: var(--green-100); }
+.readiness-warning { color: #8a5516; background: #fff4dc; }
+.readiness-blocked, .unit-exited { color: var(--danger); background: #fff0ef; }
+.unit-archived { color: #58657a; background: #eef2f7; }
+.readiness-panel { margin: 16px 0; padding: 16px 18px; border: 1px solid var(--line); border-left: 4px solid var(--green-600); border-radius: 12px; background: #fff; }
+.readiness-panel.readiness-warning { border-left-color: var(--orange-600); }
+.readiness-panel.readiness-blocked { border-left-color: var(--danger); }
+.readiness-panel h2 { margin: 0 0 6px; font-size: 16px; }
+.readiness-panel p { margin: 0; color: var(--ink-600); }
+.readiness-panel ul { margin: 10px 0 0; padding-left: 20px; color: var(--ink-600); }
 .generation-lock-summary { display: grid; grid-template-columns: minmax(110px,auto) minmax(0,1fr); margin: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .generation-lock-summary dt, .generation-lock-summary dd { margin: 0; padding: 9px 12px; overflow-wrap: anywhere; font-size: 12px; }
 .generation-lock-summary dt { color: var(--ink-600); background: var(--canvas); }
@@ -666,6 +677,11 @@ body { overflow-x: clip; }
 .audit-log { margin-top: 18px; padding: 16px 20px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .audit-log summary { cursor: pointer; font-weight: 800; }
 .audit-log ol { margin-top: 14px; }
+.diagnostics-center { min-width: 0; }
+.diagnostic-list { display: grid; gap: 10px; }
+.diagnostic-row { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.diagnostic-row strong, .diagnostic-row span { display: block; overflow-wrap: anywhere; }
+.diagnostic-row span { margin-top: 3px; color: var(--ink-600); font-size: 12px; }
 .member-table { min-width: 560px; }
 .validation-pass { padding: 12px 16px; color: #0d7252; background: var(--green-100); border-radius: 10px; }
 
@@ -785,7 +801,7 @@ body { overflow-x: clip; }
   .proposal-change-index { display: flex; overflow-x: auto; }
   .proposal-change-index a { min-width: 210px; }
   .proposal-change-card { padding: 16px; }
-  .review-diff-grid, .release-operations-grid { grid-template-columns: 1fr; }
+  .review-diff-grid, .release-operations-grid, .diagnostic-row { grid-template-columns: 1fr; }
   .review-summary-grid, .release-version-grid { grid-template-columns: 1fr 1fr; }
   .merge-bar { align-items: stretch; flex-direction: column; }
   .merge-bar button, .review-actions button, .release-action-card button { width: 100%; }

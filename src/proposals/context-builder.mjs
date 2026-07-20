@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { createMaterialReadinessService } from "../materials/readiness-service.mjs";
 import { createProjectRepository } from "../repositories/project-repository.mjs";
 import { proposalError } from "./errors.mjs";
 
@@ -58,6 +59,10 @@ export function buildGenerationContext(database, input) {
   if (materials.some(row => !row.templateId || !row.templateVersion)) throw proposalError("UPDATE_TEMPLATE_REQUIRED", "所选材料尚未选择更新模板", 409);
   const templateKey = `${materials[0].templateId}@${materials[0].templateVersion}`;
   if (materials.some(row => `${row.templateId}@${row.templateVersion}` !== templateKey)) throw proposalError("MIXED_UPDATE_TEMPLATES", "所选材料的更新模板不一致", 409);
+  const readiness = createMaterialReadinessService(database);
+  const materialReadiness = materials.map(row => readiness.compute({ projectId, materialId: row.id, extractionVersion: row.extractionVersion, templateId: row.templateId, templateVersion: row.templateVersion }));
+  const blocked = materialReadiness.find(item => item?.status === "blocked");
+  if (blocked) throw proposalError("MATERIAL_READINESS_BLOCKED", blocked.suggestion, 409, { missing: blocked.missing, template: blocked.template });
 
   const evidence = [];
   let evidenceBytes = 0;
@@ -81,5 +86,6 @@ export function buildGenerationContext(database, input) {
   const [templateId, templateVersion] = templateKey.split("@");
   const published = boundedPublished(graph);
   const digest = createHash("sha256").update(JSON.stringify({ projectId, baseVersionId: graph.versionId, templateKey, materials: materials.map(item => [item.id, item.extractionVersion]), evidence: evidence.map(item => [item.evidenceId, item.contentHash]) })).digest("hex");
-  return Object.freeze({ projectId, baseVersionId: graph.versionId, baseVersionLabel: graph.versionLabel, templateId, templateVersion, materials, evidence, published, digest, limits: { maxMaterials: MAX_MATERIALS, maxEvidence: MAX_EVIDENCE, maxEvidenceBytes: MAX_EVIDENCE_BYTES } });
+  const enrichedMaterials = materials.map((row, index) => ({ ...row, readiness: materialReadiness[index] }));
+  return Object.freeze({ projectId, baseVersionId: graph.versionId, baseVersionLabel: graph.versionLabel, templateId, templateVersion, materials: enrichedMaterials, evidence, published, digest, limits: { maxMaterials: MAX_MATERIALS, maxEvidence: MAX_EVIDENCE, maxEvidenceBytes: MAX_EVIDENCE_BYTES } });
 }

@@ -1,7 +1,7 @@
 const commonTaskFields = ["title", "unitId", "parentId", "dependsOn", "startDate", "endDate", "progress", "owner", "state", "expectedOutput"];
 const fields = Object.freeze({
   overview: ["title", "summary", "status"],
-  units: ["name", "description", "owner"],
+  units: ["name", "description", "owner", "status", "effectiveDate", "lifecycleReason", "source"],
   roadmap: ["title", "date", "description", "state"],
   "task-network": commonTaskFields,
   gantt: commonTaskFields,
@@ -10,7 +10,7 @@ const fields = Object.freeze({
   metrics: ["name", "value", "unit", "status", "asOf", "target", "source"]
 });
 
-const highImpactFields = Object.freeze(["progress", "status", "state", "owner", "startDate", "endDate", "date", "dueDate", "asOf", "value", "target", "result", "source"]);
+const highImpactFields = Object.freeze(["progress", "status", "state", "owner", "startDate", "endDate", "date", "dueDate", "asOf", "effectiveDate", "lifecycleReason", "value", "target", "result", "source"]);
 
 function template(id, label, modules, operations) {
   return Object.freeze({ id, version: "1.0.0", label, schemaVersion: "change-proposal-v1@1.0.0", maxChanges: 100,

@@ -2,6 +2,8 @@ const stableIdPattern = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const semanticVersionPattern = /^\d+\.\d+\.\d+$/;
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 const safeAssetPattern = /^(?:\.\/|\/)?assets\/[a-zA-Z0-9][a-zA-Z0-9._/-]*$/;
+const unitStatuses = new Set(["active", "archived", "exited"]);
+const closedTaskStates = new Set(["done", "completed", "complete", "closed", "archived", "exited", "已完成", "完成", "关闭", "已关闭", "归档", "已归档"]);
 
 export class ModuleValidationError extends Error {
   constructor(message) {
@@ -77,6 +79,14 @@ function validateTaskDag(tasks, taskById) {
   };
   for (const id of edges.keys()) visit(id);
 }
+function normalized(value) {
+  return String(value ?? "").normalize("NFKC").trim().toLocaleLowerCase("zh-CN");
+}
+function isOpenTask(task) {
+  if (closedTaskStates.has(normalized(task.state))) return false;
+  if (Number(task.progress) >= 100) return false;
+  return true;
+}
 
 export function validateVersionGraph(graph) {
   object(graph, "graph");
@@ -97,10 +107,21 @@ export function validateVersionGraph(graph) {
   uniqueIndex(risks, "graph.risks");
   uniqueIndex(metrics, "graph.metrics");
 
+  units.forEach((unit, index) => {
+    const status = unit.status ?? "active";
+    if (!unitStatuses.has(status)) fail(`graph.units[${index}].status`, "is unknown");
+    validateDate(unit.effectiveDate, `graph.units[${index}].effectiveDate`);
+    if (["archived", "exited"].includes(status) && (!unit.effectiveDate || !unit.lifecycleReason)) {
+      fail(`graph.units[${index}]`, "inactive units require effectiveDate and lifecycleReason");
+    }
+  });
+
   tasks.forEach((task, index) => {
     const path = `graph.tasks[${index}]`;
     stableId(task.unitId, `${path}.unitId`);
     if (!unitById.has(task.unitId)) fail(path, `references missing unit ${task.unitId}`);
+    const unit = unitById.get(task.unitId);
+    if (["archived", "exited"].includes(unit.status) && isOpenTask(task)) fail(path, `belongs to inactive unit ${task.unitId}`);
     validateDate(task.startDate, `${path}.startDate`);
     validateDate(task.endDate, `${path}.endDate`);
     if (task.startDate && task.endDate && task.startDate > task.endDate) fail(path, "starts after it ends");

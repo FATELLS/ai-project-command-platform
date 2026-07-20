@@ -149,3 +149,23 @@
 - 浏览器 UAT 发现版本元数据时间戳被误算为 Overview 业务差异、发布后外层版本标题未刷新，均已修正并重新截图。
 - 完成用户/成员安全 API、追加式项目审计、SQLite 一致备份/校验/离线恢复、显式模板导入、10 项参考评估与跨项目安全矩阵。
 - 138 项自动化测试、17 项 Phase 6 浏览器用例、6 张哈希/尺寸机检证据与统一验证全部通过；参考 Xugu HEAD、状态和种子哈希未变。
+
+## 2026-07-20：Phase 7 规划启动
+
+状态：`accepted for planning`
+
+- 用户指出“上传材料即可更新项目”还需要覆盖作战单元新增、归档和退出，并同意规划 Phase 7。
+- 当前代码已支持 `units` 的新增/更新提案，但未把归档、退出、关键缺失诊断和单位生命周期引用校验做成产品能力。
+- Phase 7 范围确定为发布前硬化：材料关键内容覆盖检查、作战单元生命周期提案、生产请求追踪、脱敏错误堆栈、诊断包和产品内测试中心。
+- `gsd-plan-phase` 技能已读取；其引用的本机 `gsd-core` 工作流文件缺失，因此按仓库既有 GSD 产物和门槛手工补充 Phase 7 规划。
+
+## 2026-07-20：Phase 7 实现完成
+
+状态：`accepted`
+
+- 完成迁移 007、材料 readiness 规则/快照、生成上下文阻断、生成任务 readiness 记录和 Materials UI 关键内容标记。
+- 完成作战单元 `active / archived / exited` 生命周期字段、提案目录/Schema/validator、copy-on-write 应用和完整图校验；单位删除失败关闭。
+- 完成 requestId/traceId、脱敏 5xx 错误事件、诊断包 API、项目管理员访问控制和产品内“运维自检”中心。
+- 新增材料 readiness、作战单元生命周期、observability/product-test 三组回归测试，并把迁移 007 纳入数据库、备份和统一验证清单。
+- `npm test` 144 项通过；`npm run verify` 通过语法、自动化测试、Phase 3–6 浏览器证据、迁移、隔离、Xugu 等价和参考只读校验。
+- 本机浏览器抽查确认可登录、进入 `xugu-agentic-group` Materials 模块，并在“运维自检”运行 `core · passed`、`5/5 通过`。

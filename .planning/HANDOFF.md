@@ -13,10 +13,11 @@
 7. `AI-SPEC.md`
 8. `.planning/phases/06-review-publish-operations/VERIFICATION.md`
 9. `.planning/phases/07-release-hardening-material-readiness/CONTEXT.md`
+10. `.planning/phases/08-roadmap-visual-workbench/CONTEXT.md`
 
 ## 当前状态
 
-- Phase 1–7 已实现并通过验收，平台版本为 `0.7.0`。
+- Phase 1–7 已实现并通过验收，平台版本为 `0.7.0`；Phase 8“路线图可视化工作台与卡片化审核”已经确认产品方向，尚未实施。
 - 首个项目 `xugu-agentic-group` 与参考 v4.2 脱敏种子语义一致。
 - `xugu-agentic-group` 是首个 Xugu Agentic Group Schedule 作战项目；详情页标题、Banner、状态提示、事实与模块标签均按项目模板/术语配置渲染，新增标准项目不得复用 Xugu 作战文案。
 - 已有认证、基础角色、项目生命周期、项目切换、九类发布态模块，以及管理员/编辑者只写草稿的模块排序与启停 UI/API。
@@ -27,6 +28,9 @@
 - 已有材料关键内容 readiness 诊断、作战单元新增/归档/退出生命周期校验、统一 request/trace ID、脱敏堆栈错误事件、诊断包 API 和产品内测试中心。
 - `campaign-map-v1@1.0.0` 与 `standard-project-v1@1.0.0` 共用九类固定渲染器；标准验收夹具为 3 团队、7 任务、4 里程碑、2 工作流。
 - Xugu 战役路线图主图的作战单元分支胶囊不是装饰：它们必须保持可点击、可键盘触发、`unit` 深链、选中态和下方对应分支高亮置顶。
+- Phase 8 将保留上述现有交互并扩展为四种固定视图：活动路线图、阶段卡片板、作战单元进度、依赖网络。活动路线图采用时间列内的阶段、目标、分支、任务卡；卡片板按状态泳道展示任务。所有选择必须就地展开并能恢复深链，不能把详情隐藏到远处页面。
+- 材料生成后的建议需要以审核卡片展示新增、更新、归档与关键缺失。卡片移动、状态推进或字段变更只能创建/编辑既有 `ChangeProposal`，继续经过审核、copy-on-write 草稿合并和人工发布；绝不成为直写看板。
+- 当前 Codex 任务的 built-in imagegen 出口对图像生成 endpoint 超时，未能生成 Phase 8 效果图；这仅是本会话工具环境问题，不能用本地截图替代，也不影响 Phase 8 的文档化需求或代码实现。
 - 默认数据库为 `data/platform.sqlite`，测试与统一验证只使用临时目录。
 - 参考项目位于 `../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console/`，必须继续只读。
 
@@ -65,6 +69,7 @@ npm run verify
 
 ## 下一步
 
+- 先读取 Phase 8 Context，然后完成 UI 设计契约、数据投影/DTO 设计、拖拽到提案的安全语义与测试计划；未完成这些工作前不得直接把卡片拖拽写成草稿更新。
 - 进入内部单服务器试用完整材料→提案→审核→合并→发布→回滚流程，收集可用性、材料模板质量和角色运营反馈。
 - 后续里程碑再评估完整成员管理 UI、外部身份提供商、部署自动化和 PostgreSQL 迁移需求。
 - 保持 Xugu 参考项目只读，任何新增项目继续通过模板、数据、术语与主题配置表达差异。

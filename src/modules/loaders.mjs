@@ -49,7 +49,10 @@ export function loadRoadmap(graph) {
       state: optional(stage.state),
       dateLabel: optional(stage.dateLabel),
       description: optional(stage.description),
-      expectedOutput: optional(stage.expectedOutput)
+      expectedOutput: optional(stage.expectedOutput),
+      previewTitle: optional(stage.previewTitle),
+      previewCaption: optional(stage.previewCaption),
+      previewAssets: Array.isArray(stage.previewImages) ? [...stage.previewImages] : []
     })),
     closures: graph.closures.map(closure => ({
       id: closure.id,
@@ -142,4 +145,3 @@ export function loadMaterials() {
     items: []
   };
 }
-

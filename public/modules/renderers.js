@@ -22,6 +22,15 @@ function setQuery(navigate, changes) {
   navigate(`${location.pathname}${params.size ? `?${params}` : ""}`);
 }
 
+function routePath(points) {
+  if (!points.length) return "";
+  return points.slice(1).reduce((path, point, index) => {
+    const previous = points[index];
+    const dx = point.x - previous.x;
+    return `${path} C ${previous.x + dx / 2},${previous.y} ${point.x - dx / 2},${point.y} ${point.x},${point.y}`;
+  }, `M ${points[0].x},${points[0].y}`);
+}
+
 export function renderOverview(context) {
   const { data, project, presentation, snapshot } = context;
   const facts = new Map((data.facts ?? []).map(fact => [fact.id, fact.value]));
@@ -111,21 +120,30 @@ export function renderUnits(context) {
   ]);
 }
 
-function roadmapSvg(context, stages, closures) {
+function roadmapSvg(context, stages, closures, selectedStageId) {
   const width = Math.max(760, stages.length * 180 + 80);
   const height = context.module.viewVariant === "campaign-network" ? 310 : 230;
   const svg = svgEl("svg", { class: "roadmap-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-labelledby": "roadmap-svg-title roadmap-svg-desc" });
   svg.append(svgEl("title", { id: "roadmap-svg-title" }, []), svgEl("desc", { id: "roadmap-svg-desc" }, []));
   svg.querySelector("title").textContent = `${context.module.title}可视化`;
   svg.querySelector("desc").textContent = `${stages.length} 个顺序阶段；完整文本见图后列表。`;
+  const points = stages.map((_, index) => ({
+    x: stages.length === 1 ? width / 2 : 70 + index * ((width - 140) / (stages.length - 1)),
+    y: context.module.viewVariant === "campaign-network" ? 135 + (index % 2 ? 30 : -15) : 115
+  }));
   if (stages.length > 1) {
-    const points = stages.map((_, index) => `${70 + index * ((width - 140) / (stages.length - 1))},${context.module.viewVariant === "campaign-network" ? 135 + (index % 2 ? 30 : -15) : 115}`);
-    svg.append(svgEl("polyline", { points: points.join(" "), class: "route-line", fill: "none" }));
+    svg.append(svgEl("path", { d: routePath(points), class: "route-line", fill: "none" }));
   }
   stages.forEach((stage, index) => {
-    const x = stages.length === 1 ? width / 2 : 70 + index * ((width - 140) / (stages.length - 1));
-    const y = context.module.viewVariant === "campaign-network" ? 135 + (index % 2 ? 30 : -15) : 115;
-    const group = svgEl("g", { class: `route-node ${stateClass(stage.state, stage.id === context.data.currentStageId)}`, tabindex: "0", role: "button", "aria-label": `${index + 1}. ${stage.title}，${statusText(stage.state)}，${safeText(stage.dateLabel, "日期待确认")}` });
+    const { x, y } = points[index];
+    const group = svgEl("g", {
+      class: `route-node ${stateClass(stage.state, stage.id === context.data.currentStageId)}${stage.id === selectedStageId ? " selected" : ""}`,
+      tabindex: "0",
+      role: "button",
+      "aria-pressed": stage.id === selectedStageId ? "true" : "false",
+      "aria-label": `${index + 1}. ${stage.title}，${statusText(stage.state)}，${safeText(stage.dateLabel, "日期待确认")}`,
+      "data-stage-id": stage.id
+    });
     group.append(svgEl("circle", { cx: x, cy: y, r: 28 }), svgEl("circle", { cx: x, cy: y, r: 40, class: "route-hit" }));
     const number = svgEl("text", { x, y: y + 5, "text-anchor": "middle", class: "route-number" }); number.textContent = String(index + 1);
     const label = svgEl("text", { x, y: y + 62, "text-anchor": "middle", class: "route-label" }); label.textContent = stage.title;
@@ -148,30 +166,54 @@ export function renderRoadmap(context) {
   const stages = Array.isArray(context.data.stages) ? context.data.stages : [];
   const closures = Array.isArray(context.data.closures) ? context.data.closures : [];
   if (!stages.length) return emptyState(context.module.emptyState);
-  const selectedId = context.query.get("closure");
-  const selected = closures.find(item => item.id === selectedId) ?? closures[0];
-  const visual = roadmapSvg(context, stages, closures);
+  const requestedStageId = context.query.get("stage");
+  const selectedStage = stages.find(item => item.id === requestedStageId) ?? stages.find(item => item.id === context.data.currentStageId) ?? stages[0];
+  const selectedClosureId = context.query.get("closure");
+  const selectedClosure = closures.find(item => item.id === selectedClosureId);
+  const visual = roadmapSvg(context, stages, closures, selectedStage.id);
   visual.addEventListener("click", event => {
-    const id = event.target.closest?.("[data-closure-id]")?.dataset.closureId;
-    if (id) setQuery(context.navigate, { closure: id });
+    const stageId = event.target.closest?.("[data-stage-id]")?.dataset.stageId;
+    if (stageId) { setQuery(context.navigate, { stage: stageId, closure: "" }); return; }
+    const closureId = event.target.closest?.("[data-closure-id]")?.dataset.closureId;
+    if (closureId) setQuery(context.navigate, { closure: closureId });
   });
   visual.addEventListener("keydown", event => {
     if (!["Enter", " "].includes(event.key)) return;
-    const id = event.target.dataset.closureId;
-    if (id) { event.preventDefault(); setQuery(context.navigate, { closure: id }); }
+    const stageId = event.target.closest?.("[data-stage-id]")?.dataset.stageId;
+    const closureId = event.target.closest?.("[data-closure-id]")?.dataset.closureId;
+    if (stageId) { event.preventDefault(); setQuery(context.navigate, { stage: stageId, closure: "" }); return; }
+    if (closureId) { event.preventDefault(); setQuery(context.navigate, { closure: closureId }); }
   });
-  const ordered = el("ol", { className: "stage-alternative", ariaLabel: `${context.module.title}文本列表` }, stages.map((stage, index) => el("li", { className: stateClass(stage.state, stage.id === context.data.currentStageId) }, [
-    el("span", { className: "stage-sequence", text: String(index + 1) }),
-    el("div", {}, [el("h3", { text: stage.title }), el("p", { text: `${safeText(stage.dateLabel, "日期待确认")} · ${statusText(stage.state)}` }), el("p", { text: safeText(stage.description, "暂无阶段说明") })])
+  const ordered = el("ol", { className: "stage-alternative", ariaLabel: `${context.module.title}文本列表` }, stages.map((stage, index) => el("li", { className: `${stateClass(stage.state, stage.id === context.data.currentStageId)}${stage.id === selectedStage.id ? " selected" : ""}` }, [
+    el("button", { type: "button", className: "stage-select", ariaPressed: stage.id === selectedStage.id ? "true" : "false", onClick: () => setQuery(context.navigate, { stage: stage.id, closure: "" }) }, [
+      el("span", { className: "stage-sequence", text: String(index + 1) }),
+      el("span", { className: "stage-copy" }, [el("strong", { text: stage.title }), el("small", { text: `${safeText(stage.dateLabel, "日期待确认")} · ${statusText(stage.state)}` }), el("span", { text: safeText(stage.description, "暂无阶段说明") })])
+    ])
   ])));
+  const stageAssets = Array.isArray(selectedStage.previewAssets) ? selectedStage.previewAssets : [];
+  const stageDetail = el("section", { className: "selection-detail stage-node-detail", tabIndex: -1 }, [
+    el("div", { className: "stage-node-copy" }, [
+      el("span", { className: `badge ${["complete", "current"].includes(stateClass(selectedStage.state, selectedStage.id === context.data.currentStageId)) ? "active" : "archived"}`, text: statusText(selectedStage.state) }),
+      el("h2", { text: selectedStage.title }),
+      definitionList([["日期", selectedStage.dateLabel], ["说明", selectedStage.description], ["预期产出", selectedStage.expectedOutput]])
+    ]),
+    el("article", { className: "stage-preview" }, [
+      el("h3", { text: safeText(selectedStage.previewTitle, `${context.presentation.stage}预览`) }),
+      el("p", { text: safeText(selectedStage.previewCaption, "暂无节点预览说明") }),
+      stageAssets.length ? el("div", { className: "stage-preview-grid" }, stageAssets.map((asset, index) => el("button", { type: "button", className: "stage-preview-thumb", onClick: event => openLightbox(context, stageAssets, index, event.currentTarget) }, [
+        el("img", { src: asset.startsWith("/") ? asset : `/${asset.replace(/^\.\//, "")}`, alt: `${selectedStage.title}预览 ${index + 1}` })
+      ]))) : el("small", { text: "无本地预览" })
+    ])
+  ]);
   return el("div", {}, [
     el("section", { className: "module-primary-card" }, [
-      cardHeading(context.module.viewVariant === "campaign-network" ? "CAMPAIGN ROUTE" : "LINEAR ROADMAP", context.module.title, "路线几何由当前发布数据计算；下方提供完整文本替代。"),
+      cardHeading(context.module.viewVariant === "campaign-network" ? "CAMPAIGN ROUTE" : "LINEAR ROADMAP", context.module.title, `点击${context.presentation.stage}可切换到对应节点详情；路线几何由当前发布数据计算。`),
       localScroller(`${context.module.title}路线图，可水平滚动`, visual), ordered
     ]),
-    selected ? el("section", { className: "selection-detail outcome-detail" }, [
-      el("span", { className: "badge active", text: statusText(selected.state) }), el("h2", { text: selected.title }),
-      definitionList([["日期", selected.dateLabel], ["说明", selected.description], ["结果", selected.result], ["来源", selected.source]])
+    stageDetail,
+    selectedClosure ? el("section", { className: "selection-detail outcome-detail" }, [
+      el("span", { className: "badge active", text: statusText(selectedClosure.state) }), el("h2", { text: selectedClosure.title }),
+      definitionList([["日期", selectedClosure.dateLabel], ["说明", selectedClosure.description], ["结果", selectedClosure.result], ["来源", selectedClosure.source]])
     ]) : null,
     context.data.workstreams?.length ? el("section", { className: "workstream-grid" }, context.data.workstreams.map(stream => el("article", { className: "workstream-card" }, [
       el("span", { className: "eyebrow", text: context.presentation.workstream }), el("h3", { text: stream.title }), el("p", { text: safeText(stream.description) }), el("small", { text: `${stream.taskIds?.length ?? 0} 个关联${context.presentation.task}` })

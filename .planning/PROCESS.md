@@ -212,3 +212,16 @@
 - 增加客户端回归测试，约束 `data-unit-id`、`aria-pressed`、`.branch-chip.selected` 与 `.stage-branch-lane.selected`。
 - 浏览器验证 `stage=launch` 下点击“财务作战单元”后 URL 为 `?stage=launch&unit=finance`，分支胶囊选中，下方“财务作战单元”高亮置顶；点击“跨单元扩展作战”后 URL 切换为 `?stage=scale` 且旧 `unit` 清除。
 - `npm test` 144 项通过；`npm run verify` 通过，参考 Xugu 应用保持只读未变。
+
+## 2026-07-20：Phase 8 路线图可视化与卡片工作台方向
+
+状态：`accepted for planning`
+
+- 用户在审阅现有路线图后确认，产品需要从单一曲线概览升级为能同时表达战略阶段、作战单元分支、执行进度和材料审核的工作台。
+- 确认采用 Aha 式时间列活动路线图与 Trello 式状态卡片板的信息组织原则，但不复制其品牌、Logo 或页面；桌面端继续保持 Xugu 白色顶部导航、暖色指挥背景和作战语言。
+- 固定视图确定为活动路线图、阶段卡片板、作战单元进度、依赖网络；它们读取同一版本化项目数据，以稳定 ID、深链、选中态和就地详情互相定位。
+- 确认“拖拽卡片”不等于直写看板：任何状态、日期、负责人或作战单元变化仍必须形成受权限、证据、Schema、依赖图与审核保护的 `ChangeProposal`，随后才可能合并草稿与发布。
+- 确认材料更新后应以 proposal item 审核卡片呈现新增、更新、归档和关键缺失，卡片中必须可见字段差异、证据、风险、诊断与接受/编辑后接受/驳回动作。
+- 详细上下文已固化到 `.planning/phases/08-roadmap-visual-workbench/CONTEXT.md`；当前没有实现 Phase 8 代码，也没有把产品方向误记为完成结果。
+- 本会话 Codex imagegen 多次调用均在图像生成 endpoint 超时，未生成效果图；该工具环境问题已记录在交接与 Context，不影响后续设计和编码。
+- 文档固化后在可监听本机环境执行 `npm run verify`：144/144 自动化测试、浏览器证据、迁移、隔离、Xugu 等价与参考只读检查均通过。受限沙盒中的同命令因 `127.0.0.1` 监听权限报 `EPERM`，不是产品回归。

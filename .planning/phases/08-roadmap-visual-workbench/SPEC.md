@@ -1,7 +1,7 @@
 # Phase 8 设计契约：路线图可视化工作台与卡片化审核
 
-状态：`implemented`
-最后更新：2026-07-20
+状态：`complete`
+最后更新：2026-07-21
 
 ## 信息架构
 
@@ -13,10 +13,14 @@
 | `board` | 阶段卡片板 | 任务按状态泳道（待确认 / 进行中 / 待审核 / 已完成） |
 | `units` | 作战单元进度 | 以单元为入口的覆盖阶段、任务、完成度 |
 | `network` | 依赖网络 | 复用 task-network 数据的跨单元跨阶段阻塞关系 |
+| `swimlane` | 项目泳道 | 主泳道（阶段时间轴·拆解锚点）+ 副泳道（作战单元甘特任务条·并行子任务）+ 收口锚点 + 生命周期三带（事前/事中/事后，由 `stage.state` 派生） |
 
 - 视图切换不改 `published / draft / proposal` 数据边界；切换只是渲染投影。
-- 项目配置不能提供 HTML/CSS/JavaScript/SVG；四种视图全部由仓库内固定渲染器实现（`public/modules/renderers.js`）。
-- `units / tasks / edges` 由 `loadRoadmap` 统一投影，供四种视图共用（VIS-05）。
+- 项目配置不能提供 HTML/CSS/JavaScript/SVG；五种视图全部由仓库内固定渲染器实现（`public/modules/renderers.js`）。
+- `units / tasks / edges` 由 `loadRoadmap` 统一投影，供五种视图共用（VIS-05）。
+
+
+- 泳道视图（第 5 视图）是 D-022 分形作战生命周期与双锚点模型的可见层（纯投影渲染）；其数据/提案/模板层深化见 Phase 9（LIF-01..05）。
 
 ## 深链与对象选择状态机
 

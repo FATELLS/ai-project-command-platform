@@ -291,3 +291,174 @@
 - `public/styles.css`：新增 `.module-summary-chip`(SVG)、`.module-inspector`、`.module-summary-strip`、`.unit-module-grid`、`.unit-module-card`；移除 `.branch-chip`/`.route-branch-summary` 相关样式。
 - `test/module-ui-server.test.mjs`、`test/e2e/02-roadmap-deeplinks.spec.mjs`：把分支胶囊断言改为单元模块卡片下钻断言。
 - 本方向只改展示层，不改 published/draft/proposal 边界、不改 loadRoadmap DTO、不调用 LLM。
+
+---
+
+## 2026-07-21 路线图模块整体重设计（看板为中心）
+
+**方向状态：待确认（尚未落代码）。** 本节是对前一次"Aha + Trello 展示层改造"的取代，不是增量调整。上一版仍在以四视图（timeline/board/units/network）和 SVG 曲线节点为骨架，把 Trello 只当成其中之一；本次明确：**Trello 式看板是路线图模块的中心范式，其余表达收敛为它的辅件**。确认后才动代码。
+
+### 起因（为什么上一版方向不对）
+
+1. 把 Trello 当成四视图之一，而不是中心范式——导致看板与 timeline/units/network 并列竞争，模块仍偏"路线图"而非"工作台"。
+2. 上一版在 SVG 曲线节点上继续叠加摘要芯片/分支下钻，主线仍是"节点曲线"，与"卡片推进工作"的 Trello 心智不一致。
+3. 任务数据里普遍没有显式状态文本（只有 progress），上一版的 board 状态泳道近乎空。
+
+### 设计原则
+
+- **抽象层用通用 PMP**：项目 / 时序阶段 / 分工支线（group）/ 任务 / 交付物 / 依赖；渲染器只绑定这个通用结构。
+- **术语层保留作战语言**：作战单元 = group（项目拆解的支线分工），战役阶段 = phase，任务卡 = task，战果闭环 = deliverable（phase 边界产出）。多项目靠术语/主题配置表达差异，**不注入布局或代码**。
+- **Trello 范式作主面**：卡片/泳道/拖拽是任何项目都成立的通用交互，因此把它作为路线图模块的中心，而非次级视图。
+
+### 通用 schema（渲染器只认这个）
+
+| 概念 | 字段 | 术语 |
+|---|---|---|
+| Project | goal, status, overallProgress, currentPhase | 项目 / 战役 |
+| Phase | id, title, state, dateLabel, expectedOutput | 阶段 / 战役阶段 |
+| Group | id, name, owner, objective, currentWork | 作战单元（group） |
+| Task | id, groupId, phaseId, title, owner, status, progress, dates, dependsOn, expectedOutput | 任务卡 |
+| Status | todo / in-progress / in-review / done | 待启动 / 进行中 / 待审核 / 已完成 |
+| Deliverable | id, title, between:[phaseA,phaseB], result, evidence | 战果闭环 |
+| Dependency | from→to | 依赖 |
+
+**Status 来源规则（待确认）**：现有 task 普遍只有 `progress`（0–100）无显式状态。派生规则——`progress=100 → done`、`>0 → in-progress`、`空 → todo`；`in-review` 仅当数据显式给出时才显示。旧项目零改动即可上板，新项目可直接填状态。
+
+### 视觉范式：看板为中心 + 阶段主脊
+
+**主脊（Phase Spine）= 看板的表头**
+- 一条顺序阶段条带，`currentPhase` 标"当前战役"。
+- 点阶段 → 把看板筛选到该阶段（写入 `?phase=`）；不与看板竞争，只锚定它。
+- 战果闭环锚定在它所连接的两个阶段之间（数据 `between` 的本义），带证据数徽标。
+
+**看板（Board）= 主面**
+- 列 = 通用状态带（待启动 / 进行中 / 待审核 / 已完成）。
+- 卡片 = 任务卡：标题、作战单元、负责人、进度/日期、证据数、关键缺失/风险。
+- 泳道分组（可切换）：默认按**作战单元**分泳道，可切到按**战役阶段**分。两者都是通用项目轴。
+- 拖动换列 = 状态变更 → 走既有 `interaction` 模板 `ChangeProposal`，仍经审核 + copy-on-write + 人工发布；**不直写 draft/published**。
+- 高影响字段必须引用本项目已就绪材料证据（`EVIDENCE_REQUIRED` / `EVIDENCE_NOT_ALLOWED`），缺 CSRF 返回 403、viewer 返回 404——沿用 Phase 8 既有服务层。
+
+**卡片检查器（侧栏 / 就地）**
+- 点卡片就地展开：owner、进度、依赖上下文（本地小图，非全局网）、证据、提案入口。
+- 可深链，不滚到页底；键盘可访问。
+
+### 对现有四视图的收敛
+
+| 旧视图 | 处置 |
+|---|---|
+| timeline（活动路线图） | 收敛为**看板顶部的阶段主脊**（不再独立） |
+| board（阶段卡片板） | 升格为**主面**，泳道可切（作战单元 / 阶段） |
+| units（作战单元进度） | 降级为**泳道分组维度之一**（按作战单元分泳道）+ 卡片检查器里的单元信息 |
+| network（依赖网络） | 降级为**卡片检查器里的本地依赖上下文**（聚焦、不画全局交叉线） |
+
+### 深链与状态机
+
+- `?view=` 退役；保留旧值做**向后兼容映射**（board→默认、timeline→默认、units→泳道按组、network→忽略并聚焦任务）。
+- 状态机改为 `?phase= / ?group= / ?task=` 正交深链；切换 phase 清除旧 group/task 选择。
+- 泳道维度（group/phase）作为 `?lanes=` 独立参数，与焦点正交。
+
+### 落地范围（纯渲染层 + 投影层，不碰数据边界）
+
+- `src/modules/loaders.mjs` `loadRoadmap`：补 group 的 `currentWork/nextPlan`、task 的 `status/taskType/schedule/startMonth/span`、deliverable 的 `previewImages/sourceFile`；新增 `companyWorkstreams` 投影与 task→phase 归属。
+- `public/modules/renderers.js`：重写 `renderRoadmap` 为「阶段主脊 + 可切泳道看板 + 卡片检查器」；移除 board/units/network 顶层视图（逻辑下沉为泳道维度与检查器 facet）；**保留** `openInteractionProposal` 与正交状态机、键盘可访问、就地详情。
+- `public/styles.css`：看板列/泳道/卡片/主脊样式；作战语言标签沿用既有 Xugu 暖色指挥背景。
+- `test/e2e/05-roadmap-views.spec.mjs` 改写：主脊阶段筛选、状态带渲染、泳道切换、拖拽提案仍受控、深链恢复。
+- `published/draft/proposal` 隔离、CSRF、角色、固定渲染器、projectId 隔离**全部不动**；不调用 LLM。
+
+### 验证目标（落代码后）
+
+- `npm run verify` 全绿（148 后台 + Playwright E2E，E2E 用例随设计改写）。
+- 看板拖拽仍只造提案、不改版本指针；跨项目证据/缺 CSRF 行为不变。
+- 参考虚谷应用 HEAD 与脱敏种子哈希不变。
+
+### 待确认（阻塞落代码）
+
+1. 看板为中心 + 阶段主脊做表头：**已确认（要主脊）**。
+2. Status 来源规则（progress 派生 + 待审核仅显式）：默认采纳，用户未明确反对即按此实现。
+
+## 2026-07-21：分形生命周期 + 主/副泳道（真实推进范式）
+
+状态：`accepted for design`（用户在另一 session 提出，并要求继续执行；本方向是上一段「看板为中心 + 阶段主脊」的演进，而非冲突）
+
+### 用户诉求（逐条还原）
+
+1. 项目推进时目标持续变化，确定大目标与大阶段的地方应当是**通用范式**（事前/事中/事后为例，可更优）。准备阶段由不同作战单元拆解任务；执行阶段每个作战单元相当于又走一次全阶段动作；研发、销售链路皆是如此。
+2. 主路线图存在**多次拆解与合并**。项目泳道 = 一条主泳道 + 多条作战单元副泳道（类甘特）。从主泳道拆到副泳道时有**项目锚点**；收尾回归时有**收口锚点**；一个作战单元可同时干不止一个子任务。需考虑主泳道拆给不同作战单元的不同子任务。
+
+### 设计模型：分形生命周期 + 主/副泳道 + 双锚点
+
+**通用生命周期范式（事前/事中/事后，分形）**：不新造字段，直接从既有 `stage.state` 派生三带，且可作用于项目级（阶段分组）与单元级（当前单元所处节律），无需改 schema、模板或数据库：
+
+| 生命周期带 | 来源 `state` | 语义 |
+|---|---|---|
+| 事前·待启 `prepare` | 计划战役 / planned | 目标对齐、拆解、单元编组 |
+| 事中·当前 `active` | 当前战役 / active | 各单元并行执行 |
+| 事后·已交付 `converged` | 已完成 / done | 收口、复盘、锚定 |
+
+- 「目标持续变化」靠**多轮拆解/合并**承载（见下），不靠单一线性阶段表。
+- 分形：项目三带是宏观节律；单元在「事中」内部再走自己的待启→进行→收口（由该单元任务的进度/状态体现），无需重复建模。
+
+**主泳道（main lane）= 阶段主脊，按真实日期时间轴定位**
+
+- 阶段（`stages`）按 `dateLabel` 解析出的时间窗口，定位到与副泳道**共享的时间轴**上；无窗口阶段排到尾部，不冒充时间。
+- 每阶段标注其生命周期带；`currentStage` 高亮。
+- **项目锚点（拆解锚点 / D-anchor）**= 每个阶段的起点：主目标在此拆给各作战单元。
+
+**副泳道（sub lanes）= 每个作战单元一条，类甘特**
+
+- 复用 `loadGantt` 已有的 per-unit lanes；任务按 `startDate/endDate` 在共享时间轴上成条。
+- **并行子任务**：同一单元时间重叠的任务自动分配到不同 track（贪心区间着色），多个 track 上下堆叠 → 视觉上「一个单元同时干多个子任务」。
+- **任务→阶段归属**：按任务起点落入哪个阶段窗口推断（`parseStageWindow` + 起点 containment，回退到区间重叠）；这是「主泳道拆给副泳道」的投影载体。
+
+**收口锚点（C-anchor）= 战果闭环 `closures`**
+
+- `closure.between:[a,b]` 天然锚定在两阶段之间，就是「收尾回归到主泳道」的具体锚点；带证据/结果/日期。
+- 视觉上作为穿过副泳道区、连接其 `between` 两阶段的竖向锚点线。
+
+**拆解/合并的视觉表达**
+
+- 每个阶段起点的**拆解引导线**自主泳道向下贯穿副泳道区，凡归属该阶段的任务条在其轨道内被引导线穿过/着色 → 「主→副拆解」。
+- 收口锚点处的**收口标记**自下而上映回主泳道 → 「副→主合并」。
+- 由此多次拆解/合并在同一张图上可读。
+
+### 与「看板为中心」的关系（两个正交轴，不互斥）
+
+| 轴 | 视图 | 回答的问题 | 改变边界？ |
+|---|---|---|---|
+| 规划/时间轴 | **泳道路线图** `?view=swimlane`（本段） | 大目标如何拆给各单元、何时收口、谁在何时并行 | 否（纯投影+渲染） |
+| 执行/状态 | 阶段卡片板 `?view=board` | 现在谁在干什么、状态如何推进 | 拖拽只造提案（既有） |
+
+- 看板（执行）与泳道（规划）共享同一版本化项目图的不同投影；两者都不直写 `draft/published`。
+- `stage`（阶段选择）/`unit`/`task` 深链沿用既有正交状态机；新增 `anchor` 深链用于收口锚点。
+
+### 数据映射（证明零边界改动）
+
+| 用户概念 | 既有实体 | 现状 |
+|---|---|---|
+| 通用生命周期带 | `stage.state` | ✅ 已有（已完成/当前战役/计划战役） |
+| 主泳道阶段 | `stages` + `dateLabel`（迁移自 `date`） | ✅ 已有 |
+| 副泳道（每单元） | `loadGantt.lanes` / `task.unitId` | ✅ 已有 |
+| 拆解字段（主→子任务） | `task.parentId` | ⚠️ schema 已支持，Xugu 当前为空 → 本期靠任务→阶段归属投影表达拆解；parentId 待后续数据填充 |
+| 项目锚点（拆解） | 阶段起点 | ✅ 派生 |
+| 收口锚点（合并） | `closures.between` | ✅ 已有 |
+| 并行子任务 | 同单元多任务不同日期 + track 着色 | ✅ 已有数据（如市场单元 5 任务并行） |
+| 跨单元战线 | `companyWorkstreams` | ✅ 已有（本期不展开） |
+
+### 落地范围（纯渲染层 + 派生，不碰边界）
+
+- `public/modules/renderers.js`：新增 `renderRoadmapSwimlane(context)` + 视图切换项；timeline 仍为默认，swimlane 为新增受控视图。
+- `public/styles.css`：主泳道/副泳道/任务条/双锚点/拆解引导线/生命周期分带样式；沿用既有 Xugu 暖色指挥语言。
+- `test/e2e/05-roadmap-views.spec.mjs`：新增 `?view=swimlane` 渲染主泳道+副泳道+锚点的断言。
+- **不动**：published/draft/proposal 隔离、CSRF、角色、固定渲染器注册、模板（不可变 @1.0.0）、数据库、`loadRoadmap` 字段（已有 dateLabel/state）；**不调用 LLM**。
+
+### 验证目标
+
+- `npm run verify` 全绿（148 后台 + Playwright E2E，含新增 swimlane 断言）。
+- 泳道视图不改变版本指针、不写 draft/published；既有 timeline/board/units/network 视图与深链行为不变。
+- 参考虚谷应用 HEAD 与脱敏种子哈希不变。
+
+### 待确认（不阻塞首版落地，留作演进）
+
+1. **生命周期术语**是否随模板术语配置（事前/事中/事后 vs PDCA 等）——首版用固定中文术语 + state 派生，后续可进模板 config。
+2. **`parentId` 拆解字段**是否在虚谷数据里补真实主任务→子任务关系（目前靠任务→阶段窗口归属投影，已能表达拆解）。
+3. swimlane 是否升为路线图默认视图（首版保持 timeline 默认，避免破坏既有深链预期）。

@@ -256,10 +256,11 @@ export function renderRoadmap(context) {
   // timeline 采用粗主线（阶段节点 + 模块摘要芯片）+ 支线下钻（作战单元模块卡片）。
   const defaultView = "timeline";
   const view = context.query.get("view");
-  const activeView = ["timeline", "board", "units", "network"].includes(view) ? view : defaultView;
+  const activeView = ["timeline", "board", "units", "network", "swimlane"].includes(view) ? view : defaultView;
   if (activeView === "board") return renderRoadmapBoard(context);
   if (activeView === "units") return renderRoadmapUnits(context);
   if (activeView === "network") return renderRoadmapNetwork(context);
+  if (activeView === "swimlane") return renderRoadmapSwimlane(context);
   const stages = Array.isArray(context.data.stages) ? context.data.stages : [];
   if (!stages.length) return emptyState(context.module.emptyState);
   const requestedStageId = context.query.get("stage");
@@ -354,7 +355,7 @@ function buildModuleInspector(context, selectedStage) {
 // Phase 8：四种视图切换器（segmented control）。view 与 stage/unit/task 深链正交。
 function roadmapViewSwitcher(context) {
   const current = context.query.get("view") || "timeline";
-  const views = [["timeline", "活动路线图"], ["board", "阶段卡片板"], ["units", `${context.presentation.unit}进度`], ["network", "依赖网络"]];
+  const views = [["timeline", "活动路线图"], ["swimlane", "项目泳道"], ["board", "阶段卡片板"], ["units", `${context.presentation.unit}进度`], ["network", "依赖网络"]];
   return el("nav", { className: "roadmap-view-switcher", ariaLabel: "路线图视图" }, views.map(([value, label]) => {
     const params = new URLSearchParams(context.query.toString());
     if (value === "timeline") params.delete("view"); else params.set("view", value);
@@ -549,6 +550,207 @@ function renderRoadmapNetwork(context) {
       cardHeading("DEPENDENCY NETWORK", context.module.title, `跨${context.presentation.unit}、跨${context.presentation.stage}的阻塞关系；点击${context.presentation.task}查看前置与后续。`),
       el("div", { className: "visual-controls" }, [unitSelector]),
       dependencyList(context, visible, selectedTaskId)
+    ])
+  ]);
+}
+
+// 项目泳道（分形生命周期 + 主/副泳道 + 双锚点）：纯渲染投影，不写 draft/published，不调用 LLM。
+// 主泳道 = 阶段主脊按真实日期时间轴；副泳道 = 每作战单元一条类甘特条；阶段起点=项目锚点（主→副拆解），
+// 战果闭环=收口锚点（副→主合并）；生命周期三带（事前/事中/事后）派生自 stage.state；并行子任务按区间着色。
+function lifecycleBandOf(state) {
+  if (/完成|closed|done|mitigated/i.test(String(state ?? ""))) return "converged";
+  if (/当前|active|current|进行/i.test(String(state ?? ""))) return "active";
+  return "prepare";
+}
+const SWIMLANE_BAND_LABEL = { prepare: "事前 · 待启", active: "事中 · 当前", converged: "事后 · 已交付" };
+
+function isoFromDay(dayNumber) {
+  return new Date(dayNumber * 86_400_000).toISOString().slice(0, 10);
+}
+
+function renderRoadmapSwimlane(context) {
+  const stages = Array.isArray(context.data.stages) ? context.data.stages : [];
+  const units = Array.isArray(context.data.units) ? context.data.units : [];
+  const tasks = Array.isArray(context.data.tasks) ? context.data.tasks : [];
+  const closures = Array.isArray(context.data.closures) ? context.data.closures : [];
+  if (!stages.length) return emptyState(context.module.emptyState);
+  const stageTerm = context.presentation.stage;
+  const unitTerm = context.presentation.unit;
+  const selectedStage = context.query.get("stage");
+  const selectedUnit = context.query.get("unit");
+  const selectedTask = context.query.get("task");
+  const selectedAnchor = context.query.get("anchor");
+
+  const dated = tasks.filter(task => task.startDate && task.endDate);
+  const origin = dated.length ? Math.min(...dated.map(task => dayNumber(task.startDate))) : null;
+  const horizon = dated.length ? Math.max(...dated.map(task => dayNumber(task.endDate))) : null;
+  const span = origin == null ? 1 : Math.max(1, horizon - origin + 1);
+  const at = value => value && origin != null ? ((dayNumber(value) - origin) / span) * 100 : null;
+  const hasTimeline = origin != null;
+
+  const phaseStages = stages.map(stage => ({ ...stage, window: parseStageWindow(stage.dateLabel), band: lifecycleBandOf(stage.state) }));
+  const stagePos = new Map();
+  for (const stage of phaseStages) stagePos.set(stage.id, at(stage.window.start || stage.window.end || ""));
+
+  function phaseOf(task) {
+    const start = task.startDate;
+    if (start) {
+      const hit = phaseStages.find(stage => stage.window.start && stage.window.end && start >= stage.window.start && start <= stage.window.end);
+      if (hit) return hit.id;
+    }
+    const overlap = phaseStages.find(stage => overlapsWindow({ startDate: task.startDate || task.endDate, endDate: task.endDate || task.startDate }, stage.window));
+    return overlap?.id ?? null;
+  }
+
+  const subLanes = units.map(unit => {
+    const list = tasks.filter(task => task.unitId === unit.id)
+      .sort((a, b) => safeText(a.startDate, "9999").localeCompare(safeText(b.startDate, "9999")) || safeText(a.title).localeCompare(safeText(b.title), "zh-CN"));
+    const tracks = [];
+    const positioned = list.map(task => {
+      const left = at(task.startDate);
+      const width = left != null && task.endDate ? Math.max(1.5, ((dayNumber(task.endDate) - dayNumber(task.startDate) + 1) / span) * 100) : null;
+      let track = 0;
+      if (left != null && task.endDate) {
+        const start = dayNumber(task.startDate), end = dayNumber(task.endDate);
+        const free = tracks.findIndex(endDay => endDay < start);
+        track = free === -1 ? tracks.length : free;
+        tracks[track] = end;
+      }
+      return { task, left, width, track, phaseId: phaseOf(task) };
+    });
+    return { unit, positioned, trackCount: Math.max(1, tracks.length) };
+  });
+  const unscheduled = tasks.filter(task => !task.startDate || !task.endDate);
+
+  const guideStages = phaseStages.filter(stage => stagePos.get(stage.id) != null);
+  const anchorItems = closures.filter(closure => Array.isArray(closure.between) && closure.between.length).map(closure => {
+    const [a, b] = closure.between;
+    const pa = stagePos.get(a), pb = stagePos.get(b);
+    const pos = pa != null && pb != null ? (pa + pb) / 2 : (pb ?? pa ?? at(parseStageWindow(closure.dateLabel).start));
+    return { closure, pos };
+  }).filter(item => item.pos != null);
+
+  const selectStage = id => setQuery(context.navigate, { stage: id, unit: "", task: "", anchor: "" });
+  const selectUnit = id => setQuery(context.navigate, { unit: id, task: "" });
+  const selectTask = id => setQuery(context.navigate, { task: id });
+  const selectAnchor = id => setQuery(context.navigate, { anchor: id, task: "" });
+
+  function guideSpans() {
+    return guideStages.map(stage => el("span", { className: `guide-line${stage.id === selectedStage ? " active" : ""}`, style: `left:${stagePos.get(stage.id)}%`, dataset: { guideStage: stage.id } }));
+  }
+
+  const STATION_LANE_PX = 50, ANCHOR_LANE_PX = 28;
+  function laneSchedule(items, gapPct) {
+    const laneMax = [];
+    const laneOf = new Map();
+    for (const { id, pos } of [...items].sort((a, b) => (a.pos ?? Infinity) - (b.pos ?? Infinity))) {
+      if (pos == null) { laneOf.set(id, 0); continue; }
+      let lane = laneMax.findIndex(max => max == null || pos - max >= gapPct);
+      if (lane === -1) lane = laneMax.length;
+      laneMax[lane] = pos;
+      laneOf.set(id, lane);
+    }
+    return { laneOf, laneCount: Math.max(1, laneMax.length) };
+  }
+  const stationPlan = laneSchedule(phaseStages.map(stage => ({ id: stage.id, pos: stagePos.get(stage.id) })), 15);
+  const anchorPlan = laneSchedule(anchorItems.map(item => ({ id: item.closure.id, pos: item.pos })), 10);
+  const anchorBandTop = 14 + stationPlan.laneCount * STATION_LANE_PX;
+
+  const phaseNodes = phaseStages.map(stage => {
+    const pos = stagePos.get(stage.id);
+    const isSelected = stage.id === selectedStage;
+    const lane = stationPlan.laneOf.get(stage.id) ?? 0;
+    return el("button", {
+      type: "button", className: `phase-station band-${stage.band}${isSelected ? " selected" : ""}${stage.id === context.data.currentStageId ? " current" : ""}`,
+      style: [pos != null ? `left:${pos}%` : null, `top:${12 + lane * STATION_LANE_PX}px`].filter(Boolean).join(";"), dataset: { stageId: stage.id },
+      ariaLabel: `${stage.title}，${SWIMLANE_BAND_LABEL[stage.band]}${stage.state ? "，" + stage.state : ""}`,
+      title: `${stage.title} · ${SWIMLANE_BAND_LABEL[stage.band]}`, onClick: () => selectStage(stage.id)
+    }, [
+      el("span", { className: "phase-anchor-mark", ariaHidden: "true", text: "▾", title: "项目锚点·拆解" }),
+      el("span", { className: "phase-station-title", text: stage.title }),
+      el("span", { className: "phase-station-meta", text: SWIMLANE_BAND_LABEL[stage.band] })
+    ]);
+  });
+  const anchorNodes = anchorItems.map(({ closure, pos }) => el("button", {
+    type: "button", className: `closure-anchor${closure.id === selectedAnchor ? " selected" : ""}`,
+    style: `left:${pos}%;top:${anchorBandTop + (anchorPlan.laneOf.get(closure.id) ?? 0) * ANCHOR_LANE_PX}px`, dataset: { anchor: closure.id }, title: `${closure.title} · 收口锚点`,
+    ariaLabel: `${closure.title}，收口锚点`, onClick: () => selectAnchor(closure.id)
+  }, [el("span", { ariaHidden: "true", text: "◆" }), el("span", { className: "closure-anchor-label", text: closure.title })]));
+
+  const mainTrackStyle = hasTimeline ? `min-height:${24 + stationPlan.laneCount * STATION_LANE_PX + anchorPlan.laneCount * ANCHOR_LANE_PX + 14}px` : null;
+  const mainTrack = el("div", { className: "swimlane-main-track", style: mainTrackStyle }, [...guideSpans(), ...phaseNodes, ...anchorNodes]);
+
+  const subRows = subLanes.map(({ unit, positioned, trackCount }) => {
+    const bars = positioned.map(({ task, left, width, track, phaseId }) => {
+      if (left == null) return null;
+      const dimmed = selectedStage && phaseId !== selectedStage;
+      return el("button", {
+        type: "button", className: `swimlane-bar${task.id === selectedTask ? " selected" : ""}${dimmed ? " dimmed" : ""}`,
+        style: `left:${left}%;width:${width}%;--track:${track}`, dataset: { taskId: task.id, phaseId: phaseId ?? "" },
+        ariaLabel: `${task.title}，${unit.name}，${safeText(task.owner, "待确认")}，${formatDay(task.startDate)} 至 ${formatDay(task.endDate)}，${statusText(task.state)}`,
+        title: `${task.title} · ${formatDay(task.startDate)}→${formatDay(task.endDate)}`, onClick: () => selectTask(task.id)
+      }, [el("span", { className: "swimlane-bar-title", text: task.title }), Number.isFinite(task.progress) ? el("span", { className: "swimlane-bar-progress", text: `${task.progress}%` }) : null]);
+    }).filter(Boolean);
+    return el("div", { className: `swimlane-row${unit.id === selectedUnit ? " selected" : ""}`, dataset: { unitId: unit.id } }, [
+      el("button", { type: "button", className: "swimlane-rail", title: unit.name, onClick: () => selectUnit(unit.id) }, [el("span", { text: unit.name })]),
+      el("div", { className: "swimlane-unit-track", style: `--tracks:${trackCount}`, role: "list" }, [...guideSpans(), ...(bars.length ? bars : [el("span", { className: "swimlane-empty", text: "无排期任务" })])])
+    ]);
+  });
+
+  const legend = el("ul", { className: "swimlane-legend", ariaLabel: "图例" }, [
+    el("li", { className: "band-prepare" }, [el("i", { className: "dot" }), "事前·待启"]),
+    el("li", { className: "band-active" }, [el("i", { className: "dot" }), "事中·当前"]),
+    el("li", { className: "band-converged" }, [el("i", { className: "dot" }), "事后·已交付"]),
+    el("li", {}, [el("span", { className: "anchor-glyph", text: "▾", ariaHidden: "true" }), "拆解锚点"]),
+    el("li", {}, [el("span", { className: "anchor-glyph", text: "◆", ariaHidden: "true" }), "收口锚点"])
+  ]);
+  const chart = el("div", { className: "swimlane-chart", dataset: { timeline: hasTimeline ? "1" : "0" } }, [
+    el("div", { className: "swimlane-main", role: "row", ariaLabel: "主泳道" }, [el("span", { className: "swimlane-rail swimlane-rail-main", text: "主泳道" }), mainTrack]),
+    el("div", { className: "swimlane-sub", role: "rowgroup", ariaLabel: `${unitTerm}副泳道` }, subRows.length ? subRows : el("p", { className: "swimlane-empty", text: `暂无${unitTerm}副泳道数据。` })),
+    hasTimeline ? el("div", { className: "swimlane-axis", ariaHidden: "true" }, [el("span", { text: formatDay(isoFromDay(origin)) }), el("span", { text: formatDay(isoFromDay(horizon)) })]) : null
+  ]);
+
+  let detail = null;
+  if (selectedTask) {
+    const task = tasks.find(item => item.id === selectedTask);
+    const unitName = units.find(unit => unit.id === task?.unitId)?.name ?? "";
+    detail = task ? taskInlineDetail(context, task, unitName) : null;
+  } else if (selectedUnit) {
+    const unit = units.find(item => item.id === selectedUnit);
+    detail = unit ? unitRouteDetail(context, unit) : null;
+  } else if (selectedAnchor) {
+    const closure = closures.find(item => item.id === selectedAnchor);
+    detail = closure ? el("article", { className: "inline-task-detail" }, [
+      el("span", { className: "eyebrow", text: "收口锚点 · 战果闭环" }), el("h4", { text: closure.title }),
+      definitionList([["状态", closure.state], ["日期", closure.dateLabel], ["关联阶段", (closure.between ?? []).join(" → ")], ["结果", closure.result], ["说明", closure.description], ["来源", closure.source]])
+    ]) : null;
+  } else {
+    const stage = phaseStages.find(item => item.id === (selectedStage ?? context.data.currentStageId)) ?? phaseStages[0];
+    if (stage) {
+      const branchUnitCount = new Set(tasks.filter(task => phaseOf(task) === stage.id).map(task => task.unitId)).size;
+      detail = el("article", { className: "inline-task-detail" }, [
+        el("span", { className: "eyebrow", text: `项目锚点 · ${SWIMLANE_BAND_LABEL[stage.band]}` }), el("h4", { text: stage.title }),
+        definitionList([["生命周期", SWIMLANE_BAND_LABEL[stage.band]], ["状态", stage.state], ["日期", stage.dateLabel], ["预期产出", stage.expectedOutput]]),
+        el("p", { className: "stage-branch-hint", text: `该阶段拆解到 ${branchUnitCount} 个${unitTerm}副泳道（按任务起点归入本阶段窗口）。` })
+      ]);
+    }
+  }
+
+  const unscheduledSection = unscheduled.length ? el("section", { className: "unscheduled-lane" }, [
+    el("h3", { text: "待排期任务" }),
+    el("ul", {}, unscheduled.map(task => el("li", {}, [
+      el("button", { type: "button", className: "linkish", onClick: () => selectTask(task.id) }, [el("span", { text: task.title })])
+    ])))
+  ]) : null;
+
+  return el("div", {}, [
+    el("section", { className: "module-primary-card roadmap-workbench roadmap-swimlane" }, [
+      roadmapViewSwitcher(context),
+      cardHeading("PROJECT SWIMLANE", context.module.title, `主泳道按${stageTerm}推进，副泳道按${unitTerm}并行；${stageTerm}起点为拆解锚点（主→副），战果闭环为收口锚点（副→主）。`),
+      legend,
+      localScroller("项目泳道图，可水平滚动", chart),
+      unscheduledSection,
+      detail
     ])
   ]);
 }

@@ -10,7 +10,7 @@ function valid() {
 }
 
 test("six immutable proposal templates expose bounded module and field policies", () => {
-  assert.equal(proposalTemplates.length, 6); assert.deepEqual(proposalTemplates.map(item => item.id), ["meeting-notes", "project-plan", "progress-report", "metrics-data", "outcome-archive", "new-project-material"]);
+  assert.equal(proposalTemplates.length, 7); assert.deepEqual(proposalTemplates.map(item => item.id), ["meeting-notes", "project-plan", "progress-report", "metrics-data", "outcome-archive", "new-project-material", "interaction"]);
   assert.equal(getProposalTemplate("meeting-notes", "1.0.0").operations["task-network"].includes("delete"), false);
   assert.equal(getProposalTemplate("new-project-material", "1.0.0").operations.units.includes("create"), true);
   assert.equal(getProposalTemplate("missing", "1.0.0"), undefined);

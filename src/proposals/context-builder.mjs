@@ -3,10 +3,10 @@ import { createMaterialReadinessService } from "../materials/readiness-service.m
 import { createProjectRepository } from "../repositories/project-repository.mjs";
 import { proposalError } from "./errors.mjs";
 
-const MAX_MATERIALS = 8;
-const MAX_EVIDENCE = 48;
-const MAX_EVIDENCE_BYTES = 64 * 1024;
-const MAX_PUBLISHED_BYTES = 32 * 1024;
+export const MAX_MATERIALS = 8;
+export const MAX_EVIDENCE = 48;
+export const MAX_EVIDENCE_BYTES = 64 * 1024;
+export const MAX_PUBLISHED_BYTES = 32 * 1024;
 
 function stableUniqueIds(value) {
   if (!Array.isArray(value) || value.length < 1 || value.length > MAX_MATERIALS) throw proposalError("INVALID_MATERIAL_SELECTION", "请选择 1 至 8 份材料");
@@ -15,7 +15,7 @@ function stableUniqueIds(value) {
   return ids;
 }
 
-function boundedPublished(graph) {
+export function boundedPublished(graph) {
   const value = {
     projectId: graph.projectId,
     versionId: graph.versionId,

@@ -320,6 +320,11 @@ export function createApp(options) {
         if (!projectIdPattern.test(projectId)) throw new HttpError(404, "PROJECT_NOT_FOUND", "项目不存在或你无权访问");
         const principal = requirePrincipal(request); principalForError = principal;
         if (segments.length === 4 && request.method === "GET") return respond(response, 200, proposalService.listProposals(principal, projectId));
+        // Phase 8：交互发起的 manual proposal（拖拽卡片等）；需要 CSRF + editor 及以上权限，仍经审核合并。
+        if (segments.length === 4 && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 201, await proposalService.createInteractionProposal(principal, projectId, await readJson(request, 32 * 1024)));
+        }
         if (segments.length === 5 && request.method === "GET") return respond(response, 200, proposalService.getProposal(principal, projectId, segments[4]));
         if (segments.length === 6 && segments[5] === "review" && request.method === "GET") return respond(response, 200, reviewService.getReview(principal, projectId, segments[4]));
         if (segments.length === 7 && segments[5] === "review" && request.method === "PATCH") {

@@ -225,3 +225,69 @@
 - 详细上下文已固化到 `.planning/phases/08-roadmap-visual-workbench/CONTEXT.md`；当前没有实现 Phase 8 代码，也没有把产品方向误记为完成结果。
 - 本会话 Codex imagegen 多次调用均在图像生成 endpoint 超时，未生成效果图；该工具环境问题已记录在交接与 Context，不影响后续设计和编码。
 - 文档固化后在可监听本机环境执行 `npm run verify`：144/144 自动化测试、浏览器证据、迁移、隔离、Xugu 等价与参考只读检查均通过。受限沙盒中的同命令因 `127.0.0.1` 监听权限报 `EPERM`，不是产品回归。
+
+## 2026-07-20：引入全自动浏览器 E2E（Playwright）
+
+状态：`accepted`
+
+- 用户确认现有测试为后台驱动 + 静态源码断言 + 预录证据哈希校验，不存在实时浏览器自动化；要求建立全自动端到端测试。
+- 方向（默认模式合理假设，可随时修正）：采用 Playwright + Chromium；首轮覆盖登录、项目检索/切换、路线图深链与就地详情、材料→生成→审核→草稿合并→发布/回滚的核心闭环，以及跨项目 404、角色矩阵、CSRF 等隔离回归。
+- 接入方式：新增 `npm run test:e2e`，并在 `scripts/verify.mjs` 尾部串联，保持 `npm run verify` 单条命令全绿。
+- 本阶段不改变已完成的 Phase 1–7 产品行为；E2E 仅新增测试层与可复用的浏览器 fixture 启动约定。
+- 已完成：4 个 spec、18 个浏览器用例在可监听环境一次跑通；接入 `npm run verify`；`npm run verify` 现在可监听环境输出 144 后台测试 + 18 E2E 全绿。
+
+## 2026-07-20：Phase 8 实施
+
+状态：`accepted / delivered`
+
+### 设计决策
+
+- Roadmap 模块承载四种受控视图，通过同一路由的 `?view=` 查询参数切换：`timeline`（活动路线图）、`board`（阶段卡片板）、`units`（作战单元进度）、`network`（依赖网络）；保留 `?stage=&unit=&task=` 深链与选中态，view 参数与对象参数正交。默认 view 由模板 viewVariant 决定，现有曲线 SVG 作为 timeline 视图的战略概览保留。
+- 扩展 `loadRoadmap` DTO：在 stages/closures/workstreams 基础上投影 units/tasks/edges，让活动路线图的时间列、卡片板的任务卡、单元进度和依赖网络共享同一数据源（VIS-05）。
+- 卡片板拖拽不直写 draft/published。拖拽生成一个 manual `ChangeProposal`：`POST /api/projects/:id/change-proposals`。该 API 复用现有 validator（Schema、证据、日期、依赖 DAG、重复、版本冲突），锁定当前 published 版本，保存为 pending 后进入既有审核流。与 generation 不同，manual proposal 无 jobId，来源标记为 interaction。
+- 证据边界遵守 validator 现有规则：state/progress/owner/dates 等高影响字段必须引用本项目已就绪材料证据；纯 plan 类（如非完成状态、非高影响字段的计划调整）允许无证据。拖拽表单从项目已就绪材料加载证据供勾选引用，高影响字段必选证据后才可提交。
+- 审核卡片：在现有提案详情基础上，proposals 列表页以 proposal-item 卡片呈现新增/更新/归档/关键缺失，复用既有接受/编辑后接受/驳回/合并/发布边界。
+- 桌面端保持 Xugu 白色顶部导航、暖色指挥背景、作战语言；工作画布采用浅蓝灰底、深海军蓝文字、蓝色主操作、浅绿目标卡、浅橙关键缺失/风险卡。
+
+### 完成记录
+
+- 四视图渲染、视图切换器、阶段卡片板状态泳道、作战单元进度（含点击/键盘 unit= 深链）、依赖网络与共享 DTO（`loadRoadmap` 投影 units/tasks/edges）全部落地，视图只投影同一版本图、不改变 published/draft/proposal 边界。
+- 交互提案服务 `createInteractionProposal` 落地：锁定当前 published、复用 validator、保存为 pending，不调用 LLM、不创建 generation job；引用证据必须属于本项目已就绪材料，跨项目/不存在证据返回 EVIDENCE_NOT_ALLOWED。
+- 卡片板拖拽表单改为证据引用式：从项目已就绪材料加载证据供勾选，高影响字段（state）必选证据后才提交，仍经审核与 copy-on-write 草稿合并。
+- 验证：148 项后台测试 + 26 项 Playwright E2E（含 Phase 8 的 8 项）在可监听环境全绿；新增 `test/interaction-proposal.test.mjs` 4 项交互提案服务层契约测试；参考虚谷应用未变。
+- 文档：`.planning/phases/08-roadmap-visual-workbench/SPEC.md`、`VERIFICATION.md` 已写入；RESULT/STATE/HANDOFF/ROADMAP 已把 Phase 8 标记完成，平台版本升至 `0.8.0`。
+
+## 2026-07-20：路线图模块化重设计（粗主线 + 支线下钻）
+
+状态：`accepted for implementation`
+### 完成记录
+
+- 已落地：`roadmapSvg` 移除分支胶囊、节点下挂模块摘要芯片（`N 单元 · M 任务 · X%`，`pointer-events:none` 不拦截节点点击）；`renderRoadmap` 移除时间列与全展开分支图，改为模块检查器 + 作战单元模块卡片网格下钻；新增 `stageModuleSummary` 聚合 helper。
+- 修复两个交互缺陷：摘要芯片原先内嵌在 `route-node` 分组里导致节点点击落空——已移到 svg 层并禁用指针事件；任务按钮点击原先冒泡到单元卡片的 `selectUnit`（清空 `task`）——已加 `stopPropagation`。
+- 修复 E2E 端口冲突：`test/e2e/03|04|05` 把 `BASE` 硬编码为 `4191`，导致 API 登录打到遗留进程的 5 次/15 分钟限流；改为读取 `E2E_PORT`。`scripts/verify.mjs` 的 Playwright 步骤改为自动选空闲端口，避免与运行中实例冲突。
+- 验证：`npm run verify` 全绿——148 项后台测试 + 26 项 Playwright E2E（含 Phase 8 全部视图与下钻）+ Phase 3–6 浏览器证据；参考虚谷应用未变。
+- 状态更新：`implemented and verified`。
+
+### 背景
+用户在审阅活动路线图后指出：当一个项目有很多支线（作战单元）时，主线不必那么细，应当粗一点、模块化——把支线做成可下钻的模块，而非把所有分支与任务都堆在主线和详情里。
+
+之前的 Phase 8 已确立"采用 Aha 式时间列活动路线图与 Trello 式状态卡片板的信息组织原则"。本次重设计把这个原则落到活动路线图（timeline）视图的**展示层**。
+
+### 问题（当前活动路线图三重密度）
+1. SVG 曲线的选中节点上挂最多 6 个作战单元分支胶囊。
+2. 曲线下方的时间列（activity-timeline）对每个阶段列出归入该窗口的全部任务。
+3. 节点详情里的分支图（stage-branch-map）又把全部作战单元分支及其全部任务再展开一遍。
+
+结果：29 个任务在时间列与分支图各出现一次，加上 SVG 分支胶囊，主线信息过密。
+
+### 设计决策（Aha + Trello 模型）
+- **粗主线（Aha 式层级抽象）**：SVG 只保留阶段节点；移除节点上的分支胶囊。每个节点下方放一个紧凑**模块摘要芯片**，显示该阶段窗口内 `N 个作战单元 · M 个任务 · X%`，让主线一眼可扫到每个阶段的模块重量与进度。
+- **支线下钻（Trello 式卡片→点击展开）**：节点详情改为**模块检查器**——阶段说明 + 模块摘要条 + 作战单元**模块卡片网格**。点击单元模块卡片写入 `unit=` 深链，只展开该单元的任务列表；点击任务写入 `task=` 深链，就地展开任务详情（复用 `taskInlineDetail`）。同一时间只展开选中的单元，避免全展开。
+- **移除冗余**：移除 activity-timeline 时间列与全展开 stage-branch-map，二者由模块检查器的下钻替代。
+- **保留契约**：四个视图（timeline/board/units/network）、`?view=&stage=&unit=&task=` 正交深链、选中态、就地详情、键盘可访问、Trello 式卡片板拖拽提案边界全部不变；board/units/network 视图已符合模块化原则，本次不改。
+
+### 实施范围
+- `public/modules/renderers.js`：`roadmapSvg`（移除分支胶囊、加模块摘要芯片）、`renderRoadmap`（移除时间列与全展开分支图、新增模块检查器与单元模块卡片下钻）、新增 `stageModuleSummary` 聚合 helper。
+- `public/styles.css`：新增 `.module-summary-chip`(SVG)、`.module-inspector`、`.module-summary-strip`、`.unit-module-grid`、`.unit-module-card`；移除 `.branch-chip`/`.route-branch-summary` 相关样式。
+- `test/module-ui-server.test.mjs`、`test/e2e/02-roadmap-deeplinks.spec.mjs`：把分支胶囊断言改为单元模块卡片下钻断言。
+- 本方向只改展示层，不改 published/draft/proposal 边界、不改 loadRoadmap DTO、不调用 LLM。

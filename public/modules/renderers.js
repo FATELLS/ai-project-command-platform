@@ -203,13 +203,13 @@ export function renderUnits(context) {
   ]);
 }
 
-function roadmapSvg(context, stages, selectedStageId, branchGroups = [], selectedUnitId = "") {
+function roadmapSvg(context, stages, selectedStageId, stageSummaries = new Map()) {
   const width = Math.max(760, stages.length * 180 + 80);
   const height = context.module.viewVariant === "campaign-network" ? 390 : 290;
   const svg = svgEl("svg", { class: "roadmap-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-labelledby": "roadmap-svg-title roadmap-svg-desc" });
   svg.append(svgEl("title", { id: "roadmap-svg-title" }, []), svgEl("desc", { id: "roadmap-svg-desc" }, []));
   svg.querySelector("title").textContent = `${context.module.title}可视化`;
-  svg.querySelector("desc").textContent = `${stages.length} 个顺序阶段；完整文本见图后列表。`;
+  svg.querySelector("desc").textContent = `${stages.length} 个顺序阶段；点击节点下钻该阶段的${context.presentation.unit}模块。`;
   const points = stages.map((_, index) => ({
     x: stages.length === 1 ? width / 2 : 70 + index * ((width - 140) / (stages.length - 1)),
     y: context.module.viewVariant === "campaign-network" ? 135 + (index % 2 ? 30 : -15) : 115
@@ -217,6 +217,8 @@ function roadmapSvg(context, stages, selectedStageId, branchGroups = [], selecte
   if (stages.length > 1) {
     svg.append(svgEl("path", { d: routePath(points), class: "route-line", fill: "none" }));
   }
+  const unitTerm = context.presentation.unit;
+  const taskTerm = context.presentation.task;
   stages.forEach((stage, index) => {
     const { x, y } = points[index];
     const group = svgEl("g", {
@@ -232,100 +234,111 @@ function roadmapSvg(context, stages, selectedStageId, branchGroups = [], selecte
     const label = svgEl("text", { x, y: y + 62, "text-anchor": "middle", class: "route-label" }); label.textContent = stage.title;
     const date = svgEl("text", { x, y: y + 82, "text-anchor": "middle", class: "route-date" }); date.textContent = safeText(stage.dateLabel, "待确认");
     group.append(number, label, date);
+    // Phase 8 模块化：粗主线不挂分支胶囊，节点下方放模块摘要芯片
+    const summary = stageSummaries.get(stage.id) ?? { units: 0, tasks: 0, progress: null };
+    const chipText = summary.tasks ? `${summary.units} ${unitTerm} · ${summary.tasks} ${taskTerm}${summary.progress != null ? ` · ${summary.progress}%` : ""}` : `无${taskTerm}`;
+    const chipWidth = Math.min(168, Math.max(108, [...chipText].length * 9 + 22));
+    const chipX = x - chipWidth / 2;
+    const chipY = y + 92;
+    const chip = svgEl("g", { class: `module-summary-chip${stage.id === selectedStageId ? " selected" : ""}`, "aria-hidden": "true", "pointer-events": "none" });
+    chip.append(svgEl("rect", { x: chipX, y: chipY, width: chipWidth, height: 30, rx: 15 }));
+    const chipLabel = svgEl("text", { x, y: chipY + 19, "text-anchor": "middle", class: "module-summary-label" });
+    chipLabel.textContent = chipText;
+    chip.append(chipLabel);
     svg.append(group);
+    svg.append(chip);
   });
-  const selectedIndex = stages.findIndex(stage => stage.id === selectedStageId);
-  const selectedPoint = points[selectedIndex];
-  if (selectedPoint && branchGroups.length) {
-    const visibleBranches = branchGroups.slice(0, 6);
-    const hiddenCount = Math.max(0, branchGroups.length - visibleBranches.length);
-    const chipWidth = 88, chipHeight = 30, gap = 10;
-    const totalWidth = visibleBranches.length * chipWidth + (visibleBranches.length - 1) * gap;
-    const startX = Math.max(20, Math.min(width - totalWidth - 20, selectedPoint.x - totalWidth / 2));
-    const branchesAbove = selectedPoint.y > 145;
-    const branchY = branchesAbove ? 38 : 292;
-    const railY = branchY + chipHeight / 2;
-    const elbowX = Math.max(84, Math.min(width - 84, selectedPoint.x + (selectedPoint.x > width / 2 ? -74 : 74)));
-    const nodeExitY = selectedPoint.y + (branchesAbove ? -34 : 34);
-    const hubY = branchesAbove ? Math.min(selectedPoint.y - 58, railY) : Math.max(selectedPoint.y + 100, railY - 38);
-    const summary = svgEl("g", { class: "route-branch-summary", "aria-label": `${safeText(stages[selectedIndex].title)}包含${branchGroups.length}个${context.presentation.unit}分支` });
-    summary.append(svgEl("path", { d: `M ${selectedPoint.x},${nodeExitY} C ${selectedPoint.x},${hubY} ${elbowX},${hubY} ${elbowX},${railY}`, class: "branch-spine", fill: "none" }));
-    visibleBranches.forEach((group, index) => {
-      const x = startX + index * (chipWidth + gap);
-      const y = branchY + (index % 2 ? 18 : 0);
-      const centerX = x + chipWidth / 2;
-      summary.append(svgEl("path", { d: `M ${elbowX},${railY} C ${elbowX},${y + chipHeight / 2} ${centerX},${railY} ${centerX},${y + chipHeight / 2}`, class: "branch-line", fill: "none" }));
-      const chip = svgEl("g", {
-        class: `branch-chip${group.unitId === selectedUnitId ? " selected" : ""}`,
-        tabindex: "0",
-        role: "button",
-        "aria-pressed": group.unitId === selectedUnitId ? "true" : "false",
-        "aria-label": `${group.unitName}，${group.tasks.length} 个${context.presentation.task}`,
-        "data-unit-id": group.unitId
-      });
-      chip.append(svgEl("rect", { x, y, width: chipWidth, height: chipHeight, rx: 15 }));
-      const label = svgEl("text", { x: x + 11, y: y + 19, class: "branch-label" });
-      label.textContent = safeText(group.unitName).replace(/作战单元$/, "").slice(0, 5);
-      const count = svgEl("text", { x: x + chipWidth - 10, y: y + 19, "text-anchor": "end", class: "branch-count" });
-      count.textContent = `${group.tasks.length}`;
-      chip.append(label, count);
-      summary.append(chip);
-    });
-    if (hiddenCount) {
-      const more = svgEl("text", { x: startX + totalWidth + 8, y: branchY + 21, class: "branch-more" });
-      more.textContent = `+${hiddenCount}`;
-      summary.append(more);
-    }
-    svg.append(summary);
-  }
   return svg;
 }
 
 export function renderRoadmap(context) {
+  // Phase 8：四种受控视图通过同一路由的 ?view= 切换，共享 stage/unit/task 深链。
+  // timeline 采用粗主线（阶段节点 + 模块摘要芯片）+ 支线下钻（作战单元模块卡片）。
+  const defaultView = "timeline";
+  const view = context.query.get("view");
+  const activeView = ["timeline", "board", "units", "network"].includes(view) ? view : defaultView;
+  if (activeView === "board") return renderRoadmapBoard(context);
+  if (activeView === "units") return renderRoadmapUnits(context);
+  if (activeView === "network") return renderRoadmapNetwork(context);
   const stages = Array.isArray(context.data.stages) ? context.data.stages : [];
   if (!stages.length) return emptyState(context.module.emptyState);
   const requestedStageId = context.query.get("stage");
   const selectedStage = stages.find(item => item.id === requestedStageId) ?? stages.find(item => item.id === context.data.currentStageId) ?? stages[0];
-  const branchGroups = stageBranchGroups(context, selectedStage);
-  const selectedUnitId = context.query.get("unit");
-  const branchTasks = branchGroups.flatMap(group => group.tasks.map(task => ({ ...task, unitName: group.unitName })));
-  const selectedTask = branchTasks.find(task => task.id === context.query.get("task"));
-  const visual = roadmapSvg(context, stages, selectedStage.id, branchGroups, selectedUnitId);
+  // 模块化：每个阶段的聚合摘要挂在粗主线节点上（单元数/任务数/进度）
+  const stageSummaries = new Map();
+  for (const stage of stages) stageSummaries.set(stage.id, stageModuleSummary(context, stage));
+  const visual = roadmapSvg(context, stages, selectedStage.id, stageSummaries);
   visual.addEventListener("click", event => {
     const stageId = event.target.closest?.("[data-stage-id]")?.dataset.stageId;
-    const unitId = event.target.closest?.("[data-unit-id]")?.dataset.unitId;
-    if (unitId) { setQuery(context.navigate, { stage: selectedStage.id, unit: unitId, task: "" }); return; }
     if (stageId) setQuery(context.navigate, { stage: stageId, unit: "", task: "" });
   });
   visual.addEventListener("keydown", event => {
     if (!["Enter", " "].includes(event.key)) return;
     const stageId = event.target.closest?.("[data-stage-id]")?.dataset.stageId;
-    const unitId = event.target.closest?.("[data-unit-id]")?.dataset.unitId;
-    if (unitId) { event.preventDefault(); setQuery(context.navigate, { stage: selectedStage.id, unit: unitId, task: "" }); return; }
     if (stageId) { event.preventDefault(); setQuery(context.navigate, { stage: stageId, unit: "", task: "" }); }
   });
+  return el("div", {}, [
+    el("section", { className: "module-primary-card roadmap-workbench" }, [
+      roadmapViewSwitcher(context),
+      el("header", { className: "roadmap-workbench-heading" }, [
+        cardHeading(context.module.viewVariant === "campaign-network" ? "CAMPAIGN ROUTE" : "LINEAR ROADMAP", context.module.title, `点击${context.presentation.stage}可切换到对应节点；主线只显示节点与模块摘要，支线作为${context.presentation.unit}模块下钻。`)
+      ]),
+      localScroller(`${context.module.title}路线图，可水平滚动`, visual)
+    ]),
+   buildModuleInspector(context, selectedStage)
+ ]);
+}
+
+// 模块化：单个阶段的作战单元/任务聚合摘要（粗主线芯片用）
+function stageModuleSummary(context, stage) {
+  const groups = stageBranchGroups(context, stage);
+  const tasks = groups.flatMap(group => group.tasks);
+  const units = groups.length;
+  const progress = tasks.length ? Math.round((tasks.filter(task => Number(task.progress) >= 100 || ["done", "completed", "完成", "已完成"].includes(String(task.state ?? "").toLowerCase())).length / tasks.length) * 100) : null;
+  return { units, tasks: tasks.length, progress };
+}
+
+// 模块化：阶段模块检查器——阶段说明 + 模块摘要条 + 作战单元模块卡片（点击单元下钻到任务）
+function buildModuleInspector(context, selectedStage) {
+  const unitTerm = context.presentation.unit;
+  const taskTerm = context.presentation.task;
+  const groups = stageBranchGroups(context, selectedStage);
+  const summary = stageModuleSummary(context, selectedStage);
+  const selectedUnitId = context.query.get("unit");
+  const selectedTaskId = context.query.get("task");
   const stageAssets = Array.isArray(selectedStage.previewAssets) ? selectedStage.previewAssets : [];
-  const orderedBranchGroups = selectedUnitId ? [...branchGroups].sort((left, right) => (right.unitId === selectedUnitId) - (left.unitId === selectedUnitId)) : branchGroups;
-  const branchMap = branchGroups.length ? el("section", { className: "stage-branch-map", ariaLabel: `${selectedStage.title}作战分支` }, [
-    el("header", {}, [el("span", { className: "eyebrow", text: "BRANCHES" }), el("h3", { text: `${context.presentation.unit}分支任务` })]),
-    el("div", { className: "stage-branch-lanes" }, orderedBranchGroups.map(group => el("article", { className: `stage-branch-lane${group.unitId === selectedUnitId ? " selected" : ""}` }, [
-      el("h4", { text: group.unitName }),
-      el("div", { className: "stage-task-chips" }, group.tasks.map(task => el("div", { className: `stage-task-item${task.id === selectedTask?.id ? " selected" : ""}` }, [
-        el("button", {
-          type: "button",
-          className: "stage-task-chip",
-          ariaPressed: task.id === selectedTask?.id ? "true" : "false",
-          onClick: () => setQuery(context.navigate, { stage: selectedStage.id, task: task.id })
-        }, [el("strong", { text: task.title }), el("small", { text: `${safeText(task.startDate, "待排期")} → ${safeText(task.endDate, "待确认")} · ${statusText(task.state)}` })]),
-        task.id === selectedTask?.id ? taskInlineDetail(context, task, group.unitName) : null
-      ])))
-    ])))
-  ]) : el("section", { className: "stage-branch-map empty-preview" }, [el("h3", { text: `暂无映射到该${context.presentation.stage}的分支任务` }), el("p", { text: "当前发布数据未提供可按时间窗口归入该节点的任务；后续材料可通过提案补充任务日期或更明确的阶段归属。" })]);
-  const stageDetail = el("section", { className: "selection-detail stage-node-detail", tabIndex: -1 }, [
+  const orderedGroups = selectedUnitId ? [...groups].sort((left, right) => (right.unitId === selectedUnitId) - (left.unitId === selectedUnitId)) : groups;
+  const unitCards = orderedGroups.map(group => {
+    const isSelected = group.unitId === selectedUnitId;
+    const selectUnit = () => setQuery(context.navigate, { unit: group.unitId, task: "" });
+    const unitProgress = group.tasks.length ? Math.round((group.tasks.filter(task => Number(task.progress) >= 100 || ["done", "completed", "完成", "已完成"].includes(String(task.state ?? "").toLowerCase())).length / group.tasks.length) * 100) : null;
+    return el("article", {
+      className: `unit-module-card${isSelected ? " selected" : ""}`,
+      "data-unit-id": group.unitId,
+      tabIndex: 0,
+      role: "button",
+      ariaLabel: `${group.unitName}，${group.tasks.length}${taskTerm}${unitProgress != null ? `，完成度 ${unitProgress}%` : ""}`,
+      onClick: selectUnit,
+      onKeyDown: event => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); selectUnit(); } }
+    }, [
+      el("header", {}, [el("h4", { text: group.unitName }), el("span", { className: "badge neutral", text: `${group.tasks.length}${taskTerm}` })]),
+      unitProgress != null ? el("div", { className: "unit-progress-bar" }, [el("div", { className: "unit-progress-fill", style: `width:${unitProgress}%` }), el("span", { text: `${unitProgress}%` })]) : null,
+      isSelected && group.tasks.length ? el("ul", { className: "unit-module-tasks" }, group.tasks.map(task => el("li", { className: `stage-task-item${task.id === selectedTaskId ? " selected" : ""}` }, [
+        el("button", { type: "button", className: "stage-task-chip", ariaPressed: task.id === selectedTaskId ? "true" : "false", onClick: event => { event.stopPropagation(); setQuery(context.navigate, { unit: group.unitId, task: task.id }); } }, [el("strong", { text: task.title }), el("small", { text: `${safeText(task.startDate, "待排期")} → ${safeText(task.endDate, "待确认")} · ${statusText(task.state)}` })]),
+        task.id === selectedTaskId ? taskInlineDetail(context, task, group.unitName) : null
+      ]))) : null
+    ]);
+  });
+  const modulesSection = groups.length ? el("section", { className: "unit-module-section" }, [
+    el("header", {}, [el("span", { className: "eyebrow", text: "MODULES" }), el("h3", { text: `${unitTerm}模块（点击展开${taskTerm}）` })]),
+    el("div", { className: "unit-module-grid" }, unitCards)
+  ]) : el("section", { className: "unit-module-section empty-preview" }, [el("h3", { text: `暂无映射到该${context.presentation.stage}的${unitTerm}模块` }), el("p", { text: "当前发布数据未提供可按时间窗口归入该节点的任务；后续材料可通过提案补充任务日期或更明确的阶段归属。" })]);
+  return el("section", { className: "selection-detail stage-node-detail module-inspector", tabIndex: -1 }, [
     el("div", { className: "stage-node-copy" }, [
       el("span", { className: `badge ${["complete", "current"].includes(stateClass(selectedStage.state, selectedStage.id === context.data.currentStageId)) ? "active" : "archived"}`, text: statusText(selectedStage.state) }),
       el("h2", { text: selectedStage.title }),
-      definitionList([["日期", selectedStage.dateLabel], ["说明", selectedStage.description], ["预期产出", selectedStage.expectedOutput]])
+      definitionList([["日期", selectedStage.dateLabel], ["说明", selectedStage.description], ["预期产出", selectedStage.expectedOutput]]),
+      el("p", { className: "module-summary-strip", text: summary.tasks ? `${summary.units} 个${unitTerm} · ${summary.tasks} 个${taskTerm}${summary.progress != null ? ` · 整体 ${summary.progress}%` : ""}` : `该${context.presentation.stage}暂无${taskTerm}` })
     ]),
     el("article", { className: "stage-preview" }, [
       el("h3", { text: safeText(selectedStage.previewTitle, `${context.presentation.stage}预览`) }),
@@ -334,14 +347,209 @@ export function renderRoadmap(context) {
         el("img", { src: asset.startsWith("/") ? asset : `/${asset.replace(/^\.\//, "")}`, alt: `${selectedStage.title}预览 ${index + 1}` })
       ]))) : el("small", { text: "无本地预览" })
     ]),
-    branchMap
+    modulesSection
   ]);
+}
+
+// Phase 8：四种视图切换器（segmented control）。view 与 stage/unit/task 深链正交。
+function roadmapViewSwitcher(context) {
+  const current = context.query.get("view") || "timeline";
+  const views = [["timeline", "活动路线图"], ["board", "阶段卡片板"], ["units", `${context.presentation.unit}进度`], ["network", "依赖网络"]];
+  return el("nav", { className: "roadmap-view-switcher", ariaLabel: "路线图视图" }, views.map(([value, label]) => {
+    const params = new URLSearchParams(context.query.toString());
+    if (value === "timeline") params.delete("view"); else params.set("view", value);
+    const href = `?${params.toString()}`;
+    return el("a", { href, className: current === value ? "active" : "", ariaCurrent: current === value ? "page" : null, text: label, onClick: event => { event.preventDefault(); context.navigate(href); } });
+  }));
+}
+
+// 阶段卡片板：按任务状态泳道排列，卡片可拖拽；拖拽只发起受控提案，不直写 draft/published
+function renderRoadmapBoard(context) {
+  const tasks = Array.isArray(context.data.tasks) ? context.data.tasks : [];
+  const units = context.data.units ?? [];
+  const selectedTaskId = context.query.get("task");
+  const selectedUnit = context.query.get("unit");
+  const canPropose = ["platform_admin", "project_admin", "project_editor"].includes(context.project.role);
+  const lanes = [
+    ["todo", "待确认", ["planned", "todo", "待确认", ""]],
+    ["doing", "进行中", ["in-progress", "doing", "进行中"]],
+    ["review", "待审核", ["review", "待审核", "in-review"]],
+    ["done", "已完成", ["done", "completed", "完成", "已完成"]]
+  ];
+  function laneOf(task) {
+    const s = String(task.state ?? "").toLowerCase();
+    for (const [id, , keys] of lanes) if (keys.some(k => k && s === String(k).toLowerCase())) return id;
+    return "todo";
+  }
+  const byLane = { todo: [], doing: [], review: [], done: [] };
+  const visibleTasks = selectedUnit ? tasks.filter(t => t.unitId === selectedUnit) : tasks;
+  for (const task of visibleTasks) byLane[laneOf(task)].push(task);
+  const unitSelector = el("select", { ariaLabel: `筛选${context.presentation.unit}` }, [el("option", { value: "", text: `全部${context.presentation.unit}` }), ...units.map(unit => el("option", { value: unit.id, text: unit.name }))]);
+  unitSelector.value = selectedUnit;
+  unitSelector.addEventListener("change", () => setQuery(context.navigate, { unit: unitSelector.value, task: "" }));
   return el("div", {}, [
-    el("section", { className: "module-primary-card" }, [
-      cardHeading(context.module.viewVariant === "campaign-network" ? "CAMPAIGN ROUTE" : "LINEAR ROADMAP", context.module.title, `点击${context.presentation.stage}可切换到对应节点详情；路线几何由当前发布数据计算。`),
-      localScroller(`${context.module.title}路线图，可水平滚动`, visual)
+    el("section", { className: "module-primary-card roadmap-workbench roadmap-board" }, [
+      roadmapViewSwitcher(context),
+      cardHeading("STAGE BOARD", context.module.title, `拖拽${context.presentation.task}卡只发起结构化提案，不会直接修改草稿或发布版本。`),
+      el("div", { className: "visual-controls" }, [unitSelector]),
+      el("div", { className: "board-lanes" }, lanes.map(([id, label]) => el("section", { className: `board-lane lane-${id}`, dataset: { lane: id } }, [
+        el("header", {}, [el("h3", { text: label }), el("span", { className: "count-pill", text: String(byLane[id].length) })]),
+        el("div", { className: "board-cards" }, byLane[id].map(task => el("article", {
+          className: `board-card${task.id === selectedTaskId ? " selected" : ""}`,
+          draggable: canPropose,
+          dataset: { taskId: task.id, state: String(task.state ?? ""), lane: id },
+          tabIndex: 0,
+          role: "button",
+          ariaLabel: `${task.title}，${statusText(task.state)}，${safeText(task.owner, "待确认")}`,
+          onClick: () => setQuery(context.navigate, { task: task.id }),
+          onKeyDown: event => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); setQuery(context.navigate, { task: task.id }); } },
+          onDragStart: event => { event.dataTransfer.setData("text/plain", task.id); event.dataTransfer.effectAllowed = "move"; },
+          onDragEnd: () => {}
+        }, [
+          el("strong", { text: task.title }),
+          el("small", { text: `${(context.data.units ?? []).find(u => u.id === task.unitId)?.name ?? "—"} · ${safeText(task.owner, "待确认")}` }),
+          task.progress != null ? el("span", { className: "board-card-progress", text: `${task.progress}%` }) : null,
+          el("span", { className: `task-state state-${laneOf(task)}`, text: statusText(task.state) })
+        ])))
+      ]))),
+      canPropose ? el("p", { className: "board-hint", text: `把${context.presentation.task}卡拖到新泳道会生成待审核的结构化提案。` }) : el("p", { className: "board-hint", text: `只读访问者不能创建提案；切换视图查看${context.presentation.task}。` })
     ]),
-    stageDetail
+    boardDropTarget(context, lanes)
+  ]);
+}
+
+// 拖拽落点：拖到新泳道后打开提案表单，绝不直写
+function boardDropTarget(context, lanes) {
+  const target = el("div", { className: "board-drop-zone", ariaLive: "polite" });
+  const laneMap = new Map(lanes.map(([id, label, keys]) => [id, keys[1] ?? label]));
+  target.addEventListener("dragover", event => { event.preventDefault(); target.classList.add("drag-over"); });
+  target.addEventListener("dragleave", () => target.classList.remove("drag-over"));
+  target.addEventListener("drop", event => {
+    event.preventDefault();
+    target.classList.remove("drag-over");
+    const taskId = event.dataTransfer.getData("text/plain");
+    const card = document.querySelector(`[data-task-id="${CSS.escape(taskId)}"]`);
+    const fromLane = card?.dataset.lane;
+    const toLane = [...event.composedPath()].find(el => el?.dataset?.lane)?.dataset.lane;
+    if (!taskId || !toLane || fromLane === toLane) { target.textContent = "请把任务卡拖到不同的状态泳道。"; return; }
+    openInteractionProposal(context, taskId, toLane, laneMap.get(toLane), target);
+  });
+  target.textContent = `把${context.presentation.task}卡拖到目标泳道，生成结构化提案。`;
+  return target;
+}
+
+// 交互提案表单：拖拽发起的 manual ChangeProposal
+function openInteractionProposal(context, taskId, toLane, toLabel, container) {
+  const task = (context.data.tasks ?? []).find(t => t.id === taskId) ?? {};
+  // 高影响字段（state）必须引用证据：表单从项目已就绪材料加载证据，由用户勾选引用，仍经审核与合并。
+  const error = el("p", { className: "form-error", role: "alert" });
+  const submit = el("button", { type: "submit", className: "primary-button", text: "创建待审核提案", disabled: true });
+  const evidenceByMaterial = new Map(); // evidenceId -> materialId
+  const evidenceLoader = el("p", { className: "form-hint", text: "正在加载项目证据…" });
+  const evidenceField = el("fieldset", { className: "interaction-evidence-field" }, [el("legend", { text: "引用证据（推进状态必选）" }), evidenceLoader]);
+  const refreshSubmit = () => { submit.disabled = !evidenceField.querySelector("input[name=evidence]:checked"); };
+  (async () => {
+    try {
+      const materials = await context.api(`/api/projects/${encodeURIComponent(context.project.id)}/materials`);
+      const ready = (materials.items ?? []).filter(item => item.status === "ready" && Number(item.evidenceCount ?? 0) > 0);
+      if (!ready.length) { evidenceLoader.textContent = "尚无已就绪材料证据；先上传材料形成证据后再发起推进提案。"; return; }
+      const options = [];
+      for (const material of ready) {
+        const response = await context.api(`/api/projects/${encodeURIComponent(context.project.id)}/materials/${encodeURIComponent(material.id)}/evidence`);
+        for (const item of response.items ?? []) {
+          evidenceByMaterial.set(item.id, material.id);
+          const input = el("input", { type: "checkbox", value: item.id, name: "evidence" });
+          input.addEventListener("change", refreshSubmit);
+          options.push(el("label", { className: "interaction-evidence-option" }, [input, el("span", { text: `${safeText(material.name, material.id)} · ${locatorLabel(item)}` })]));
+        }
+      }
+      evidenceField.replaceChildren(el("legend", { text: "引用证据（推进状态必选）" }), ...options);
+    } catch (requestError) {
+      evidenceLoader.textContent = requestError.message;
+    }
+  })();
+  const form = el("form", { className: "interaction-proposal-form", onSubmit: async event => {
+    event.preventDefault();
+    error.textContent = "";
+    submit.disabled = true;
+    submit.textContent = "正在创建…";
+    const checked = [...evidenceField.querySelectorAll("input[name=evidence]:checked")].map(input => input.value);
+    const materialIds = [...new Set(checked.map(id => evidenceByMaterial.get(id)).filter(Boolean))];
+    try {
+      const changeId = `interaction-${crypto.randomUUID().slice(0, 8)}`;
+      const body = {
+        source: "board-drag",
+        summary: `拖拽提案：推进「${task.title ?? taskId}」到「${toLabel}」`,
+        materialIds,
+        evidenceIds: checked,
+        changes: [{ changeId, module: "task-network", operation: "update", targetId: taskId, semanticType: "plan", patch: { state: toLane }, confidence: 0.5, warnings: [], evidenceIds: checked }]
+      };
+      await context.api(`/api/projects/${encodeURIComponent(context.project.id)}/change-proposals`, { method: "POST", mutation: true, body });
+      container.replaceChildren(el("p", { className: "validation-pass", text: "已创建待审核提案。在审核工作区接受并合并后才会进入草稿。" }), linkTo(context, materialsUiPath(context, "?view=proposals"), "前往审核工作区", "primary-button"));
+    } catch (requestError) {
+      error.textContent = requestError.message;
+      submit.disabled = false;
+      submit.textContent = "创建待审核提案";
+    }
+  } }, [
+    el("p", { className: "material-boundary", text: "拖拽只创建结构化提案；高影响字段（状态、负责人、日期等）需经审核与合并才会进入草稿。" }),
+    definitionList([[context.presentation.task, task.title ?? taskId], ["当前状态", statusText(task.state)], ["目标状态", toLabel]]),
+    evidenceField,
+    error,
+    el("footer", { className: "sheet-actions" }, [submit])
+  ]);
+  container.replaceChildren(form);
+}
+
+// 作战单元进度视图：以单元为入口，展示覆盖阶段、任务、完成度
+function renderRoadmapUnits(context) {
+  const units = context.data.units ?? [];
+  const tasks = Array.isArray(context.data.tasks) ? context.data.tasks : [];
+  const stages = context.data.stages ?? [];
+  const selectedUnitId = context.query.get("unit");
+  const unitsWithTasks = units.map(unit => {
+    const unitTasks = tasks.filter(task => task.unitId === unit.id);
+    const done = unitTasks.filter(task => String(task.state ?? "").toLowerCase()).length;
+    const progress = unitTasks.length ? Math.round((unitTasks.filter(t => Number(t.progress) >= 100 || ["done", "completed", "完成", "已完成"].includes(String(t.state ?? "").toLowerCase())).length / unitTasks.length) * 100) : null;
+    return { ...unit, taskCount: unitTasks.length, progress, tasks: unitTasks };
+  });
+  const cards = unitsWithTasks.map(unit => {
+    const isSelected = unit.id === selectedUnitId;
+    const selectUnit = () => setQuery(context.navigate, { unit: unit.id, task: "" });
+    return el("article", { className: `unit-progress-card${isSelected ? " selected" : ""}`, dataset: { unitId: unit.id }, tabIndex: 0, role: "button", ariaLabel: `${unit.name}，${unit.taskCount}${context.presentation.task}${unit.progress != null ? `，完成度 ${unit.progress}%` : ""}`, onClick: selectUnit, onKeyDown: event => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); selectUnit(); } } }, [
+      el("header", {}, [el("h3", { text: unit.name }), unit.status && unit.status !== "active" ? el("span", { className: `badge archived`, text: unit.status }) : null]),
+      definitionList([["目标", unit.objective], ["负责人", unit.owner], [context.presentation.task, String(unit.taskCount)]]),
+      unit.progress != null ? el("div", { className: "unit-progress-bar" }, [el("div", { className: "unit-progress-fill", style: `width:${unit.progress}%` }), el("span", { text: `${unit.progress}%` })]) : null,
+      isSelected && unit.tasks.length ? el("ul", { className: "unit-task-list" }, unit.tasks.map(task => el("li", { className: `unit-task${task.id === context.query.get("task") ? " selected" : ""}`, onClick: () => setQuery(context.navigate, { unit: unit.id, task: task.id }) }, [el("strong", { text: task.title }), el("small", { text: statusText(task.state) })]))) : null
+    ]);
+  });
+  return el("div", {}, [
+    el("section", { className: "module-primary-card roadmap-workbench roadmap-units" }, [
+      roadmapViewSwitcher(context),
+      cardHeading(`${context.presentation.unit.toUpperCase()} PROGRESS`, context.module.title, `以${context.presentation.unit}为入口，查看覆盖${context.presentation.stage}、${context.presentation.task}与完成度。`),
+      cards.length ? el("div", { className: "unit-progress-grid" }, cards) : emptyState(context.module.emptyState)
+    ])
+  ]);
+}
+
+// 依赖网络视图：复用 task-network 数据，作为跨单元跨阶段阻塞关系入口
+function renderRoadmapNetwork(context) {
+  const tasks = Array.isArray(context.data.tasks) ? context.data.tasks : [];
+  const edges = context.data.edges ?? [];
+  const units = context.data.units ?? [];
+  const selectedTaskId = context.query.get("task");
+  const selectedUnit = context.query.get("unit");
+  const visible = selectedUnit ? tasks.filter(t => t.unitId === selectedUnit) : tasks;
+  const unitSelector = el("select", { ariaLabel: `筛选${context.presentation.unit}` }, [el("option", { value: "", text: `全部${context.presentation.unit}` }), ...units.map(unit => el("option", { value: unit.id, text: unit.name }))]);
+  unitSelector.value = selectedUnit;
+  unitSelector.addEventListener("change", () => setQuery(context.navigate, { unit: unitSelector.value, task: "" }));
+  return el("div", {}, [
+    el("section", { className: "module-primary-card roadmap-workbench roadmap-network" }, [
+      roadmapViewSwitcher(context),
+      cardHeading("DEPENDENCY NETWORK", context.module.title, `跨${context.presentation.unit}、跨${context.presentation.stage}的阻塞关系；点击${context.presentation.task}查看前置与后续。`),
+      el("div", { className: "visual-controls" }, [unitSelector]),
+      dependencyList(context, visible, selectedTaskId)
+    ])
   ]);
 }
 

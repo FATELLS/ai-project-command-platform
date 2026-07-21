@@ -24,7 +24,9 @@ export const proposalTemplates = Object.freeze([
   template("progress-report", "进度汇报", ["task-network", "risks", "outcomes", "metrics"], { "task-network": ["create", "update"], risks: ["create", "update"], outcomes: ["create", "update"], metrics: ["create", "update"] }),
   template("metrics-data", "指标数据", ["metrics"], { metrics: ["create", "update"] }),
   template("outcome-archive", "成果归档", ["outcomes"], { outcomes: ["create", "update"] }),
-  template("new-project-material", "新项目材料", ["overview", "units", "roadmap", "task-network", "risks", "metrics"], { overview: ["update"], units: ["create"], roadmap: ["create"], "task-network": ["create"], risks: ["create"], metrics: ["create"] })
+  template("new-project-material", "新项目材料", ["overview", "units", "roadmap", "task-network", "risks", "metrics"], { overview: ["update"], units: ["create"], roadmap: ["create"], "task-network": ["create"], risks: ["create"], metrics: ["create"] }),
+  // Phase 8：交互发起的 manual proposal，覆盖任务/单元/路线的受控更新；仍经审核合并，不绕过版本边界。
+  template("interaction", "交互提案", ["task-network", "units", "roadmap", "gantt"], { "task-network": ["create", "update"], units: ["create", "update"], roadmap: ["create", "update"], gantt: ["create", "update"] })
 ]);
 
 export function getProposalTemplate(id, version = "1.0.0") {

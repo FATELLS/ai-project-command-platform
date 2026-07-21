@@ -188,15 +188,29 @@ const required = [
 ];
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
+  const spawnOptions = {
     cwd: options.cwd ?? root,
     encoding: "utf8",
     stdio: options.capture ? "pipe" : "inherit"
-  });
+  };
+  if (options.env) spawnOptions.env = options.env;
+  const result = spawnSync(command, args, spawnOptions);
   if (result.status !== 0) {
     throw new Error(`${command} ${args.join(" ")} failed\n${result.stdout || ""}${result.stderr || ""}`);
   }
   return options.capture ? result.stdout.trim() : "";
+}
+// 选一个空闲端口给 E2E：避免与已在 4191/4190 等端口运行的实例冲突导致登录撞限流。
+function findFreePort() {
+  return new Promise((resolvePort, rejectPort) => {
+    const probe = createServer();
+    probe.unref();
+    probe.on("error", rejectPort);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close(() => resolvePort(port));
+    });
+  });
 }
 
 function sha256(content) {
@@ -298,7 +312,11 @@ for (const file of [
   "public/modules/shared.js",
   "public/modules/renderers.js"
 ]) run(process.execPath, ["--check", file]);
-run(process.execPath, ["--test"]);
+run(process.execPath, ["--test", "test/*.test.mjs"]); // 显式 glob：避免 node --test 默认发现误跑 test/e2e/fixtures/server.mjs（会阻塞的 fixture server）
+// 全自动浏览器 E2E（Playwright + Chromium）：需要可监听 127.0.0.1 的运行环境。
+// 受限沙盒如禁止端口监听会报 EPERM；在可监听环境中必须通过。
+const e2ePort = await findFreePort();
+run("npx", ["playwright", "test", "--reporter=list"], { env: { ...process.env, E2E_PORT: String(e2ePort) } });
 run(process.execPath, ["scripts/verify-browser-evidence.mjs", ".planning/evidence/phase3-browser-matrix.json"]);
 
 const phase4BrowserMatrix = join(root, ".planning/evidence/phase4-browser-matrix.json");
@@ -409,4 +427,4 @@ try {
 }
 
 assert.deepEqual(await referenceSnapshot(), referenceBefore, "read-only Xugu reference project changed during verification");
-console.log("Verification passed: Phase 7 material readiness, unit lifecycle gates, diagnostics, product self-tests, Phase 6 review/publish, project isolation, browser evidence, Xugu equivalence, and source read-only checks are valid.");
+console.log("Verification passed: Phase 8 roadmap visual workbench (four views, controlled drag-to-proposal, card review), Phase 7 material readiness, unit lifecycle gates, diagnostics, product self-tests, Phase 6 review/publish, project isolation, browser evidence, Xugu equivalence, source read-only checks, and Playwright browser E2E are valid.");

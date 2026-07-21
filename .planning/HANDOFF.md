@@ -14,10 +14,12 @@
 8. `.planning/phases/06-review-publish-operations/VERIFICATION.md`
 9. `.planning/phases/07-release-hardening-material-readiness/CONTEXT.md`
 10. `.planning/phases/08-roadmap-visual-workbench/CONTEXT.md`
+11. `.planning/phases/08-roadmap-visual-workbench/SPEC.md`
+12. `.planning/phases/08-roadmap-visual-workbench/VERIFICATION.md`
 
 ## 当前状态
 
-- Phase 1–7 已实现并通过验收，平台版本为 `0.7.0`；Phase 8“路线图可视化工作台与卡片化审核”已经确认产品方向，尚未实施。
+- Phase 1–8 已实现并通过验收，平台版本为 `0.8.0`；Phase 8“路线图可视化工作台与卡片化审核”已交付（四视图、拖拽到受控提案、卡片化审核）。
 - 首个项目 `xugu-agentic-group` 与参考 v4.2 脱敏种子语义一致。
 - `xugu-agentic-group` 是首个 Xugu Agentic Group Schedule 作战项目；详情页标题、Banner、状态提示、事实与模块标签均按项目模板/术语配置渲染，新增标准项目不得复用 Xugu 作战文案。
 - 已有认证、基础角色、项目生命周期、项目切换、九类发布态模块，以及管理员/编辑者只写草稿的模块排序与启停 UI/API。
@@ -49,6 +51,8 @@
 - 审核与发布：`src/review/`、`src/release/`、`src/versions/`、迁移 `006_review_publish_operations.sql`
 - 运维与成员：`src/operations/database-backup.mjs`、`src/services/member-service.mjs`、`scripts/backup-database.mjs`、`scripts/restore-database.mjs`
 - Phase 7 运维硬化：`src/materials/readiness-service.mjs`、`src/operations/observability.mjs`、`src/operations/product-test-service.mjs`、迁移 `007_release_hardening_readiness_observability.sql`
+- 全自动浏览器 E2E：`playwright.config.mjs`、`test/e2e/`（spec 与 `fixtures/server.mjs` fixture server、`helpers.mjs`、`global-setup.mjs`）
+- Phase 8 路线图工作台：`public/modules/renderers.js`（`renderRoadmap`/`renderRoadmapBoard`/`renderRoadmapUnits`/`renderRoadmapNetwork`、`activityTimelineColumns`、`openInteractionProposal`）、`src/modules/loaders.mjs`（units/tasks/edges 投影）、`src/services/proposal-service.mjs`（`createInteractionProposal`）、`src/proposals/catalog.mjs`（`interaction` 模板）、`test/interaction-proposal.test.mjs`、`test/e2e/05-roadmap-views.spec.mjs`
 
 ## 运行与验证
 
@@ -58,7 +62,9 @@
 npm run verify
 ```
 
-当前通过 144 项自动化测试、临时数据库/API/静态冒烟、Xugu 语义等价、Phase 3–6 共十九张浏览器证据哈希/尺寸机检、备份恢复、诊断/自检接口、敏感文件检查和参考项目只读校验。
+当前通过 148 项自动化测试、临时数据库/API/静态冒烟、Xugu 语义等价、Phase 3–6 共十九张浏览器证据哈希/尺寸机检、备份恢复、诊断/自检接口、敏感文件检查和参考项目只读校验。
+
+E2E（`npm run test:e2e`，首次需 `npm run e2e:install` 安装 Chromium）：自动启动临时数据库的 fixture server + Chromium，跑 26 个浏览器用例（登录导航、路线图深链与模块化下钻、材料→生成→审核→发布/回滚、隔离与安全），已接入 `npm run verify`。`node --test` 显式限定 `test/*.test.mjs`，避免默认发现把 fixture server 当作测试文件阻塞。`verify` 的 Playwright 步骤自动选空闲端口，避免与运行中实例冲突；`test/e2e/03|04|05` 的 `BASE` 读 `E2E_PORT`。受限沙盒如禁止监听 `127.0.0.1` 会报 `EPERM`，属环境限制非回归；E2E 必须在可监听端口的环境运行。
 
 ## 风险和边界
 
@@ -69,7 +75,8 @@ npm run verify
 
 ## 下一步
 
-- 先读取 Phase 8 Context，然后完成 UI 设计契约、数据投影/DTO 设计、拖拽到提案的安全语义与测试计划；未完成这些工作前不得直接把卡片拖拽写成草稿更新。
+- Phase 8 设计契约与验证见 `.planning/phases/08-roadmap-visual-workbench/SPEC.md` 与 `VERIFICATION.md`；后续可按试用反馈打磨视图信息密度与拖拽证据选择体验。
+- 路线图模块化重设计（粗主线 + 支线下钻）已实现并全绿验证；timeline 视图主线改为阶段节点 + 模块摘要芯片，节点详情改为作战单元模块卡片下钻，移除原分支胶囊/时间列/全展开分支图。
 - 进入内部单服务器试用完整材料→提案→审核→合并→发布→回滚流程，收集可用性、材料模板质量和角色运营反馈。
 - 后续里程碑再评估完整成员管理 UI、外部身份提供商、部署自动化和 PostgreSQL 迁移需求。
 - 保持 Xugu 参考项目只读，任何新增项目继续通过模板、数据、术语与主题配置表达差异。

@@ -18,3 +18,8 @@ data/*
 .idea/
 .vscode/
 *.swp
+
+# Playwright E2E 会话与产物
+.e2e-auth/
+test-results/
+playwright-report/

@@ -1,6 +1,10 @@
 import { createGenerationService } from "../proposals/generation-service.mjs";
-import { proposalTemplates } from "../proposals/catalog.mjs";
+import { proposalTemplates, getProposalTemplate } from "../proposals/catalog.mjs";
 import { ProposalServiceError, proposalError } from "../proposals/errors.mjs";
+import { validateProposal } from "../proposals/validator.mjs";
+import { boundedPublished, MAX_EVIDENCE, MAX_EVIDENCE_BYTES } from "../proposals/context-builder.mjs";
+import { createProjectRepository } from "../repositories/project-repository.mjs";
+import { createHash } from "node:crypto";
 
 function timestamp(now) { return new Date(now()).toISOString(); }
 
@@ -48,5 +52,51 @@ export function createProposalService(database, options = {}) {
   function enrichProposal(projectId, proposal) { if (!proposal) return proposal; return { ...proposal, changes: proposal.changes.map(change => ({ ...change, evidence: change.evidenceIds.map(id => { const row=database.prepare(`SELECT e.external_id AS evidenceId,e.material_id AS materialId,e.ordinal,e.kind,e.location_json AS locationJson,m.display_name AS materialName FROM evidence_blocks e JOIN project_materials m ON m.project_id=e.project_id AND m.id=e.material_id WHERE e.project_id=? AND e.external_id=?`).get(projectId,id); return row ? {...row,location:JSON.parse(row.locationJson)} : {evidenceId:id}; }) })) }; }
   function listProposals(principal,projectId){permission(principal,projectId);return {items:generation.repository.listProposals(projectId).map(item=>enrichProposal(projectId,item)),capabilities:capabilityEnvelope(principal,projectId).capabilities};}
   function getProposal(principal,projectId,id){permission(principal,projectId);const proposal=enrichProposal(projectId,generation.repository.getProposal(projectId,id));if(!proposal)throw proposalError("CHANGE_PROPOSAL_NOT_FOUND","更新提案不存在或你无权访问",404);return {proposal,capabilities:capabilityEnvelope(principal,projectId).capabilities};}
-  return Object.freeze({capabilities:capabilityEnvelope,createJob,listJobs,getJob,retryJob,listProposals,getProposal,generation});
+  // Phase 8：交互发起的 manual proposal（拖拽卡片等）。锁定当前 published，复用 validator，保存为 pending，无 generation job。
+  // 与生成提案共享同一证据/高影响边界：必须引用项目内已就绪材料的证据；纯 plan 类允许无证据。
+  function createInteractionProposal(principal, projectId, input) {
+    const access = permission(principal, projectId);
+    if (!access.create) throw proposalError("CHANGE_PROPOSAL_NOT_FOUND", "更新提案不存在或你无权访问", 404);
+    const repository = createProjectRepository(database);
+    const graph = repository.getModuleVersionGraph(projectId, "published");
+    if (!graph) throw proposalError("PROJECT_NOT_FOUND", "项目不存在或你无权访问", 404);
+    const { materialIds, evidence } = loadInteractionEvidence(projectId, input);
+    const context = { projectId, baseVersionId: graph.versionId, baseVersionLabel: graph.versionLabel, templateId: "interaction", templateVersion: "1.0.0", materials: materialIds.map(id => ({ id })), evidence, published: boundedPublished(graph), digest: createHash("sha256").update(JSON.stringify({ projectId, baseVersionId: graph.versionId, interaction: true, materials: materialIds, evidence: evidence.map(item => [item.evidenceId, item.contentHash]) })).digest("hex"), limits: { maxMaterials: materialIds.length, maxEvidence: MAX_EVIDENCE, maxEvidenceBytes: MAX_EVIDENCE_BYTES } };
+    const summary = String(input.summary ?? "交互提案").slice(0, 500);
+    const envelope = { schemaVersion: "change-proposal-v1@1.0.0", projectId, baseVersionId: graph.versionId, template: { id: "interaction", version: "1.0.0" }, materialIds, summary, changes: Array.isArray(input.changes) ? input.changes : [], warnings: [] };
+    const validated = validateProposal(envelope, context);
+    const proposal = { ...validated, proposalId: undefined, schemaVersion: envelope.schemaVersion, projectId, baseVersionId: graph.versionId, template: { id: "interaction", version: "1.0.0" }, materialIds, summary: envelope.summary, changes: validated.changes, warnings: validated.warnings };
+    const saved = generation.repository.saveInteractionProposal(projectId, proposal);
+    audit(principal, "proposal.interaction_created", projectId, "change_proposal", saved.proposalId, { changes: saved.changes.length, materials: materialIds.length, evidence: evidence.length });
+    return { proposal: enrichProposal(projectId, saved) };
+  }
+  // Phase 8：交互提案引用项目内已就绪材料证据。复用证据校验边界（项目隔离、ready 状态、去重）。
+  // 交互提案不调用 LLM，因此不要求生成授权或更新模板，但仍需材料/证据归属本项目。
+  function loadInteractionEvidence(projectId, input) {
+    const rawMaterialIds = Array.isArray(input.materialIds) ? input.materialIds : [];
+    if (rawMaterialIds.length < 1 || rawMaterialIds.length > 8) throw proposalError("INVALID_MATERIAL_SELECTION", "交互提案必须引用 1 至 8 份项目材料", 422);
+    const materialIds = rawMaterialIds.map(id => String(id ?? "").trim());
+    if (materialIds.some(id => !/^[a-zA-Z0-9._-]{16,128}$/.test(id)) || new Set(materialIds).size !== materialIds.length) throw proposalError("INVALID_MATERIAL_SELECTION", "交互提案材料选择无效", 422);
+    const placeholders = materialIds.map(() => "?").join(",");
+    const rows = database.prepare(`SELECT id, display_name AS name, active_extraction_version AS extractionVersion, status FROM project_materials WHERE project_id=? AND id IN (${placeholders})`).all(projectId, ...materialIds);
+    if (rows.length !== materialIds.length) throw proposalError("MATERIAL_NOT_FOUND", "材料不存在或你无权访问", 404);
+    if (rows.some(row => row.status !== "ready" || !row.extractionVersion)) throw proposalError("MATERIAL_NOT_READY", "所选材料证据尚未就绪", 409);
+    const byMaterial = new Map(rows.map(row => [row.id, row]));
+    const requestedEvidence = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(id => String(id ?? "").trim()) : [];
+    const selectEvidence = database.prepare(`SELECT external_id AS evidenceId, material_id AS materialId, kind, location_json AS locationJson, text, summary, content_hash AS contentHash, extraction_version AS extractionVersion FROM evidence_blocks WHERE project_id=? AND external_id=?`);
+    const evidence = [];
+    let evidenceBytes = 0;
+    for (const evidenceId of requestedEvidence) {
+      const row = selectEvidence.get(projectId, evidenceId);
+      if (!row) throw proposalError("EVIDENCE_NOT_ALLOWED", "交互提案引用了不可用证据", { evidenceId });
+      const material = byMaterial.get(row.materialId);
+      if (!material || row.extractionVersion !== material.extractionVersion) throw proposalError("EVIDENCE_NOT_ALLOWED", "证据不属于所选材料", { evidenceId });
+      if (evidence.length >= MAX_EVIDENCE) throw proposalError("EVIDENCE_REQUIRED", "交互提案引用证据超过上限", 422);
+      evidenceBytes += Buffer.byteLength(row.text);
+      if (evidenceBytes > MAX_EVIDENCE_BYTES) throw proposalError("EVIDENCE_REQUIRED", "交互提案引用证据过大", 422);
+      evidence.push({ ...row, location: JSON.parse(row.locationJson), materialName: material.name });
+    }
+    return Object.freeze({ materialIds, evidence });
+  }
+  return Object.freeze({capabilities:capabilityEnvelope,createJob,listJobs,getJob,retryJob,listProposals,getProposal,createInteractionProposal,generation});
 }

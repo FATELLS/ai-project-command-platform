@@ -54,6 +54,23 @@ export function loadRoadmap(graph) {
       previewCaption: optional(stage.previewCaption),
       previewAssets: Array.isArray(stage.previewImages) ? [...stage.previewImages] : []
     })),
+    // Phase 8：四种视图共享同一版本图。units/tasks/edges 让活动路线图的时间列、
+    // 阶段卡片板的任务卡、作战单元进度和依赖网络投影到同一数据（VIS-05）。
+    units: graph.units.map(unit => ({ id: unit.id, name: unit.name, status: optional(unit.status), owner: optional(unit.owner), objective: optional(unit.objective) })),
+    tasks: graph.tasks.map(task => ({
+      id: task.id,
+      unitId: task.unitId,
+      parentId: optional(task.parentId),
+      title: task.title,
+      owner: optional(task.owner),
+      state: optional(task.state),
+      progress: task.progress ?? null,
+      startDate: optional(task.startDate),
+      endDate: optional(task.endDate),
+      expectedOutput: optional(task.expectedOutput),
+      dependsOn: [...(Array.isArray(task.dependsOn) ? task.dependsOn : [])]
+    })),
+    edges: graph.tasks.flatMap(task => (Array.isArray(task.dependsOn) ? task.dependsOn : []).map(dependencyId => ({ from: dependencyId, to: task.id, kind: "depends-on" }))),
     closures: graph.closures.map(closure => ({
       id: closure.id,
       title: closure.title,

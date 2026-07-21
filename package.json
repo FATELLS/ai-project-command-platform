@@ -15,10 +15,15 @@
     "backup": "node scripts/backup-database.mjs",
     "restore": "node scripts/restore-database.mjs",
     "verify": "node scripts/verify.mjs",
-    "test": "node --test"
+    "test": "node --test \"test/*.test.mjs\"",
+    "test:e2e": "npx playwright test --reporter=list",
+    "e2e:install": "npx playwright install chromium"
   },
   "dependencies": {
     "file-type": "22.0.1",
     "yauzl": "3.4.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
   }
 }

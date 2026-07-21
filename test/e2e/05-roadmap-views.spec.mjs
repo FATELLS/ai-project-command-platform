@@ -9,7 +9,7 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     await page.goto(ROADMAP);
     await expect(page.locator(".roadmap-view-switcher")).toBeVisible();
     const tabs = page.locator(".roadmap-view-switcher a");
-    await expect(tabs).toHaveCount(4);
+    await expect(tabs).toHaveCount(5);
 
     // 切换到卡片板
     await page.locator(".roadmap-view-switcher a", { hasText: "阶段卡片板" }).click();
@@ -122,5 +122,29 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     await page.goto(`${ROADMAP}?view=network`);
     await expect(page.locator(".roadmap-network")).toBeVisible();
     await expect(page.locator(".dependency-list")).toBeVisible();
+  });
+
+  test("项目泳道呈现主泳道/副泳道/双锚点并支持深链", async ({ page }) => {
+    await page.goto(`${ROADMAP}?view=swimlane`);
+    await expect(page.locator(".roadmap-swimlane")).toBeVisible();
+    // 主泳道：阶段站点（项目锚点·拆解）
+    await expect(page.locator(".swimlane-main-track .phase-station").first()).toBeVisible();
+    expect(await page.locator(".swimlane-main-track .phase-station").count()).toBeGreaterThanOrEqual(6);
+    // 副泳道：作战单元行 + 任务条（并行子任务）
+    await expect(page.locator(".swimlane-sub .swimlane-row").first()).toBeVisible();
+    expect(await page.locator(".swimlane-sub .swimlane-row").count()).toBeGreaterThanOrEqual(7);
+    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
+    // 收口锚点（战果闭环）
+    expect(await page.locator(".closure-anchor").count()).toBeGreaterThanOrEqual(1);
+    // 生命周期三带图例
+    await expect(page.locator(".swimlane-legend .band-prepare")).toBeVisible();
+    await expect(page.locator(".swimlane-legend .band-active")).toBeVisible();
+    await expect(page.locator(".swimlane-legend .band-converged")).toBeVisible();
+    // 点击阶段站点写入 stage 深链
+    await page.locator(".swimlane-main-track .phase-station").first().click();
+    await expect(page).toHaveURL(/stage=/);
+    // 点击任务条写入 task 深链
+    await page.locator(".swimlane-bar").first().click();
+    await expect(page).toHaveURL(/task=/);
   });
 });

@@ -1,12 +1,12 @@
 # 项目状态
 
-最后更新：2026-07-21
+最后更新：2026-07-22
 
 - 项目状态：`active`
-- 当前阶段：Phase 8 已闭环（五种受控视图，含项目泳道）；Phase 9（分形作战生命周期与拆解模型）已沉淀为 `planned`
+- 当前阶段：Phase 9 进行中——切片一（同单元 parentId 真实拆解链）已落地并全绿验证
 - 当前结果：Phase 1–8 的低代码更新闭环、材料关键内容诊断、作战单元生命周期、生产追踪、诊断包、产品内测试中心，路线图五种受控视图（活动路线图、项目泳道、阶段卡片板、作战单元进度、依赖网络）、拖拽到结构化提案与卡片化审核，以及全自动 Playwright 浏览器 E2E 层已完成
 - 已实现平台功能：数据底座、Xugu 迁移、认证/成员、项目切换、九类固定模块、材料证据问答、结构化提案、审核合并、发布回滚、材料 readiness、作战单元生命周期、运维诊断、自检中心、审计、备份恢复、项目导入导出、路线图五视图工作台（含项目泳道·双锚点·生命周期分带）与交互式受控提案
-- 下一步：推进 Phase 9（LIF-01..05）把分形作战生命周期、真实拆解链、单元级分形、术语模板化深化到数据/提案/模板层；或进入内部单服务器试用收集路线图工作台可用性反馈
+- 下一步：推进 Phase 9 后续切片（单元级分形生命周期 LIF-05、术语模板化 LIF-01、多源合并收口 LIF-04）；或进入内部单服务器试用
 - 当前阻塞：无
 
 ## 2026-07-20 Phase 8 完成
@@ -81,3 +81,13 @@ npm run verify
 
 - 把用户提出的"分形作战生命周期（事前/事中/事后，可下沉到作战单元）+ 主副泳道双锚点 + 多次拆解合并"沉淀为正式规划：DECISIONS.md D-022（为什么）、REQUIREMENTS.md LIF-01–05（要什么）、ROADMAP.md Phase 9（做什么，`planned`）。
 - Phase 8 泳道视图（`?view=swimlane`）已落地范式可见层（纯投影，全绿验证）；Phase 9 将拆解关系、单元级分形、术语模板化、多次拆解合并深化到数据/提案/模板层。
+
+## 2026-07-22 Phase 9 切片一：同单元 parentId 真实拆解链
+
+- 方向 A（阶段作项目锚点、parentId 只管同单元拆解）已确认并落地。调研发现 DB/迁移/仓储/DTO/validator 五层早已支持 parentId，唯一缺种子数据与渲染器显式表达。
+- 虚谷种子（published+draft 各 4 条）补真实同单元拆解链：研发 `rd-driver-productize→rd-core-assessment`、`rd-tool-rebuild→rd-driver-productize`；技术 `tech-company-knowledge-pilot→tech-kb-foundation`；财务 `finance-scale→finance-data-security`。
+- 关键约束：`schemas.mjs validateTaskDag` 把 parentId 与 dependsOn 合并去重，故 parentId 不得与既有 dependsOn 重复（否则 MODULE_VALIDATION_FAILED）；4 条链均避开重复。
+- 泳道渲染器升级：带 parentId 的子任务条加 `⇢` 拆解标记与橙色色带（`has-parent`）；选中任务时高亮整条拆解链（父链+子链，`chain` class），非链任务淡化（`dimmed`），图例新增「同单元拆解链」。
+- 同步更新迁移来源基线：参考应用 `state.seed.json` 补相同 4 条 parentId 并提交（HEAD `d8224f30`），4 个 browser-evidence manifest 的 reference head/seedSha256 同步更新，fixture 与参考种子哈希重新等价。
+- 纯渲染层 + 种子数据：不改 validator 跨单元禁令、不加 stageId、不改 schema/隔离/CSRF/角色/模板/loadRoadmap DTO 形状。
+- 验证：`npm run verify` 全绿——149 后台测试（+1 拆解链种子校验）+ 28 E2E（+1 拆解链渲染断言）+ 4 组浏览器证据；参考虚谷应用基线已提交更新。

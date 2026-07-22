@@ -5,9 +5,9 @@
   "runner": "Codex in-app browser against an isolated seeded SQLite database",
   "reference": {
     "path": "../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console",
-    "head": "97cb1ebfbbd4998cdb32d419a5670f1233b7cba8",
+    "head": "d8224f30a9a40b3e0251e72b2025942df4d6be4d",
     "statusShort": "",
-    "seedSha256": "b134f5493834d55f61aa47d9b9fac855c502ee67c0b59253e9498c214e4adcfa"
+    "seedSha256": "01d6e85a10ac29e368f03155418aa5d0fd1268163f377c09522ced720aff9ec0"
   },
   "evidence": {
     "xuguDesktop": {
@@ -177,7 +177,7 @@
       "viewport": "n/a",
       "url": "n/a",
       "expected": "Reference HEAD, clean status and seed hash remain unchanged",
-      "actual": "HEAD 97cb1ebfbbd4998cdb32d419a5670f1233b7cba8; clean status; seed SHA-256 b134f5493834d55f61aa47d9b9fac855c502ee67c0b59253e9498c214e4adcfa",
+      "actual": "HEAD d8224f30a9a40b3e0251e72b2025942df4d6be4d; clean status; seed SHA-256 01d6e85a10ac29e368f03155418aa5d0fd1268163f377c09522ced720aff9ec0",
       "evidence": "xuguDesktop"
     }
   ]

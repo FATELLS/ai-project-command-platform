@@ -380,7 +380,7 @@
         "endDate": "2026-08-31",
         "expectedOutput": "九类接口产品化、自动化测试和发布要求",
         "progress": null,
-        "parentId": "",
+        "parentId": "rd-core-assessment",
         "dependsOn": [],
         "taskType": "action",
         "startMonth": 1,
@@ -397,7 +397,7 @@
         "endDate": "2026-09-30",
         "expectedOutput": "运维平台等外围工具的重构方案与验收证据",
         "progress": null,
-        "parentId": "",
+        "parentId": "rd-driver-productize",
         "dependsOn": [
           "rd-core-assessment"
         ],
@@ -506,7 +506,7 @@
         "endDate": "2026-09-30",
         "expectedOutput": "最小知识域、发布流程、评测集和试点验收报告",
         "progress": null,
-        "parentId": "",
+        "parentId": "tech-kb-foundation",
         "dependsOn": [
           "tech-company-knowledge",
           "tech-skill-refine"
@@ -652,7 +652,7 @@
         "endDate": "2026-11-14",
         "expectedOutput": "凭证、报销审核、对账和税务辅助能力",
         "progress": null,
-        "parentId": "",
+        "parentId": "finance-data-security",
         "dependsOn": [
           "finance-pilot"
         ],
@@ -1210,7 +1210,7 @@
         "endDate": "2026-08-31",
         "expectedOutput": "九类接口产品化、自动化测试和发布要求",
         "progress": null,
-        "parentId": "",
+        "parentId": "rd-core-assessment",
         "dependsOn": [],
         "taskType": "action",
         "startMonth": 1,
@@ -1227,7 +1227,7 @@
         "endDate": "2026-09-30",
         "expectedOutput": "运维平台等外围工具的重构方案与验收证据",
         "progress": null,
-        "parentId": "",
+        "parentId": "rd-driver-productize",
         "dependsOn": [
           "rd-core-assessment"
         ],
@@ -1336,7 +1336,7 @@
         "endDate": "2026-09-30",
         "expectedOutput": "最小知识域、发布流程、评测集和试点验收报告",
         "progress": null,
-        "parentId": "",
+        "parentId": "tech-kb-foundation",
         "dependsOn": [
           "tech-company-knowledge",
           "tech-skill-refine"
@@ -1482,7 +1482,7 @@
         "endDate": "2026-11-14",
         "expectedOutput": "凭证、报销审核、对账和税务辅助能力",
         "progress": null,
-        "parentId": "",
+        "parentId": "finance-data-security",
         "dependsOn": [
           "finance-pilot"
         ],

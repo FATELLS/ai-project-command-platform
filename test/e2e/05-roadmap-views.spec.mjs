@@ -148,3 +148,27 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     await expect(page).toHaveURL(/task=/);
   });
 });
+
+  test("项目泳道副泳道展示同单元拆解链并高亮链上任务", async ({ page }) => {
+    await page.goto(`${ROADMAP}?view=swimlane`);
+    // 先等副泳道任务条渲染完成
+    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
+    // 带 parentId 的子任务条带拆解标记（⇢ 与 has-parent）
+    const decompBars = page.locator(".swimlane-bar[data-parent]:not([data-parent=''])");
+    expect(await decompBars.count()).toBeGreaterThanOrEqual(3);
+    await expect(decompBars.first()).toBeVisible();
+    // 图例含拆解链说明
+    await expect(page.locator(".swimlane-legend .decomp-glyph")).toBeVisible();
+    // 点击研发拆解链的中节点（rd-driver-productize），祖孙三代（rd-core-assessment → productize → rd-tool-rebuild）均高亮
+    const productize = page.locator(".swimlane-bar[data-task-id='rd-driver-productize']");
+    await productize.click();
+    await expect(page).toHaveURL(/task=rd-driver-productize/);
+    await expect(productize).toHaveClass(/\bchain\b/);
+    const rdParent = page.locator(".swimlane-bar[data-task-id='rd-core-assessment']");
+    await expect(rdParent).toHaveClass(/\bchain\b/);
+    const rdChild = page.locator(".swimlane-bar[data-task-id='rd-tool-rebuild']");
+    await expect(rdChild).toHaveClass(/\bchain\b/);
+    // 非链上任务（如财务）应被淡化
+    const financeTask = page.locator(".swimlane-bar[data-task-id='finance-scale']");
+    await expect(financeTask).toHaveClass(/\bdimmed\b/);
+  });

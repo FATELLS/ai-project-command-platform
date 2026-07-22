@@ -914,6 +914,7 @@ body { overflow-x: clip; }
 .swimlane-legend .band-active .dot { background: var(--orange-600); }
 .swimlane-legend .band-converged .dot { background: var(--green-600); }
 .swimlane-legend .anchor-glyph { color: var(--blue-600); font-weight: 700; }
+.swimlane-legend .decomp-glyph { color: var(--orange-600); }
 .swimlane-chart { min-width: 1040px; display: grid; gap: 0; padding: 8px 0 0; }
 .swimlane-main { display: grid; grid-template-columns: var(--swim-rail, 132px) 1fr; align-items: stretch; }
 .swimlane-rail { min-height: 44px; display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink-600); font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; }
@@ -946,6 +947,10 @@ body { overflow-x: clip; }
 .swimlane-bar:hover, .swimlane-bar:focus-visible { outline: 3px solid var(--blue-100); outline-offset: 1px; }
 .swimlane-bar.selected { outline: 3px solid var(--blue-600); outline-offset: 1px; }
 .swimlane-bar.dimmed { opacity: .32; }
+.swimlane-bar.has-parent { padding-left: 4px; }
+.swimlane-bar.has-parent::before { content: ""; position: absolute; left: 0; top: 4px; bottom: 4px; width: 3px; border-radius: 0 2px 2px 0; background: var(--orange-600); }
+.swimlane-bar.chain { outline: 2px solid var(--orange-600); outline-offset: 1px; }
+.swimlane-bar-decomp { color: var(--orange-300, #f5b06b); font-weight: 700; flex: none; }
 .swimlane-bar-title { overflow: hidden; text-overflow: ellipsis; }
 .swimlane-bar-progress { font-weight: 700; color: #d7e6ff; }
 .swimlane-empty { padding: 8px 12px; color: var(--ink-400); font-size: 12px; }

@@ -487,3 +487,33 @@
 - validator 跨单元 parentId 禁令不变（方向 A）。
 - 不加 stageId 字段、不改 schema/迁移。
 - published/draft/proposal 隔离、CSRF、角色、模板、loadRoadmap DTO 形状不变。
+
+## 2026-07-22 Phase 9 切片四（LIF-05）设计契约：单元级分形生命周期
+
+### 设计张力与方向选择
+
+"单元级分形生命周期"有两个实现方向：
+
+- **方向 X（unit 加独立 stage 集）**：每个 unit 拥有自己的子阶段序列（研发：评估→产品化→重构），各带自己的事前/事中/事后。问题：与项目级 stage 窗口语义重叠，真实数据无独立 unit-stage 定义，数据模型扩展大、风险高。
+- **方向 Y（从 unit 任务时序派生，投影无新数据）**：每个 unit 的生命周期带由它自己任务的状态/日期派生——同一"事前/事中/事后"范式下沉到 unit 层，但不带独立 stage 数据。
+
+**选方向 Y**。理由：符合 D-022"范式分形下沉"本质（同一范式下沉，非给每 unit 造独立 stage 体系）；零数据模型扩展（不碰 schema/迁移/validator）；真实业务里"研发链路、销售链路的完整阶段动作"就是该 unit 任务集合的状态演进，无需独立 stage 定义；与项目级 phaseOf（任务→项目阶段窗口）正交——unit 级带看 unit 自身进展，项目级带看战略阶段。
+
+### 派生规则（unit 生命周期带判定）
+
+- 全部任务完成（progress>=100 或 state∈done/completed/完成/已完成）→ **converged（事后·已交付）**
+- 有进行中任务（state∈进行/in-progress/active/当前）或 有任务落在当前日期窗口（startDate<=今天<=endDate）→ **active（事中·当前）**
+- 否则（全部待启/未来）→ **prepare（事前·待启）**
+
+### 切片范围（最小可见）
+
+1. 渲染器：副泳道行头（`swimlane-rail`）显示该 unit 的生命周期带标记（带色点 + 带标签），复用 bandLabels 术语；点击 unit 仍走 `?unit=` 深链（不变）。
+2. unit 级带标记复用项目级三带配色（prepare 灰/active 橙/converged 绿），视觉上表明"同一范式分形下沉"。
+3. 测试：E2E 断言副泳道行头有 unit 级生命周期标记，且不同 unit 因任务进展不同显示不同带。
+
+### 边界（不动）
+
+- 不给 unit 加独立 stage 集、不加 schema/迁移/validator。
+- unit 级带是纯投影派生，不引入新数据字段、不进 DTO（loadUnits 不变）。
+- published/draft/proposal 隔离、CSRF、角色、模板、loadRoadmap DTO 形状不变。
+- 派生规则用既有 task 的 state/progress/日期，无新状态机。

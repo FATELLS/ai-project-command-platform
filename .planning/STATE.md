@@ -1,6 +1,6 @@
 # 项目状态
 
-最后更新：2026-07-22（LIF-01 已落地）
+最后更新：2026-07-22（LIF-01 + LIF-04 已落地）
 
 - 项目状态：`active`
 - 当前阶段：Phase 9 进行中——切片一（同单元 parentId 拆解链）+ 切片二（LIF-01 术语模板化）已落地并全绿验证
@@ -99,3 +99,11 @@ npm run verify
 - 渲染器 `renderRoadmapSwimlane` 从 `context.presentation` 读 bandLabels（带默认回退），删除模块级硬编码常量 `SWIMLANE_BAND_LABEL`；图例、阶段站点 meta、详情面板统一用 presentation 术语。
 - 纯展示层 + 配置：不改 schema/validator/数据模型/隔离/CSRF/角色/模板种子/DTO 形状。
 - 验证：`npm run verify` 全绿——149 后台测试 + 29 E2E（+1 术语随模板断言，验证标准项目泳道显示通用术语、虚谷显示作战术语）+ 4 组浏览器证据。
+
+## 2026-07-22 Phase 9 切片三（LIF-04）：多源合并收口
+
+- 收口锚点渲染从「只取 between 前两个阶段中点」升级为「所有 between 阶段位置的平均值」，支持一个收口锚点跨多个阶段（多对多收口）。数据层早已支持多元素 between（schema/loader 无长度限制），仅渲染器只用了前两个。
+- 虚谷种子（published+draft）新增一条 3 元素 between 收口 `launch-pilot-convergence`（report-1/launch/pilot 三阶段多源合并），验证多源收口渲染；迁移来源基线 `state.seed.json` 同步并提交（HEAD `90bcc64`），4 个 browser-evidence manifest 的 reference head/seedSha256 更新。db-foundation/project-migration 测试的 closures 计数 2→3。
+- 收口详情面板已用 `between.join(" → ")` 显示全部关联阶段（无需改），3 元素收口显示 `report-1 → launch → pilot`。
+- 纯渲染层 + 种子数据：不改 schema/validator（多元素 between 早已合法）/隔离/CSRF/角色/模板/DTO 形状。
+- 验证：`npm run verify` 全绿——149 后台测试 + 30 E2E（+1 多源收口断言）+ 4 组浏览器证据；参考虚谷基线已提交更新。

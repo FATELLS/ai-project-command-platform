@@ -58,6 +58,7 @@
 - Phase 9 切片一为泳道补同单元 `parentId` 真实拆解链：带父任务的子任务条标记 `⇢` 拆解指示，选中任务时高亮整条拆解链（父链+子链）、非链任务淡化；parentId 与 dependsOn 在 validator 合并去重，不得重复。种子补 4 条同单元拆解链（研发/技术/财务），迁移来源基线同步更新。
 - Phase 9 切片二（LIF-01）让泳道生命周期三带术语随项目模板配置：虚谷（campaign）保持「事前/事中/事后」作战语言，标准项目（standard）用「规划/执行/交付」通用项目管理语言；项目层 terminology 可覆盖。渲染器从 presentation 读，删除硬编码常量。
 - Phase 9 切片三（LIF-04）让收口锚点支持多源合并：锚点位置取所有 between 阶段的中点均值（原只取前两个），一个收口可跨多个阶段；种子补一条 3 元素 between 收口验证多对多收口。
+- Phase 9 切片四（LIF-05）让生命周期范式分形下沉到作战单元：副泳道行头显示每个单元自己的事前/事中/事后带标记，由该单元任务的状态/progress/排期派生（零数据扩展），视觉表明同一范式从项目级下沉到单元级。
 - 阶段卡片板任务卡可拖拽（仅编辑者及以上），拖拽只创建 `interaction` 模板 ChangeProposal，绝不直写 draft/published；高影响字段（state/owner/日期）必须引用本项目已就绪材料证据，经审核与 copy-on-write 草稿合并后才生效。
 - 新增交互提案服务路径 `createInteractionProposal`：锁定当前 published、复用 validator、保存为 pending，不调用 LLM、不创建 generation job；缺 CSRF 返回 403，viewer 返回统一 404，伪造/跨项目证据返回 EVIDENCE_NOT_ALLOWED。
 - 审核工作区把每项 proposal item 呈现为审核卡片（字段差异、证据定位、置信度、警告、接受/驳回/编辑后接受），整模块接受与事务合并沿用 Phase 6 边界。

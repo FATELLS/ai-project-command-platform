@@ -1,9 +1,9 @@
 # 项目状态
 
-最后更新：2026-07-22
+最后更新：2026-07-22（LIF-01 已落地）
 
 - 项目状态：`active`
-- 当前阶段：Phase 9 进行中——切片一（同单元 parentId 真实拆解链）已落地并全绿验证
+- 当前阶段：Phase 9 进行中——切片一（同单元 parentId 拆解链）+ 切片二（LIF-01 术语模板化）已落地并全绿验证
 - 当前结果：Phase 1–8 的低代码更新闭环、材料关键内容诊断、作战单元生命周期、生产追踪、诊断包、产品内测试中心，路线图五种受控视图（活动路线图、项目泳道、阶段卡片板、作战单元进度、依赖网络）、拖拽到结构化提案与卡片化审核，以及全自动 Playwright 浏览器 E2E 层已完成
 - 已实现平台功能：数据底座、Xugu 迁移、认证/成员、项目切换、九类固定模块、材料证据问答、结构化提案、审核合并、发布回滚、材料 readiness、作战单元生命周期、运维诊断、自检中心、审计、备份恢复、项目导入导出、路线图五视图工作台（含项目泳道·双锚点·生命周期分带）与交互式受控提案
 - 下一步：推进 Phase 9 后续切片（单元级分形生命周期 LIF-05、术语模板化 LIF-01、多源合并收口 LIF-04）；或进入内部单服务器试用
@@ -91,3 +91,11 @@ npm run verify
 - 同步更新迁移来源基线：参考应用 `state.seed.json` 补相同 4 条 parentId 并提交（HEAD `d8224f30`），4 个 browser-evidence manifest 的 reference head/seedSha256 同步更新，fixture 与参考种子哈希重新等价。
 - 纯渲染层 + 种子数据：不改 validator 跨单元禁令、不加 stageId、不改 schema/隔离/CSRF/角色/模板/loadRoadmap DTO 形状。
 - 验证：`npm run verify` 全绿——149 后台测试（+1 拆解链种子校验）+ 28 E2E（+1 拆解链渲染断言）+ 4 组浏览器证据；参考虚谷应用基线已提交更新。
+
+## 2026-07-22 Phase 9 切片二（LIF-01）：生命周期术语模板化
+
+- 泳道生命周期三带术语（原硬编码事前/事中/事后）改为随项目模板配置：`projectPresentation` 的 campaign/standard 两套各加 `lifecyclePrepare/Active/Converged` 默认值。
+- 虚谷（campaign 模板）保持作战语言「事前 · 待启 / 事中 · 当前 / 事后 · 已交付」；标准项目（standard 模板）用通用项目管理语言「规划 · 待启动 / 执行 · 进行中 / 交付 · 已完成」。项目层 terminology JSON 可覆盖。
+- 渲染器 `renderRoadmapSwimlane` 从 `context.presentation` 读 bandLabels（带默认回退），删除模块级硬编码常量 `SWIMLANE_BAND_LABEL`；图例、阶段站点 meta、详情面板统一用 presentation 术语。
+- 纯展示层 + 配置：不改 schema/validator/数据模型/隔离/CSRF/角色/模板种子/DTO 形状。
+- 验证：`npm run verify` 全绿——149 后台测试 + 29 E2E（+1 术语随模板断言，验证标准项目泳道显示通用术语、虚谷显示作战术语）+ 4 组浏览器证据。

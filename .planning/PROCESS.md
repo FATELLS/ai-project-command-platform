@@ -488,6 +488,32 @@
 - 不加 stageId 字段、不改 schema/迁移。
 - published/draft/proposal 隔离、CSRF、角色、模板、loadRoadmap DTO 形状不变。
 
+## 2026-07-22 Phase 9 切片二（LIF-01）：生命周期术语模板化（已落地）
+
+### 设计
+
+- 三带术语原硬编码在渲染器 `SWIMLANE_BAND_LABEL`（事前/事中/事后）。发现 `projectPresentation`（app.js）已有 terminology→presentation 映射机制（campaign/standard 两套），只是缺生命周期带术语。
+- 在两套 presentation 各加 `lifecyclePrepare/Active/Converged` 键：campaign 保持作战语言（事前/事中/事后），standard 用通用项目管理语言（规划/执行/交付）。项目层 terminology JSON 可覆盖。
+- 渲染器从 `context.presentation` 读 `bandLabels`（带默认回退），删除模块级硬编码常量。图例、阶段站点 meta、详情面板统一用 presentation 术语。
+
+### 边界
+
+- 纯展示层 + 配置：不改 schema/validator/数据模型/隔离/CSRF/角色/模板种子/DTO 形状。
+
+## 2026-07-22 Phase 9 切片三（LIF-04）：多源合并收口（已落地）
+
+### 设计
+
+- 收口锚点位置原只取 `between` 前两个阶段中点（`const [a,b] = closure.between`），超过 2 个的 stage 被忽略。
+- 升级为取**所有** between 阶段位置的平均值，支持一个收口锚点跨多个阶段（多对多）。
+- 调研发现数据层早已支持多元素 between（schema validator 遍历 `closure.between` 数组逐个校验、loader `between: [...closure.between]` 保留全部），仅渲染器只用了前两个。纯渲染层升级。
+- 种子补一条 3 元素 between 收口（report-1/launch/pilot）验证多对多收口；参考基线同步提交。
+
+### 边界
+
+- 纯渲染层 + 种子数据：不改 schema/validator（多元素 between 早已合法）/隔离/CSRF/角色/模板/DTO 形状。
+
+
 ## 2026-07-22 Phase 9 切片四（LIF-05）设计契约：单元级分形生命周期
 
 ### 设计张力与方向选择

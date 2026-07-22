@@ -462,3 +462,28 @@
 1. **生命周期术语**是否随模板术语配置（事前/事中/事后 vs PDCA 等）——首版用固定中文术语 + state 派生，后续可进模板 config。
 2. **`parentId` 拆解字段**是否在虚谷数据里补真实主任务→子任务关系（目前靠任务→阶段窗口归属投影，已能表达拆解）。
 3. swimlane 是否升为路线图默认视图（首版保持 timeline 默认，避免破坏既有深链预期）。
+
+## 2026-07-22 Phase 9 切片一：同单元 parentId 真实拆解链（已落地，全绿验证）
+
+### 背景（调研结论）
+
+方向 A 已确认：**阶段作项目锚点，parentId 只管同单元内拆解**。调研发现 DB/迁移/仓储/DTO/validator 五层早已支持 parentId——schema `parent_external_id` 带外键、`legacy-project.mjs` 搬运、`project-repository.mjs` 读写、`loaders.mjs` 投影、`project-validator.mjs` 校验环并禁止跨单元。虚谷种子 29 任务 parentId 全空，泳道靠 `phaseOf()` 时间窗口推断。
+
+### 子决策：不加显式 stageId，保持窗口投影
+
+阶段→单元任务归属用 `phaseOf()` 时间窗口投影已能正确表达（29 任务都落到正确阶段窗口）。加 stageId 要改 schema/仓储/迁移/loader/validator/种子，风险大收益小。本切片聚焦"同单元 parentId 真实拆解链"一个最小可见价值点。
+
+### 切片范围（最小可见）
+
+1. **虚谷种子补真实同单元拆解链**——挑有自然父子关系的任务填 parentId（同单元内，不碰 validator 跨单元禁令）：
+   - 财务：`finance-pilot`→`finance-scale`→`finance-deepen`（时序深化链）
+   - 技术：`tech-company-knowledge`→`tech-company-knowledge-pilot`（方案→试点）
+   - 研发：`rd-core-assessment`→`rd-driver-productize`（评估→产品化）
+2. **泳道渲染器升级**——副泳道用 parentId 显式表达拆解：子任务条标记 `data-parent` 并加拆解指示（缩进/连点），`?stage=` 选中时拆解链高亮。
+3. **测试**——种子校验 parentId 引用合法、渲染拆解标记 E2E、validator 同单元允许/跨单元禁止不变。
+
+### 边界（不动）
+
+- validator 跨单元 parentId 禁令不变（方向 A）。
+- 不加 stageId 字段、不改 schema/迁移。
+- published/draft/proposal 隔离、CSRF、角色、模板、loadRoadmap DTO 形状不变。

@@ -55,6 +55,7 @@
 
 - Roadmap 模块升级为五种受控视图，通过同一路由的 `?view=` 切换：活动路线图（战略曲线 SVG + 按 stage 的时间列，含目标与归入该窗口的分支任务）、项目泳道（主泳道按时间轴铺阶段、副泳道按作战单元铺任务条，双锚点 + 并行子任务）、阶段卡片板（任务按 待确认/进行中/待审核/已完成 状态泳道）、作战单元进度（单元卡显示完成度，点击/键盘展开任务）、依赖网络（复用 task-network 数据、可按单元筛选）。五种视图共享同一版本化项目图投影（`loadRoadmap` 输出 units/tasks/edges），切换不改变 published/draft/proposal 边界。
 - 项目泳道（`?view=swimlane`）以分形生命周期（事前/事中/事后，由 `stage.state` 派生）为顶带：主泳道沿任务时间轴铺排阶段（阶段起点即拆解锚点·项目锚点），副泳道为各作战单元的甘特任务条（同单元并行子任务按 track 着色、`?unit=` 高亮、`?task=` 就地下钻），收口锚点由 `closures.between` 两端阶段中点生成并可 `?anchor=` 深链；`?stage=` 选中时跨泳道淡化非该阶段任务。该视图纯投影渲染，不改隔离与数据边界。
+- Phase 9 切片一为泳道补同单元 `parentId` 真实拆解链：带父任务的子任务条标记 `⇢` 拆解指示，选中任务时高亮整条拆解链（父链+子链）、非链任务淡化；parentId 与 dependsOn 在 validator 合并去重，不得重复。种子补 4 条同单元拆解链（研发/技术/财务），迁移来源基线同步更新。
 - 阶段卡片板任务卡可拖拽（仅编辑者及以上），拖拽只创建 `interaction` 模板 ChangeProposal，绝不直写 draft/published；高影响字段（state/owner/日期）必须引用本项目已就绪材料证据，经审核与 copy-on-write 草稿合并后才生效。
 - 新增交互提案服务路径 `createInteractionProposal`：锁定当前 published、复用 validator、保存为 pending，不调用 LLM、不创建 generation job；缺 CSRF 返回 403，viewer 返回统一 404，伪造/跨项目证据返回 EVIDENCE_NOT_ALLOWED。
 - 审核工作区把每项 proposal item 呈现为审核卡片（字段差异、证据定位、置信度、警告、接受/驳回/编辑后接受），整模块接受与事务合并沿用 Phase 6 边界。

@@ -651,9 +651,9 @@ function renderRoadmapSwimlane(context) {
 
   const guideStages = phaseStages.filter(stage => stagePos.get(stage.id) != null);
   const anchorItems = closures.filter(closure => Array.isArray(closure.between) && closure.between.length).map(closure => {
-    const [a, b] = closure.between;
-    const pa = stagePos.get(a), pb = stagePos.get(b);
-    const pos = pa != null && pb != null ? (pa + pb) / 2 : (pb ?? pa ?? at(parseStageWindow(closure.dateLabel).start));
+    // LIF-04：收口锚点支持多源合并——位置取所有 between 阶段的中点均值（多对多收口）
+    const positions = closure.between.map(id => stagePos.get(id)).filter(pos => pos != null);
+    const pos = positions.length ? positions.reduce((sum, value) => sum + value, 0) / positions.length : at(parseStageWindow(closure.dateLabel).start);
     return { closure, pos };
   }).filter(item => item.pos != null);
 

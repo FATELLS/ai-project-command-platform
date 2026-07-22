@@ -177,8 +177,8 @@ test("transactions roll back completely", () => {
 
 test("Xugu fixture validates with expected counts", () => {
   assert.deepEqual(validateLegacyFixture(fixture), {
-    published: { version: "v4.2", units: 7, tasks: 29, stages: 6, closures: 2, workstreams: 4 },
-    draft: { version: "v4.2", units: 7, tasks: 29, stages: 6, closures: 2, workstreams: 4 }
+    published: { version: "v4.2", units: 7, tasks: 29, stages: 6, closures: 3, workstreams: 4 },
+    draft: { version: "v4.2", units: 7, tasks: 29, stages: 6, closures: 3, workstreams: 4 }
   });
 });
 

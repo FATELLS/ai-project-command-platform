@@ -242,6 +242,21 @@
           "./assets/report-finance-plan.png",
           "./assets/report-market-plan-v2.png"
         ]
+      },
+      {
+        "id": "launch-pilot-convergence",
+        "title": "出征与试点首期收口",
+        "date": "2026.09.30",
+        "state": "进行中",
+        "between": [
+          "report-1",
+          "launch",
+          "pilot"
+        ],
+        "description": "首批场景出征与 9 月试点收口：汇总第一次作战汇报基线、出征启动成果与 9 月最小试点的多源产出，形成首批场景从启动到验证的闭环验收。",
+        "result": "首批场景出征与试点首期验收材料",
+        "source": "研发、技术服务、产品作战单元 · 2026.09 试点阶段性汇报",
+        "previewImages": []
       }
     ],
     "tasks": [
@@ -1072,6 +1087,21 @@
           "./assets/report-finance-plan.png",
           "./assets/report-market-plan-v2.png"
         ]
+      },
+      {
+        "id": "launch-pilot-convergence",
+        "title": "出征与试点首期收口",
+        "date": "2026.09.30",
+        "state": "进行中",
+        "between": [
+          "report-1",
+          "launch",
+          "pilot"
+        ],
+        "description": "首批场景出征与 9 月试点收口：汇总第一次作战汇报基线、出征启动成果与 9 月最小试点的多源产出，形成首批场景从启动到验证的闭环验收。",
+        "result": "首批场景出征与试点首期验收材料",
+        "source": "研发、技术服务、产品作战单元 · 2026.09 试点阶段性汇报",
+        "previewImages": []
       }
     ],
     "tasks": [

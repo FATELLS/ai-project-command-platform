@@ -27,10 +27,10 @@ test("Xugu fixture imports into separate version graphs and exports losslessly",
     const project = repository.getProject("xugu-agentic-group");
     assert.equal(project.templateId, "campaign-map-v1");
     assert.deepEqual(repository.countVersion(project.publishedVersionId), {
-      units: 7, tasks: 29, stages: 6, closures: 2, workstreams: 4
+      units: 7, tasks: 29, stages: 6, closures: 3, workstreams: 4
     });
     assert.deepEqual(repository.countVersion(project.draftVersionId), {
-      units: 7, tasks: 29, stages: 6, closures: 2, workstreams: 4
+      units: 7, tasks: 29, stages: 6, closures: 3, workstreams: 4
     });
     const exported = exportLegacyProject(database, "xugu-agentic-group");
     assert.ok(semanticallyEqual(exported, fixture));

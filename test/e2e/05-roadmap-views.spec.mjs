@@ -187,3 +187,21 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     await expect(page.locator(".swimlane-legend .band-active")).toContainText("执行");
     await expect(page.locator(".swimlane-legend .band-converged")).toContainText("交付");
   });
+
+  test("项目泳道支持多源合并收口（一个收口锚点跨多个阶段）", async ({ page }) => {
+    await page.goto(`${ROADMAP}?view=swimlane`);
+    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
+    // 新增多源收口（between 3 个阶段）应渲染为收口锚点
+    const multiAnchor = page.locator(".closure-anchor[data-anchor='launch-pilot-convergence']");
+    await expect(multiAnchor).toBeVisible();
+    // 点击写入 anchor 深链，详情显示 3 个关联阶段
+    await multiAnchor.click();
+    await expect(page).toHaveURL(/anchor=launch-pilot-convergence/);
+    // 收口详情面板显示 3 个关联阶段（between.join(" → ")）
+    const detail = page.locator(".inline-task-detail");
+    await expect(detail).toContainText("report-1");
+    await expect(detail).toContainText("launch");
+    await expect(detail).toContainText("pilot");
+    // 收口锚点总数应 >= 3（含原 2 个 + 新增多源）
+    expect(await page.locator(".closure-anchor").count()).toBeGreaterThanOrEqual(3);
+  });

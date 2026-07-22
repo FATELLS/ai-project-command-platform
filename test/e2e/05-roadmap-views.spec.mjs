@@ -172,3 +172,18 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     const financeTask = page.locator(".swimlane-bar[data-task-id='finance-scale']");
     await expect(financeTask).toHaveClass(/\bdimmed\b/);
   });
+
+  test("泳道生命周期术语随模板配置（作战语言 vs 通用项目管理语言）", async ({ page }) => {
+    // 虚谷（campaign 模板）：作战语言 事前/事中/事后
+    await page.goto(`${ROADMAP}?view=swimlane`);
+    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
+    await expect(page.locator(".swimlane-legend .band-prepare")).toContainText("事前");
+    await expect(page.locator(".swimlane-legend .band-active")).toContainText("事中");
+    await expect(page.locator(".swimlane-legend .band-converged")).toContainText("事后");
+    // 标准项目（standard 模板）：通用项目管理语言 规划/执行/交付
+    await page.goto(`/projects/standard-project-sample/modules/roadmap?view=swimlane`);
+    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
+    await expect(page.locator(".swimlane-legend .band-prepare")).toContainText("规划");
+    await expect(page.locator(".swimlane-legend .band-active")).toContainText("执行");
+    await expect(page.locator(".swimlane-legend .band-converged")).toContainText("交付");
+  });

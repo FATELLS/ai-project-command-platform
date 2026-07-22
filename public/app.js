@@ -39,12 +39,15 @@ function projectPresentation(project = {}) {
     overviewLabel: "作战总览",
     heroKicker: "OVERALL MISSION · 总作战目标",
     currentKicker: "CURRENT CAMPAIGN",
-    unit: terms.unit || "作战单元",
-    task: terms.task || "行动任务",
-    stage: terms.stage || "战役节点",
-    outcome: terms.outcome || "战果闭环",
-    workstream: "公司级战线"
-  } : {
+   unit: terms.unit || "作战单元",
+   task: terms.task || "行动任务",
+   stage: terms.stage || "战役节点",
+   outcome: terms.outcome || "战果闭环",
+    workstream: "公司级战线",
+    lifecyclePrepare: terms.lifecyclePrepare || "事前 · 待启",
+    lifecycleActive: terms.lifecycleActive || "事中 · 当前",
+    lifecycleConverged: terms.lifecycleConverged || "事后 · 已交付"
+ } : {
     kind: "standard",
     symbol: project.name?.trim()?.[0] || "项",
     scheduleTitle: "STANDARD PROJECT SCHEDULE",
@@ -52,12 +55,15 @@ function projectPresentation(project = {}) {
     overviewLabel: "项目总览",
     heroKicker: "PROJECT OVERVIEW · 项目目标",
     currentKicker: "CURRENT STATUS",
-    unit: terms.unit || "团队",
-    task: terms.task || "任务",
-    stage: terms.stage || "里程碑",
-    outcome: terms.outcome || "交付物",
-    workstream: "工作流"
-  };
+   unit: terms.unit || "团队",
+   task: terms.task || "任务",
+   stage: terms.stage || "里程碑",
+   outcome: terms.outcome || "交付物",
+    workstream: "工作流",
+    lifecyclePrepare: terms.lifecyclePrepare || "规划 · 待启动",
+    lifecycleActive: terms.lifecycleActive || "执行 · 进行中",
+    lifecycleConverged: terms.lifecycleConverged || "交付 · 已完成"
+ };
 }
 
 function element(tag, options = {}, children = []) {

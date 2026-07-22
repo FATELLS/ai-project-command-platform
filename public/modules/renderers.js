@@ -562,7 +562,7 @@ function lifecycleBandOf(state) {
   if (/当前|active|current|进行/i.test(String(state ?? ""))) return "active";
   return "prepare";
 }
-const SWIMLANE_BAND_LABEL = { prepare: "事前 · 待启", active: "事中 · 当前", converged: "事后 · 已交付" };
+// 生命周期三带术语来自项目模板（context.presentation.lifecyclePrepare/Active/Converged），默认回退见 renderRoadmapSwimlane。
 
 function isoFromDay(dayNumber) {
   return new Date(dayNumber * 86_400_000).toISOString().slice(0, 10);
@@ -576,6 +576,12 @@ function renderRoadmapSwimlane(context) {
   if (!stages.length) return emptyState(context.module.emptyState);
   const stageTerm = context.presentation.stage;
   const unitTerm = context.presentation.unit;
+  // LIF-01：生命周期三带术语随模板配置（作战语言 vs 通用项目管理语言），默认回退保证渲染器独立可用
+  const bandLabels = {
+    prepare: context.presentation.lifecyclePrepare || "事前 · 待启",
+    active: context.presentation.lifecycleActive || "事中 · 当前",
+    converged: context.presentation.lifecycleConverged || "事后 · 已交付"
+  };
   const selectedStage = context.query.get("stage");
   const selectedUnit = context.query.get("unit");
   const selectedTask = context.query.get("task");
@@ -684,12 +690,12 @@ function renderRoadmapSwimlane(context) {
     return el("button", {
       type: "button", className: `phase-station band-${stage.band}${isSelected ? " selected" : ""}${stage.id === context.data.currentStageId ? " current" : ""}`,
       style: [pos != null ? `left:${pos}%` : null, `top:${12 + lane * STATION_LANE_PX}px`].filter(Boolean).join(";"), dataset: { stageId: stage.id },
-      ariaLabel: `${stage.title}，${SWIMLANE_BAND_LABEL[stage.band]}${stage.state ? "，" + stage.state : ""}`,
-      title: `${stage.title} · ${SWIMLANE_BAND_LABEL[stage.band]}`, onClick: () => selectStage(stage.id)
+      ariaLabel: `${stage.title}，${bandLabels[stage.band]}${stage.state ? "，" + stage.state : ""}`,
+      title: `${stage.title} · ${bandLabels[stage.band]}`, onClick: () => selectStage(stage.id)
     }, [
       el("span", { className: "phase-anchor-mark", ariaHidden: "true", text: "▾", title: "项目锚点·拆解" }),
       el("span", { className: "phase-station-title", text: stage.title }),
-      el("span", { className: "phase-station-meta", text: SWIMLANE_BAND_LABEL[stage.band] })
+      el("span", { className: "phase-station-meta", text: bandLabels[stage.band] })
     ]);
   });
   const anchorNodes = anchorItems.map(({ closure, pos }) => el("button", {
@@ -721,9 +727,9 @@ function renderRoadmapSwimlane(context) {
   });
 
   const legend = el("ul", { className: "swimlane-legend", ariaLabel: "图例" }, [
-    el("li", { className: "band-prepare" }, [el("i", { className: "dot" }), "事前·待启"]),
-    el("li", { className: "band-active" }, [el("i", { className: "dot" }), "事中·当前"]),
-    el("li", { className: "band-converged" }, [el("i", { className: "dot" }), "事后·已交付"]),
+    el("li", { className: "band-prepare" }, [el("i", { className: "dot" }), bandLabels.prepare]),
+    el("li", { className: "band-active" }, [el("i", { className: "dot" }), bandLabels.active]),
+    el("li", { className: "band-converged" }, [el("i", { className: "dot" }), bandLabels.converged]),
     el("li", {}, [el("span", { className: "anchor-glyph", text: "▾", ariaHidden: "true" }), "拆解锚点"]),
     el("li", {}, [el("span", { className: "anchor-glyph", text: "◆", ariaHidden: "true" }), "收口锚点"]),
     el("li", {}, [el("span", { className: "anchor-glyph decomp-glyph", text: "⇢", ariaHidden: "true" }), "同单元拆解链"])
@@ -753,8 +759,8 @@ function renderRoadmapSwimlane(context) {
     if (stage) {
       const branchUnitCount = new Set(tasks.filter(task => phaseOf(task) === stage.id).map(task => task.unitId)).size;
       detail = el("article", { className: "inline-task-detail" }, [
-        el("span", { className: "eyebrow", text: `项目锚点 · ${SWIMLANE_BAND_LABEL[stage.band]}` }), el("h4", { text: stage.title }),
-        definitionList([["生命周期", SWIMLANE_BAND_LABEL[stage.band]], ["状态", stage.state], ["日期", stage.dateLabel], ["预期产出", stage.expectedOutput]]),
+        el("span", { className: "eyebrow", text: `项目锚点 · ${bandLabels[stage.band]}` }), el("h4", { text: stage.title }),
+        definitionList([["生命周期", bandLabels[stage.band]], ["状态", stage.state], ["日期", stage.dateLabel], ["预期产出", stage.expectedOutput]]),
         el("p", { className: "stage-branch-hint", text: `该阶段拆解到 ${branchUnitCount} 个${unitTerm}副泳道（按任务起点归入本阶段窗口）。` })
       ]);
     }

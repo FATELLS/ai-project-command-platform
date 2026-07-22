@@ -254,7 +254,8 @@ function roadmapSvg(context, stages, selectedStageId, stageSummaries = new Map()
 export function renderRoadmap(context) {
   // Phase 8：四种受控视图通过同一路由的 ?view= 切换，共享 stage/unit/task 深链。
   // timeline 采用粗主线（阶段节点 + 模块摘要芯片）+ 支线下钻（作战单元模块卡片）。
-  const defaultView = "timeline";
+ // 用户反馈：默认改为「项目泳道」（主脊/副泳道反应式），原「活动路线图」曲线作为可切换视图保留。
+ const defaultView = "swimlane";
   const view = context.query.get("view");
   const activeView = ["timeline", "board", "units", "network", "swimlane"].includes(view) ? view : defaultView;
   if (activeView === "board") return renderRoadmapBoard(context);
@@ -354,11 +355,11 @@ function buildModuleInspector(context, selectedStage) {
 
 // Phase 8：四种视图切换器（segmented control）。view 与 stage/unit/task 深链正交。
 function roadmapViewSwitcher(context) {
-  const current = context.query.get("view") || "timeline";
+  const current = context.query.get("view") || "swimlane";
   const views = [["timeline", "活动路线图"], ["swimlane", "项目泳道"], ["board", "阶段卡片板"], ["units", `${context.presentation.unit}进度`], ["network", "依赖网络"]];
   return el("nav", { className: "roadmap-view-switcher", ariaLabel: "路线图视图" }, views.map(([value, label]) => {
     const params = new URLSearchParams(context.query.toString());
-    if (value === "timeline") params.delete("view"); else params.set("view", value);
+    if (value === "swimlane") params.delete("view"); else params.set("view", value);
     const href = `?${params.toString()}`;
     return el("a", { href, className: current === value ? "active" : "", ariaCurrent: current === value ? "page" : null, text: label, onClick: event => { event.preventDefault(); context.navigate(href); } });
   }));
@@ -595,6 +596,9 @@ function renderRoadmapSwimlane(context) {
   const selectedUnit = context.query.get("unit");
   const selectedTask = context.query.get("task");
   const selectedAnchor = context.query.get("anchor");
+  const spineMode = context.query.get("spine") === "1";
+  // 主泳道「打开的卡片」：默认打开当前战役阶段，便于首屏即见涉及的副泳道任务；spine=1 表示用户显式收起回主脊。
+  const openStageId = spineMode ? null : (selectedStage || context.data.currentStageId || null);
 
   const dated = tasks.filter(task => task.startDate && task.endDate);
   const origin = dated.length ? Math.min(...dated.map(task => dayNumber(task.startDate))) : null;
@@ -670,6 +674,15 @@ function renderRoadmapSwimlane(context) {
   const selectUnit = id => setQuery(context.navigate, { unit: id, task: "" });
   const selectTask = id => setQuery(context.navigate, { task: id });
   const selectAnchor = id => setQuery(context.navigate, { anchor: id, task: "" });
+  const openStage = id => setQuery(context.navigate, { stage: id, unit: "", task: "", anchor: "", spine: "" });
+  // 点击主脊阶段卡片为手风琴：再点当前已打开的阶段 → 收起回主脊（显式 spine=1）。
+  const toggleStage = id => openStageId === id
+    ? setQuery(context.navigate, { stage: "", unit: "", task: "", anchor: "", spine: "1" })
+    : openStage(id);
+  const closeOverlay = () => setQuery(context.navigate, { task: "" });
+  // 反应式副泳道：只有「涉及当前打开主卡片」的作战单元才显示其任务条（有涉及才展示）。
+  const involvedUnitIds = new Set();
+  if (openStageId) for (const task of tasks) if (phaseOf(task) === openStageId && task.unitId) involvedUnitIds.add(task.unitId);
 
   function guideSpans() {
     return guideStages.map(stage => el("span", { className: `guide-line${stage.id === selectedStage ? " active" : ""}`, style: `left:${stagePos.get(stage.id)}%`, dataset: { guideStage: stage.id } }));
@@ -697,10 +710,11 @@ function renderRoadmapSwimlane(context) {
     const isSelected = stage.id === selectedStage;
     const lane = stationPlan.laneOf.get(stage.id) ?? 0;
     return el("button", {
-      type: "button", className: `phase-station band-${stage.band}${isSelected ? " selected" : ""}${stage.id === context.data.currentStageId ? " current" : ""}`,
+       type: "button", className: `phase-station band-${stage.band}${isSelected ? " selected" : ""}${stage.id === openStageId ? " open" : ""}${stage.id === context.data.currentStageId ? " current" : ""}`,
       style: [pos != null ? `left:${pos}%` : null, `top:${12 + lane * STATION_LANE_PX}px`].filter(Boolean).join(";"), dataset: { stageId: stage.id },
       ariaLabel: `${stage.title}，${bandLabels[stage.band]}${stage.state ? "，" + stage.state : ""}`,
-      title: `${stage.title} · ${bandLabels[stage.band]}`, onClick: () => selectStage(stage.id)
+      ariaExpanded: stage.id === openStageId ? "true" : "false",
+      title: `${stage.title} · ${bandLabels[stage.band]}`, onClick: () => toggleStage(stage.id)
     }, [
       el("span", { className: "phase-anchor-mark", ariaHidden: "true", text: "▾", title: "项目锚点·拆解" }),
       el("span", { className: "phase-station-title", text: stage.title }),
@@ -716,25 +730,27 @@ function renderRoadmapSwimlane(context) {
   const mainTrackStyle = hasTimeline ? `min-height:${24 + stationPlan.laneCount * STATION_LANE_PX + anchorPlan.laneCount * ANCHOR_LANE_PX + 14}px` : null;
   const mainTrack = el("div", { className: "swimlane-main-track", style: mainTrackStyle }, [...guideSpans(), ...phaseNodes, ...anchorNodes]);
 
-  const subRows = subLanes.map(({ unit, positioned, trackCount }) => {
-    const unitBand = unitLifecycleBandOf(tasks.filter(task => task.unitId === unit.id));
-   const bars = positioned.map(({ task, left, width, track, phaseId }) => {
-     if (left == null) return null;
-      const inChain = activeChain ? activeChain.has(task.id) : false;
-      const dimmed = activeChain ? !inChain : (selectedStage && phaseId !== selectedStage);
-      const hasParent = Boolean(task.parentId);
-      return el("button", {
-        type: "button", className: `swimlane-bar${task.id === selectedTask ? " selected" : ""}${dimmed ? " dimmed" : ""}${hasParent ? " has-parent" : ""}${inChain && !dimmed ? " chain" : ""}`,
-        style: `left:${left}%;width:${width}%;--track:${track}`, dataset: { taskId: task.id, phaseId: phaseId ?? "", parent: task.parentId || "" },
-        ariaLabel: `${task.title}，${unit.name}，${safeText(task.owner, "待确认")}，${formatDay(task.startDate)} 至 ${formatDay(task.endDate)}，${statusText(task.state)}${hasParent ? `，拆解自 ${taskById.get(task.parentId)?.title ?? task.parentId}` : ""}`,
-        title: `${task.title} · ${formatDay(task.startDate)}→${formatDay(task.endDate)}`, onClick: () => selectTask(task.id)
-      }, [hasParent ? el("span", { className: "swimlane-bar-decomp", ariaHidden: "true", text: "⇢", title: `拆解自 ${taskById.get(task.parentId)?.title ?? task.parentId}` }) : null, el("span", { className: "swimlane-bar-title", text: task.title }), Number.isFinite(task.progress) ? el("span", { className: "swimlane-bar-progress", text: `${task.progress}%` }) : null]);
-    }).filter(Boolean);
-    return el("div", { className: `swimlane-row${unit.id === selectedUnit ? " selected" : ""}`, dataset: { unitId: unit.id } }, [
-      el("button", { type: "button", className: `swimlane-rail unit-band-${unitBand}`, title: `${unit.name} · ${bandLabels[unitBand]}`, onClick: () => selectUnit(unit.id) }, [el("span", { className: "unit-band-mark", ariaHidden: "true" }), el("span", { className: "unit-band-name", text: unit.name }), el("span", { className: "unit-band-label", text: bandLabels[unitBand] })]),
-      el("div", { className: "swimlane-unit-track", style: `--tracks:${trackCount}`, role: "list" }, [...guideSpans(), ...(bars.length ? bars : [el("span", { className: "swimlane-empty", text: "无排期任务" })])])
-    ]);
-  });
+ const subRows = subLanes.map(({ unit, positioned, trackCount }) => {
+   const unitBand = unitLifecycleBandOf(tasks.filter(task => task.unitId === unit.id));
+   // 反应式：平时副泳道连卡片都不展现；仅当主泳道打开某阶段且该单元涉及该阶段时，才渲染其任务条（有涉及才展示）。
+   const isInvolved = Boolean(openStageId) && involvedUnitIds.has(unit.id);
+   const bars = (isInvolved ? positioned : []).map(({ task, left, width, track, phaseId }) => {
+    if (left == null) return null;
+     const inChain = activeChain ? activeChain.has(task.id) : false;
+     const dimmed = activeChain ? !inChain : (openStageId && phaseId !== openStageId);
+     const hasParent = Boolean(task.parentId);
+     return el("button", {
+       type: "button", className: `swimlane-bar${task.id === selectedTask ? " selected" : ""}${dimmed ? " dimmed" : ""}${hasParent ? " has-parent" : ""}${inChain && !dimmed ? " chain" : ""}`,
+       style: `left:${left}%;width:${width}%;--track:${track}`, dataset: { taskId: task.id, phaseId: phaseId ?? "", parent: task.parentId || "" },
+       ariaLabel: `${task.title}，${unit.name}，${safeText(task.owner, "待确认")}，${formatDay(task.startDate)} 至 ${formatDay(task.endDate)}，${statusText(task.state)}${hasParent ? `，拆解自 ${taskById.get(task.parentId)?.title ?? task.parentId}` : ""}`,
+       title: `${task.title} · ${formatDay(task.startDate)}→${formatDay(task.endDate)}`, onClick: () => selectTask(task.id)
+     }, [hasParent ? el("span", { className: "swimlane-bar-decomp", ariaHidden: "true", text: "⇢", title: `拆解自 ${taskById.get(task.parentId)?.title ?? task.parentId}` }) : null, el("span", { className: "swimlane-bar-title", text: task.title }), Number.isFinite(task.progress) ? el("span", { className: "swimlane-bar-progress", text: `${task.progress}%` }) : null]);
+   }).filter(Boolean);
+   return el("div", { className: `swimlane-row${unit.id === selectedUnit ? " selected" : ""}${isInvolved ? "" : " dormant"}`, dataset: { unitId: unit.id } }, [
+     el("button", { type: "button", className: `swimlane-rail unit-band-${unitBand}`, title: `${unit.name} · ${bandLabels[unitBand]}`, onClick: () => selectUnit(unit.id) }, [el("span", { className: "unit-band-mark", ariaHidden: "true" }), el("span", { className: "unit-band-name", text: unit.name }), el("span", { className: "unit-band-label", text: bandLabels[unitBand] })]),
+     el("div", { className: "swimlane-unit-track", style: `--tracks:${trackCount}`, role: "list" }, [...guideSpans(), ...(bars.length ? bars : [el("span", { className: "swimlane-empty", text: isInvolved ? "本阶段无排期任务" : "未涉及当前阶段·待主泳道展开" })])])
+   ]);
+ });
 
   const legend = el("ul", { className: "swimlane-legend", ariaLabel: "图例" }, [
     el("li", { className: "band-prepare" }, [el("i", { className: "dot" }), bandLabels.prepare]),
@@ -748,32 +764,58 @@ function renderRoadmapSwimlane(context) {
     el("div", { className: "swimlane-main", role: "row", ariaLabel: "主泳道" }, [el("span", { className: "swimlane-rail swimlane-rail-main", text: "主泳道" }), mainTrack]),
     el("div", { className: "swimlane-sub", role: "rowgroup", ariaLabel: `${unitTerm}副泳道` }, subRows.length ? subRows : el("p", { className: "swimlane-empty", text: `暂无${unitTerm}副泳道数据。` })),
     hasTimeline ? el("div", { className: "swimlane-axis", ariaHidden: "true" }, [el("span", { text: formatDay(isoFromDay(origin)) }), el("span", { text: formatDay(isoFromDay(horizon)) })]) : null
-  ]);
+ ]);
 
-  let detail = null;
+ // 主泳道展开卡片：打开某阶段时展示该阶段主卡片（说明/产出/涉及单元），点击收起回主脊。
+  const openStageObj = phaseStages.find(stage => stage.id === openStageId) ?? null;
+  const involvedUnits = openStageObj ? units.filter(unit => involvedUnitIds.has(unit.id)) : [];
+  const involvedTasks = openStageObj ? tasks.filter(task => phaseOf(task) === openStageObj.id) : [];
+  const openStageProgress = involvedTasks.length ? Math.round(involvedTasks.filter(task => Number(task.progress) >= 100 || ["done", "completed", "完成", "已完成"].includes(String(task.state ?? "").toLowerCase())).length / involvedTasks.length * 100) : null;
+  const mainCard = openStageObj ? el("article", { className: `swimlane-main-card band-${openStageObj.band}` }, [
+     el("div", { className: "swimlane-main-card-head" }, [
+       el("div", {}, [
+         el("span", { className: "eyebrow", text: `主泳道 · 阶段卡片 · ${bandLabels[openStageObj.band]}` }),
+         el("h3", { text: openStageObj.title }),
+         definitionList([["日期", openStageObj.dateLabel], ["状态", openStageObj.state], ["预期产出", openStageObj.expectedOutput], ["说明", openStageObj.description]])
+       ]),
+       el("button", { type: "button", className: "secondary-button", onClick: () => toggleStage(openStageObj.id), ariaLabel: "收起阶段卡片，回到主脊", text: "收起 · 回主脊" })
+     ]),
+     el("div", { className: "swimlane-main-card-body" }, [
+       el("p", { className: "module-summary-strip", text: involvedTasks.length ? `涉及 ${involvedUnits.length} 个${unitTerm} · ${involvedTasks.length} 个${context.presentation.task}${openStageProgress != null ? ` · 整体 ${openStageProgress}%` : ""}` : `本${stageTerm}暂无归入${unitTerm}任务` }),
+       involvedUnits.length ? el("ul", { className: "swimlane-involved-units" }, involvedUnits.map(unit => el("li", { className: "swimlane-involved-unit" }, [el("span", { className: "unit-band-mark", ariaHidden: "true" }), el("span", { text: unit.name })]))) : null
+     ])
+  ]) : el("p", { className: "swimlane-spine-hint", text: `主脊已收起：点击上方${stageTerm}即可展开该阶段涉及的${unitTerm}任务（有涉及才展示）。` });
+  // 副泳道卡片浮层：点作战单元任务条 → 浮在泳道最上层，可单独打开该单元页面或关闭。
+  let unitOverlay = null;
   if (selectedTask) {
-    const task = tasks.find(item => item.id === selectedTask);
-    const unitName = units.find(unit => unit.id === task?.unitId)?.name ?? "";
-    detail = task ? taskInlineDetail(context, task, unitName) : null;
-  } else if (selectedUnit) {
+    const task = tasks.find(item => item.id === selectedTask) ?? null;
+    const unit = units.find(item => item.id === task?.unitId) ?? null;
+    if (task) unitOverlay = el("div", { className: "swimlane-overlay", role: "dialog", ariaModal: "true", ariaLabel: `${unit?.name ?? ""}${context.presentation.task}详情` }, [
+      el("button", { type: "button", className: "swimlane-overlay-backdrop", ariaLabel: "关闭", onClick: closeOverlay }),
+      el("article", { className: "swimlane-overlay-panel" }, [
+        el("header", {}, [
+          el("div", {}, [el("span", { className: "eyebrow", text: `${unit?.name ?? unitTerm} · 副泳道卡片` }), el("h3", { text: task.title })]),
+          el("button", { type: "button", className: "icon-button", ariaLabel: "关闭浮层", text: "✕", onClick: closeOverlay })
+        ]),
+        taskInlineDetail(context, task, unit?.name ?? ""),
+        el("div", { className: "swimlane-overlay-actions" }, [
+          el("a", { className: "primary-button", href: `/projects/${encodeURIComponent(context.project.id)}/modules/units?unit=${encodeURIComponent(task.unitId ?? "")}`, text: `单独打开${unitTerm}页面` }),
+          el("button", { type: "button", className: "secondary-button", onClick: closeOverlay, text: "关闭" })
+        ])
+      ])
+    ]);
+  }
+  // 非任务的就地详情（收口锚点 / 作战单元整条路线）放在泳道下方。
+  let detail = null;
+  if (selectedUnit && !selectedTask) {
     const unit = units.find(item => item.id === selectedUnit);
     detail = unit ? unitRouteDetail(context, unit) : null;
-  } else if (selectedAnchor) {
+  } else if (selectedAnchor && !selectedTask) {
     const closure = closures.find(item => item.id === selectedAnchor);
     detail = closure ? el("article", { className: "inline-task-detail" }, [
       el("span", { className: "eyebrow", text: "收口锚点 · 战果闭环" }), el("h4", { text: closure.title }),
       definitionList([["状态", closure.state], ["日期", closure.dateLabel], ["关联阶段", (closure.between ?? []).join(" → ")], ["结果", closure.result], ["说明", closure.description], ["来源", closure.source]])
     ]) : null;
-  } else {
-    const stage = phaseStages.find(item => item.id === (selectedStage ?? context.data.currentStageId)) ?? phaseStages[0];
-    if (stage) {
-      const branchUnitCount = new Set(tasks.filter(task => phaseOf(task) === stage.id).map(task => task.unitId)).size;
-      detail = el("article", { className: "inline-task-detail" }, [
-        el("span", { className: "eyebrow", text: `项目锚点 · ${bandLabels[stage.band]}` }), el("h4", { text: stage.title }),
-        definitionList([["生命周期", bandLabels[stage.band]], ["状态", stage.state], ["日期", stage.dateLabel], ["预期产出", stage.expectedOutput]]),
-        el("p", { className: "stage-branch-hint", text: `该阶段拆解到 ${branchUnitCount} 个${unitTerm}副泳道（按任务起点归入本阶段窗口）。` })
-      ]);
-    }
   }
 
   const unscheduledSection = unscheduled.length ? el("section", { className: "unscheduled-lane" }, [
@@ -783,16 +825,18 @@ function renderRoadmapSwimlane(context) {
     ])))
   ]) : null;
 
-  return el("div", {}, [
-    el("section", { className: "module-primary-card roadmap-workbench roadmap-swimlane" }, [
-      roadmapViewSwitcher(context),
-      cardHeading("PROJECT SWIMLANE", context.module.title, `主泳道按${stageTerm}推进，副泳道按${unitTerm}并行；${stageTerm}起点为拆解锚点（主→副），战果闭环为收口锚点（副→主）。`),
-      legend,
-      localScroller("项目泳道图，可水平滚动", chart),
-      unscheduledSection,
-      detail
-    ])
-  ]);
+ return el("div", {}, [
+   el("section", { className: "module-primary-card roadmap-workbench roadmap-swimlane" }, [
+     roadmapViewSwitcher(context),
+     cardHeading("PROJECT SWIMLANE", context.module.title, `主脊按${stageTerm}排列：点击阶段展开主卡片，涉及的${unitTerm}才在副泳道显示任务（有涉及才展示）；再点${unitTerm}任务条浮层可单独打开。`),
+     mainCard,
+     legend,
+     localScroller("项目泳道图，可水平滚动", chart),
+     unscheduledSection,
+     detail
+   ]),
+   unitOverlay
+ ]);
 }
 
 function taskDetails(context, node) {

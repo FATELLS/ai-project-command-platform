@@ -222,3 +222,34 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     await expect(platformRail).toContainText("事前");
     await expect(rdRail).toContainText("事中");
   });
+
+  test("项目泳道默认为主脊反应式：打开阶段卡片才显示涉及单元任务（有涉及才展示）", async ({ page }) => {
+    // 默认（无 stage）打开当前战役阶段 launch，主脊该阶段 open、副泳道仅涉及单元有任务条
+    await page.goto(`${ROADMAP}?view=swimlane`);
+    await expect(page.locator(".phase-station.open[data-stage-id='launch']")).toBeVisible();
+    await expect(page.locator(".swimlane-main-card")).toBeVisible();
+    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
+    // platform 仅 1 个无排期任务、不涉及 launch → 该副泳道休眠、无任务条
+    await expect(page.locator(".swimlane-row.dormant[data-unit-id='platform']")).toBeVisible();
+    expect(await page.locator(".swimlane-row[data-unit-id='platform'] .swimlane-bar").count()).toBe(0);
+    // 收起回主脊（spine=1）：无主卡片、无任何任务条
+    await page.locator(".phase-station[data-stage-id='launch']").click();
+    await expect(page).toHaveURL(/spine=1/);
+    await expect(page.locator(".swimlane-main-card")).toHaveCount(0);
+    expect(await page.locator(".swimlane-bar").count()).toBe(0);
+    await expect(page.locator(".swimlane-spine-hint")).toBeVisible();
+  });
+
+  test("副泳道任务条点击浮在最上层，可单独打开/关闭（#5）", async ({ page }) => {
+    await page.goto(`${ROADMAP}?view=swimlane&stage=launch`);
+    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
+    await page.locator(".swimlane-bar").first().click();
+    await expect(page).toHaveURL(/task=/);
+    // 浮层：dialog + 单独打开按钮 + 关闭按钮
+    await expect(page.locator(".swimlane-overlay[role='dialog']")).toBeVisible();
+    await expect(page.locator(".swimlane-overlay-actions .primary-button")).toContainText("单独打开");
+    // 关闭浮层 → 清 task，浮层消失
+    await page.locator(".swimlane-overlay-actions .secondary-button", { hasText: "关闭" }).click();
+    await expect(page).not.toHaveURL(/task=/);
+    await expect(page.locator(".swimlane-overlay")).toHaveCount(0);
+  });

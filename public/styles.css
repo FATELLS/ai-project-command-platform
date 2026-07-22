@@ -970,3 +970,33 @@ body { overflow-x: clip; }
 .stage-branch-hint { margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--blue-100); color: var(--ink-600); font-size: 12px; }
 .swimlane-chart[data-timeline="0"] .swimlane-main-track { display: flex; flex-wrap: wrap; gap: 10px; min-height: 60px; }
 .swimlane-chart[data-timeline="0"] .phase-station { position: static; transform: none; }
+
+/* ===== Phase 10：路线图泳道化（主脊/副泳道反应式 + 副泳道卡片浮层）===== */
+/* 主脊阶段卡片展开态：当前打开的阶段在主脊上高亮 */
+.phase-station.open { border-color: var(--blue-600); box-shadow: 0 0 0 3px var(--blue-100), 0 10px 22px rgba(20, 82, 160, .14); }
+.phase-station.open::after { content: "▾"; position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%); color: var(--blue-600); font-size: 11px; line-height: 1; }
+/* 休眠副泳道（未涉及当前阶段）：淡化行，突出「平时不展现卡片」 */
+.swimlane-row.dormant { opacity: .46; }
+.swimlane-row.dormant .swimlane-empty { color: var(--ink-400); font-style: italic; }
+/* 主泳道展开卡片 */
+.swimlane-main-card { padding: 16px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow-card); border-top: 4px solid var(--ink-400); }
+.swimlane-main-card.band-active { border-top-color: var(--orange-600); }
+.swimlane-main-card.band-converged { border-top-color: var(--green-600); }
+.swimlane-main-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.swimlane-main-card-head h3 { margin: 4px 0 8px; font-size: 18px; }
+.swimlane-main-card-head .secondary-button { flex: none; }
+.swimlane-main-card-body { margin-top: 10px; display: grid; gap: 10px; }
+.swimlane-involved-units { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.swimlane-involved-unit { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--canvas); font-size: 12px; font-weight: 600; color: var(--ink-700); }
+.swimlane-involved-unit .unit-band-mark { position: static; transform: none; width: 8px; height: 8px; border-radius: 50%; background: var(--blue-600); }
+.swimlane-spine-hint { margin: 0; padding: 12px 16px; border: 1px dashed var(--line); border-radius: 14px; background: var(--canvas); color: var(--ink-600); font-size: 13px; text-align: center; }
+/* 副泳道卡片浮层：浮在泳道最上层（position:fixed 全屏遮罩 + 居中面板） */
+.swimlane-overlay { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 24px; }
+.swimlane-overlay-backdrop { position: absolute; inset: 0; border: 0; background: rgba(15, 23, 42, .5); backdrop-filter: blur(2px); cursor: pointer; }
+.swimlane-overlay-panel { position: relative; z-index: 1; width: min(640px, 100%); max-height: 84vh; overflow: auto; padding: 20px 22px; border-radius: 18px; background: var(--surface); box-shadow: 0 30px 60px rgba(15, 23, 42, .35); }
+.swimlane-overlay-panel header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+.swimlane-overlay-panel header h3 { margin: 4px 0 0; font-size: 18px; }
+.swimlane-overlay-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.swimlane-overlay-actions a { text-decoration: none; }
+.icon-button { min-width: 34px; min-height: 34px; padding: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--canvas); color: var(--ink-700); font-size: 15px; line-height: 1; cursor: pointer; }
+.icon-button:hover { border-color: var(--blue-600); color: var(--blue-600); }

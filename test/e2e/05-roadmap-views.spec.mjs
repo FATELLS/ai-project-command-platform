@@ -205,3 +205,20 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     // 收口锚点总数应 >= 3（含原 2 个 + 新增多源）
     expect(await page.locator(".closure-anchor").count()).toBeGreaterThanOrEqual(3);
   });
+
+  test("副泳道行头显示单元级分形生命周期带（派生自该单元任务）", async ({ page }) => {
+    await page.goto(`${ROADMAP}?view=swimlane`);
+    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
+    // 每个 unit 行头有生命周期带标记（unit-band-prepare/active/converged）
+    const bandedRails = page.locator(".swimlane-row .swimlane-rail[class*='unit-band-']");
+    expect(await bandedRails.count()).toBeGreaterThanOrEqual(7);
+    // platform 单元只有 1 个无排期任务 → 事前·待启（prepare）
+    const platformRail = page.locator(".swimlane-row[data-unit-id='platform'] .swimlane-rail");
+    await expect(platformRail).toHaveClass(/unit-band-prepare/);
+    // 研发单元有进行中任务 → 事中·当前（active）
+    const rdRail = page.locator(".swimlane-row[data-unit-id='rd'] .swimlane-rail");
+    await expect(rdRail).toHaveClass(/unit-band-active/);
+    // 行头显示带标签（复用模板术语）
+    await expect(platformRail).toContainText("事前");
+    await expect(rdRail).toContainText("事中");
+  });

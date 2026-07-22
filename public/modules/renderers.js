@@ -562,6 +562,15 @@ function lifecycleBandOf(state) {
   if (/当前|active|current|进行/i.test(String(state ?? ""))) return "active";
   return "prepare";
 }
+// LIF-05：单元级分形生命周期——从 unit 自己的任务派生同一事前/事中/事后范式，无新数据字段。
+function unitLifecycleBandOf(unitTasks) {
+  if (!unitTasks.length) return "prepare";
+  const isDone = task => Number(task.progress) >= 100 || /done|completed|完成|已完成|mitigated/i.test(String(task.state ?? ""));
+  if (unitTasks.every(isDone)) return "converged";
+  const isActive = task => Number.isFinite(task.progress) || /进行|in-progress|active|current|当前/i.test(String(task.state ?? ""));
+  const hasScheduled = unitTasks.some(task => task.startDate || task.endDate);
+  return unitTasks.some(isActive) || hasScheduled ? "active" : "prepare";
+}
 // 生命周期三带术语来自项目模板（context.presentation.lifecyclePrepare/Active/Converged），默认回退见 renderRoadmapSwimlane。
 
 function isoFromDay(dayNumber) {
@@ -708,6 +717,7 @@ function renderRoadmapSwimlane(context) {
   const mainTrack = el("div", { className: "swimlane-main-track", style: mainTrackStyle }, [...guideSpans(), ...phaseNodes, ...anchorNodes]);
 
   const subRows = subLanes.map(({ unit, positioned, trackCount }) => {
+    const unitBand = unitLifecycleBandOf(tasks.filter(task => task.unitId === unit.id));
    const bars = positioned.map(({ task, left, width, track, phaseId }) => {
      if (left == null) return null;
       const inChain = activeChain ? activeChain.has(task.id) : false;
@@ -721,7 +731,7 @@ function renderRoadmapSwimlane(context) {
       }, [hasParent ? el("span", { className: "swimlane-bar-decomp", ariaHidden: "true", text: "⇢", title: `拆解自 ${taskById.get(task.parentId)?.title ?? task.parentId}` }) : null, el("span", { className: "swimlane-bar-title", text: task.title }), Number.isFinite(task.progress) ? el("span", { className: "swimlane-bar-progress", text: `${task.progress}%` }) : null]);
     }).filter(Boolean);
     return el("div", { className: `swimlane-row${unit.id === selectedUnit ? " selected" : ""}`, dataset: { unitId: unit.id } }, [
-      el("button", { type: "button", className: "swimlane-rail", title: unit.name, onClick: () => selectUnit(unit.id) }, [el("span", { text: unit.name })]),
+      el("button", { type: "button", className: `swimlane-rail unit-band-${unitBand}`, title: `${unit.name} · ${bandLabels[unitBand]}`, onClick: () => selectUnit(unit.id) }, [el("span", { className: "unit-band-mark", ariaHidden: "true" }), el("span", { className: "unit-band-name", text: unit.name }), el("span", { className: "unit-band-label", text: bandLabels[unitBand] })]),
       el("div", { className: "swimlane-unit-track", style: `--tracks:${trackCount}`, role: "list" }, [...guideSpans(), ...(bars.length ? bars : [el("span", { className: "swimlane-empty", text: "无排期任务" })])])
     ]);
   });

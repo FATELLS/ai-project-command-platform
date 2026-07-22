@@ -13,16 +13,33 @@ await page.waitForURL(/\/projects/);
 
 const ROADMAP = `${BASE}/projects/xugu-agentic-group/modules/roadmap`;
 
-// 1) 默认 timeline：粗主线 + 模块摘要芯片 + 模块检查器
+// 1) 默认项目泳道（主脊/副泳道反应式）：当前阶段 launch 默认展开，涉及单元任务条显现
 await page.goto(ROADMAP);
-await page.waitForSelector(".roadmap-svg");
-await page.waitForSelector(".module-inspector");
+await page.waitForSelector(".roadmap-swimlane");
+await page.waitForSelector(".phase-station.open");
 await page.waitForTimeout(700);
 await page.screenshot({ path: `${OUT}/roadmap-default.png`, fullPage: true });
 console.log("saved", `${OUT}/roadmap-default.png`);
 
-// 2) 下钻：点阶段节点 launch，再点第一个作战单元模块卡片展开任务
-await page.goto(`${ROADMAP}?stage=launch`);
+// 1b) 副泳道任务条浮层（单独打开/关闭）
+await page.goto(`${ROADMAP}?view=swimlane&stage=launch`);
+await page.waitForSelector(".swimlane-bar");
+await page.locator(".swimlane-bar").first().click();
+await page.waitForSelector(".swimlane-overlay");
+await page.waitForTimeout(500);
+await page.screenshot({ path: `${OUT}/roadmap-overlay.png`, fullPage: true });
+console.log("saved", `${OUT}/roadmap-overlay.png`);
+
+// 2) 活动路线图（曲线视图，现在为可切换视图）：粗主线 + 模块摘要芯片 + 模块检查器
+await page.goto(`${ROADMAP}?view=timeline`);
+await page.waitForSelector(".roadmap-svg");
+await page.waitForSelector(".module-inspector");
+await page.waitForTimeout(700);
+await page.screenshot({ path: `${OUT}/roadmap-timeline.png`, fullPage: true });
+console.log("saved", `${OUT}/roadmap-timeline.png`);
+
+// 2b) 曲线下钻：点阶段节点 launch，再点第一个作战单元模块卡片展开任务
+await page.goto(`${ROADMAP}?view=timeline&stage=launch`);
 await page.waitForSelector(".unit-module-card");
 await page.locator(".unit-module-card").first().click();
 await page.waitForURL(/unit=/);

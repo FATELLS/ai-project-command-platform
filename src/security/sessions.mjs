@@ -1,7 +1,8 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 
 export const SESSION_COOKIE_NAME = "platform_session";
-export const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1_000;
+ // 空闲超时：用户要求会话不要因短暂离开而过期，调到 4 小时。
+ export const DEFAULT_IDLE_TIMEOUT_MS = 4 * 60 * 60 * 1_000;
 export const DEFAULT_ABSOLUTE_TIMEOUT_MS = 8 * 60 * 60 * 1_000;
 
 export function hashSessionToken(token) {

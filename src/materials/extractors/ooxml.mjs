@@ -36,10 +36,10 @@ export async function extractOoxml({ path, extension }, limits = extractionLimit
   }
   if (extension === ".xlsx") {
     const files = await readZip(path, name => name === "xl/sharedStrings.xml" || /^xl\/worksheets\/sheet\d+\.xml$/.test(name), limits.maxTextBytes);
-    const shared = [...(files.get("xl/sharedStrings.xml") ?? "").matchAll(/<si(?:\s[^>]*)?>([\s\S]*?)<\/si>/g)].map(match => decodeXmlText(match[1]));
+    const shared = [...(files.get("xl/sharedStrings.xml") ?? "").matchAll(/<(?:\w+:)?si(?:\s[^>]*)?>([\s\S]*?)<\/(?:\w+:)?si>/g)].map(match => decodeXmlText(match[1]));
     const sheets = [...files].filter(([name]) => /worksheets\/sheet/.test(name)).sort();
-    return sheets.flatMap(([name, xml], sheetIndex) => [...xml.matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)].flatMap(match => {
-      const cell = match[1].match(/\br="([^"]+)"/)?.[1]; const raw = match[2].match(/<v>([\s\S]*?)<\/v>/)?.[1] ?? "";
+    return sheets.flatMap(([name, xml], sheetIndex) => [...xml.matchAll(/<(?:\w+:)?c\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?c>/g)].flatMap(match => {
+      const cell = match[1].match(/\br="([^"]+)"/)?.[1]; const raw = match[2].match(/<(?:\w+:)?v>([\s\S]*?)<\/(?:\w+:)?v>/)?.[1] ?? "";
       const value = /\bt="s"/.test(match[1]) ? shared[Number(raw)] : decodeXmlText(raw);
       return splitBlock(value, "sheet", { type: "sheet-cell", sheet: `Sheet${sheetIndex + 1}`, cell }, limits);
     }));

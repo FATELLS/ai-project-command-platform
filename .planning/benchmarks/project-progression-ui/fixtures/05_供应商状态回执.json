@@ -1,0 +1,35 @@
+{
+  "benchmark": true,
+  "project": "xugu-agentic-group",
+  "as_of": "2026-07-23",
+  "source": {
+    "kind": "supplier_callback",
+    "name": "算力服务供应商（模拟）",
+    "ticket": "BENCH-COMPUTE-0723"
+  },
+  "status_report": {
+    "task_id": "admin-compute",
+    "task_title": "可持续算力与分级调度",
+    "responsible_unit": "行政作战单元",
+    "owner": "谢莅",
+    "progress": 40,
+    "state": "at-risk",
+    "next_action": "2026-07-28 前确认可持续算力预算和高优先级队列",
+    "risk": {
+      "title": "免费算力耗尽影响高频办公验证",
+      "severity": "high",
+      "status": "open",
+      "due_date": "2026-07-31",
+      "mitigation": "启用分级调度，优先保障申报材料与高频办公验证"
+    }
+  },
+  "metric": {
+    "name": "技能模块安装数量",
+    "value": 56,
+    "unit": "个",
+    "status": "on-track",
+    "as_of": "2026-07-23",
+    "target": 60
+  },
+  "warning": "该回执为外部来源，只能作为提案证据；不得自动改写项目。"
+}

@@ -5,11 +5,12 @@ const BASE = `http://127.0.0.1:${process.env.E2E_PORT || 4191}`;
 const ROADMAP = "/projects/xugu-agentic-group/modules/roadmap";
 
 test.describe("Phase 8 路线图可视化工作台", () => {
-  test("四种视图切换器存在并可互跳", async ({ page }) => {
+  test("项目路线图与三个辅助视图可互跳", async ({ page }) => {
     await page.goto(ROADMAP);
     await expect(page.locator(".roadmap-view-switcher")).toBeVisible();
     const tabs = page.locator(".roadmap-view-switcher a");
-    await expect(tabs).toHaveCount(5);
+    await expect(tabs).toHaveCount(4);
+    await expect(page.locator(".roadmap-view-switcher a", { hasText: "活动路线图" })).toHaveCount(0);
 
     // 切换到卡片板
     await page.locator(".roadmap-view-switcher a", { hasText: "阶段卡片板" }).click();
@@ -26,10 +27,9 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     await expect(page).toHaveURL(/view=network/);
     await expect(page.locator(".roadmap-network")).toBeVisible();
 
-    // 切回活动路线图（timeline）
-    await page.locator(".roadmap-view-switcher a", { hasText: "活动路线图" }).click();
-    // timeline 视图同时呈现战略曲线与时间列；断言主曲线可见
-    await expect(page.locator(".roadmap-svg")).toBeVisible();
+    // 切回项目路线图
+    await page.locator(".roadmap-view-switcher a", { hasText: "项目路线图" }).click();
+    await expect(page.locator(".roadmap-card-swimlane")).toBeVisible();
   });
 
   test("深链 view=board 直接恢复卡片板", async ({ page }) => {
@@ -124,132 +124,147 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     await expect(page.locator(".dependency-list")).toBeVisible();
   });
 
-  test("项目泳道呈现主泳道/副泳道/双锚点并支持深链", async ({ page }) => {
+  test("项目泳道默认只呈现主任务时间线，点击主任务才展开副任务", async ({ page }) => {
     await page.goto(`${ROADMAP}?view=swimlane`);
-    await expect(page.locator(".roadmap-swimlane")).toBeVisible();
-    // 主泳道：阶段站点（项目锚点·拆解）
-    await expect(page.locator(".swimlane-main-track .phase-station").first()).toBeVisible();
-    expect(await page.locator(".swimlane-main-track .phase-station").count()).toBeGreaterThanOrEqual(6);
-    // 副泳道：作战单元行 + 任务条（并行子任务）
-    await expect(page.locator(".swimlane-sub .swimlane-row").first()).toBeVisible();
-    expect(await page.locator(".swimlane-sub .swimlane-row").count()).toBeGreaterThanOrEqual(7);
-    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
-    // 收口锚点（战果闭环）
-    expect(await page.locator(".closure-anchor").count()).toBeGreaterThanOrEqual(1);
-    // 生命周期三带图例
-    await expect(page.locator(".swimlane-legend .band-prepare")).toBeVisible();
-    await expect(page.locator(".swimlane-legend .band-active")).toBeVisible();
-    await expect(page.locator(".swimlane-legend .band-converged")).toBeVisible();
-    // 点击阶段站点写入 stage 深链
-    await page.locator(".swimlane-main-track .phase-station").first().click();
-    await expect(page).toHaveURL(/stage=/);
-    // 点击任务条写入 task 深链
-    await page.locator(".swimlane-bar").first().click();
-    await expect(page).toHaveURL(/task=/);
-  });
-});
+    await expect(page.locator(".roadmap-card-swimlane")).toBeVisible();
+    await expect(page.locator(".swimlane-main-cards .swimlane-stage-card").first()).toBeVisible();
+    expect(await page.locator(".swimlane-stage-card").count()).toBeGreaterThanOrEqual(6);
+    await expect(page.locator(".swimlane-card-empty")).toContainText("未选择时隐藏全部");
+    await expect(page.locator(".swimlane-card-row")).toHaveCount(0);
+    await expect(page.locator(".swimlane-task-card")).toHaveCount(0);
 
-  test("项目泳道副泳道展示同单元拆解链并高亮链上任务", async ({ page }) => {
-    await page.goto(`${ROADMAP}?view=swimlane`);
-    // 先等副泳道任务条渲染完成
-    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
-    // 带 parentId 的子任务条带拆解标记（⇢ 与 has-parent）
-    const decompBars = page.locator(".swimlane-bar[data-parent]:not([data-parent=''])");
-    expect(await decompBars.count()).toBeGreaterThanOrEqual(3);
-    await expect(decompBars.first()).toBeVisible();
-    // 图例含拆解链说明
-    await expect(page.locator(".swimlane-legend .decomp-glyph")).toBeVisible();
-    // 点击研发拆解链的中节点（rd-driver-productize），祖孙三代（rd-core-assessment → productize → rd-tool-rebuild）均高亮
-    const productize = page.locator(".swimlane-bar[data-task-id='rd-driver-productize']");
-    await productize.click();
+    const launch = page.locator(".swimlane-stage-card").filter({ hasText: "首批场景出征" });
+    await launch.click();
+    await expect(page).toHaveURL(/stage=launch/);
+    await expect(launch).toHaveAttribute("aria-expanded", "true");
+    await expect(launch).toContainText("第一次作战汇报完成后启动");
+    await expect(page.locator(".swimlane-card-row").first()).toBeVisible();
+    await expect(page.locator(".swimlane-task-card").first()).toBeVisible();
+
+    await launch.click();
+    await expect(page).not.toHaveURL(/stage=/);
+    await expect(page.locator(".swimlane-card-row")).toHaveCount(0);
+    await expect(page.locator(".swimlane-task-card")).toHaveCount(0);
+  });
+
+  test("副任务是固定卡片集合而非甘特条，并按作战单元稳定分色", async ({ page }) => {
+    await page.goto(`${ROADMAP}?view=swimlane&stage=launch`);
+    const cards = page.locator(".swimlane-task-card-shell:not(.expanded)");
+    await expect(cards.first()).toBeVisible();
+    expect(await cards.count()).toBeGreaterThan(3);
+    const widths = await cards.evaluateAll(nodes => nodes.slice(0, 4).map(node => Math.round(node.getBoundingClientRect().width)));
+    expect(new Set(widths).size).toBe(1);
+    await expect(page.locator(".swimlane-bar")).toHaveCount(0);
+
+    const rows = page.locator(".swimlane-card-row");
+    expect(await rows.count()).toBeGreaterThan(1);
+    const colors = await rows.evaluateAll(nodes => nodes.slice(0, 3).map(node => getComputedStyle(node.querySelector(".swimlane-unit-color")).backgroundColor));
+    expect(new Set(colors).size).toBeGreaterThan(1);
+    const panelBox = await page.locator(".swimlane-child-panel").boundingBox();
+    const firstRow = page.locator(".swimlane-card-row").first();
+    const firstRowCards = firstRow.locator(".swimlane-task-card-shell");
+    const firstThree = await Promise.all([0, 1, 2].map(index => firstRowCards.nth(index).boundingBox()));
+    expect(firstThree[1].y).toBe(firstThree[0].y);
+    expect(firstThree[2].y).toBe(firstThree[0].y);
+    expect(firstThree[0].x).toBeGreaterThanOrEqual(panelBox.x);
+    expect(firstThree[2].x + firstThree[2].width).toBeLessThanOrEqual(panelBox.x + panelBox.width);
+    const labelBox = await firstRow.locator(".swimlane-card-row-label").boundingBox();
+    expect(labelBox.y + labelBox.height).toBeLessThanOrEqual(firstThree[0].y);
+    await expect(page.locator(".swimlane-child-slope path")).toHaveCount(2);
+  });
+
+  test("主任务展开卡覆盖相邻列而不挤宽时间线", async ({ page }) => {
+    await page.goto(`${ROADMAP}?view=swimlane&stage=launch`);
+    const selected = page.locator(".swimlane-stage-card.selected");
+    const previous = page.locator(".swimlane-stage-cell[data-stage-id='report-1'] .swimlane-stage-card");
+    const next = page.locator(".swimlane-stage-cell[data-stage-id='pilot'] .swimlane-stage-card");
+    const geometry = await Promise.all([selected, previous, next].map(locator => locator.boundingBox()));
+    const [selectedBox, previousBox, nextBox] = geometry;
+    expect(selectedBox.width).toBeGreaterThan(previousBox.width * 2);
+    expect(selectedBox.x).toBeLessThan(previousBox.x + previousBox.width);
+    expect(selectedBox.x + selectedBox.width).toBeGreaterThan(nextBox.x);
+    await expect(page.locator(".swimlane-main-cards")).toHaveCSS("grid-template-columns", /.+/);
+  });
+
+  test("点击副任务在原位置二次展开，再次点击收起", async ({ page }) => {
+    await page.goto(`${ROADMAP}?view=swimlane&stage=launch`);
+    const card = page.locator(".swimlane-task-card-shell[data-task-id='rd-driver-productize']");
+    await expect(card).toBeVisible();
+    await card.locator(".swimlane-task-card").click();
     await expect(page).toHaveURL(/task=rd-driver-productize/);
-    await expect(productize).toHaveClass(/\bchain\b/);
-    const rdParent = page.locator(".swimlane-bar[data-task-id='rd-core-assessment']");
-    await expect(rdParent).toHaveClass(/\bchain\b/);
-    const rdChild = page.locator(".swimlane-bar[data-task-id='rd-tool-rebuild']");
-    await expect(rdChild).toHaveClass(/\bchain\b/);
-    // 非链上任务（如财务）应被淡化
-    const financeTask = page.locator(".swimlane-bar[data-task-id='finance-scale']");
-    await expect(financeTask).toHaveClass(/\bdimmed\b/);
+    await expect(card).toHaveClass(/\bexpanded\b/);
+    await expect(card.locator(".swimlane-task-detail")).toBeVisible();
+    await expect(card.locator(".swimlane-task-detail")).toContainText("拆解自");
+    await expect(card.locator(".swimlane-task-detail")).toContainText("预期产出");
+    await expect(page.locator(".swimlane-overlay")).toHaveCount(0);
+    const expandedBox = await card.boundingBox();
+    const collapsedNeighbor = page.locator(".swimlane-task-card-shell:not(.expanded)").first();
+    const collapsedBox = await collapsedNeighbor.boundingBox();
+    expect(expandedBox.width).toBeGreaterThan(collapsedBox.width * 2);
+    const childPanelBox = await page.locator(".swimlane-child-panel").boundingBox();
+    expect(expandedBox.x).toBeGreaterThanOrEqual(childPanelBox.x);
+    expect(expandedBox.x + expandedBox.width).toBeLessThanOrEqual(childPanelBox.x + childPanelBox.width);
+
+    await card.locator(".swimlane-task-card").click();
+    await expect(page).not.toHaveURL(/task=/);
+    await expect(card.locator(".swimlane-task-detail")).toHaveCount(0);
   });
 
-  test("泳道生命周期术语随模板配置（作战语言 vs 通用项目管理语言）", async ({ page }) => {
-    // 虚谷（campaign 模板）：作战语言 事前/事中/事后
+  test("task 深链恢复主任务、副泳道与原位展开状态", async ({ page }) => {
+    await page.goto(`${ROADMAP}?view=swimlane&task=rd-driver-productize`);
+    await expect(page.locator(".swimlane-card-board")).toHaveAttribute("data-open-stage", "launch");
+    await expect(page.locator(".swimlane-stage-card").filter({ hasText: "首批场景出征" })).toHaveAttribute("aria-expanded", "true");
+    await expect(page.locator(".swimlane-task-card-shell[data-task-id='rd-driver-productize']")).toHaveClass(/\bexpanded\b/);
+    await expect(page.locator(".swimlane-task-card-shell[data-task-id='rd-tool-rebuild']")).toHaveClass(/\bchain\b/);
+    await expect(page.locator(".swimlane-legend .decomp-glyph")).toBeVisible();
+  });
+
+  test("末端主任务深链会自动滚入安全区且不越过画布右边界", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.goto(`${ROADMAP}?view=swimlane&stage=institutionalize`);
+    const scroller = page.locator(".roadmap-card-swimlane .visual-scroll");
+    const selected = page.locator(".swimlane-stage-card.selected");
+    await expect(selected).toContainText("机制与能力固化");
+    await expect.poll(() => scroller.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+    const bounds = await page.locator(".swimlane-card-board").evaluate((board) => {
+      const card = board.querySelector(".swimlane-stage-card.selected");
+      const boardRect = board.getBoundingClientRect();
+      const cardRect = card.getBoundingClientRect();
+      return {
+        cardRight: Math.round(cardRect.right),
+        boardRight: Math.round(boardRect.right),
+        rightPadding: Math.round(boardRect.right - cardRect.right)
+      };
+    });
+    expect(bounds.cardRight).toBeLessThanOrEqual(bounds.boardRight);
+    expect(bounds.rightPadding).toBeGreaterThanOrEqual(24);
+  });
+
+  test("泳道生命周期术语随模板配置", async ({ page }) => {
     await page.goto(`${ROADMAP}?view=swimlane`);
-    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
     await expect(page.locator(".swimlane-legend .band-prepare")).toContainText("事前");
     await expect(page.locator(".swimlane-legend .band-active")).toContainText("事中");
     await expect(page.locator(".swimlane-legend .band-converged")).toContainText("事后");
-    // 标准项目（standard 模板）：通用项目管理语言 规划/执行/交付
-    await page.goto(`/projects/standard-project-sample/modules/roadmap?view=swimlane`);
-    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
+
+    await page.goto("/projects/standard-project-sample/modules/roadmap?view=swimlane");
     await expect(page.locator(".swimlane-legend .band-prepare")).toContainText("规划");
     await expect(page.locator(".swimlane-legend .band-active")).toContainText("执行");
     await expect(page.locator(".swimlane-legend .band-converged")).toContainText("交付");
+    await expect(page.locator(".swimlane-card-row")).toHaveCount(0);
+    await page.locator(".swimlane-stage-card").filter({ hasText: "原型验证" }).click();
+    await expect(page.locator(".swimlane-card-row").first()).toBeVisible();
   });
 
-  test("项目泳道支持多源合并收口（一个收口锚点跨多个阶段）", async ({ page }) => {
+  test("项目泳道保留多源收口锚点与深链详情", async ({ page }) => {
     await page.goto(`${ROADMAP}?view=swimlane`);
-    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
-    // 新增多源收口（between 3 个阶段）应渲染为收口锚点
     const multiAnchor = page.locator(".closure-anchor[data-anchor='launch-pilot-convergence']");
     await expect(multiAnchor).toBeVisible();
-    // 点击写入 anchor 深链，详情显示 3 个关联阶段
+    expect(await page.locator(".closure-anchor").count()).toBeGreaterThanOrEqual(3);
     await multiAnchor.click();
     await expect(page).toHaveURL(/anchor=launch-pilot-convergence/);
-    // 收口详情面板显示 3 个关联阶段（between.join(" → ")）
     const detail = page.locator(".inline-task-detail");
     await expect(detail).toContainText("report-1");
     await expect(detail).toContainText("launch");
     await expect(detail).toContainText("pilot");
-    // 收口锚点总数应 >= 3（含原 2 个 + 新增多源）
-    expect(await page.locator(".closure-anchor").count()).toBeGreaterThanOrEqual(3);
   });
-
-  test("副泳道行头显示单元级分形生命周期带（派生自该单元任务）", async ({ page }) => {
-    await page.goto(`${ROADMAP}?view=swimlane`);
-    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
-    // 每个 unit 行头有生命周期带标记（unit-band-prepare/active/converged）
-    const bandedRails = page.locator(".swimlane-row .swimlane-rail[class*='unit-band-']");
-    expect(await bandedRails.count()).toBeGreaterThanOrEqual(7);
-    // platform 单元只有 1 个无排期任务 → 事前·待启（prepare）
-    const platformRail = page.locator(".swimlane-row[data-unit-id='platform'] .swimlane-rail");
-    await expect(platformRail).toHaveClass(/unit-band-prepare/);
-    // 研发单元有进行中任务 → 事中·当前（active）
-    const rdRail = page.locator(".swimlane-row[data-unit-id='rd'] .swimlane-rail");
-    await expect(rdRail).toHaveClass(/unit-band-active/);
-    // 行头显示带标签（复用模板术语）
-    await expect(platformRail).toContainText("事前");
-    await expect(rdRail).toContainText("事中");
-  });
-
-  test("项目泳道默认为主脊反应式：打开阶段卡片才显示涉及单元任务（有涉及才展示）", async ({ page }) => {
-    // 默认（无 stage）打开当前战役阶段 launch，主脊该阶段 open、副泳道仅涉及单元有任务条
-    await page.goto(`${ROADMAP}?view=swimlane`);
-    await expect(page.locator(".phase-station.open[data-stage-id='launch']")).toBeVisible();
-    await expect(page.locator(".swimlane-main-card")).toBeVisible();
-    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
-    // platform 仅 1 个无排期任务、不涉及 launch → 该副泳道休眠、无任务条
-    await expect(page.locator(".swimlane-row.dormant[data-unit-id='platform']")).toBeVisible();
-    expect(await page.locator(".swimlane-row[data-unit-id='platform'] .swimlane-bar").count()).toBe(0);
-    // 收起回主脊（spine=1）：无主卡片、无任何任务条
-    await page.locator(".phase-station[data-stage-id='launch']").click();
-    await expect(page).toHaveURL(/spine=1/);
-    await expect(page.locator(".swimlane-main-card")).toHaveCount(0);
-    expect(await page.locator(".swimlane-bar").count()).toBe(0);
-    await expect(page.locator(".swimlane-spine-hint")).toBeVisible();
-  });
-
-  test("副泳道任务条点击浮在最上层，可单独打开/关闭（#5）", async ({ page }) => {
-    await page.goto(`${ROADMAP}?view=swimlane&stage=launch`);
-    await expect(page.locator(".swimlane-bar").first()).toBeVisible();
-    await page.locator(".swimlane-bar").first().click();
-    await expect(page).toHaveURL(/task=/);
-    // 浮层：dialog + 单独打开按钮 + 关闭按钮
-    await expect(page.locator(".swimlane-overlay[role='dialog']")).toBeVisible();
-    await expect(page.locator(".swimlane-overlay-actions .primary-button")).toContainText("单独打开");
-    // 关闭浮层 → 清 task，浮层消失
-    await page.locator(".swimlane-overlay-actions .secondary-button", { hasText: "关闭" }).click();
-    await expect(page).not.toHaveURL(/task=/);
-    await expect(page.locator(".swimlane-overlay")).toHaveCount(0);
-  });
+});

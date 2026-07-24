@@ -4,6 +4,7 @@ import { ProposalServiceError, proposalError } from "../proposals/errors.mjs";
 import { validateProposal } from "../proposals/validator.mjs";
 import { boundedPublished, MAX_EVIDENCE, MAX_EVIDENCE_BYTES } from "../proposals/context-builder.mjs";
 import { createProjectRepository } from "../repositories/project-repository.mjs";
+import { createMaterialReadinessService } from "../materials/readiness-service.mjs";
 import { createHash } from "node:crypto";
 
 function timestamp(now) { return new Date(now()).toISOString(); }
@@ -13,6 +14,7 @@ export { ProposalServiceError };
 export function createProposalService(database, options = {}) {
   const now = options.now ?? Date.now;
   const generation = options.generationService ?? createGenerationService(database, { ...options, provider: options.provider, environment: options.environment, pricing: options.pricing, quotaOptions: options.quotaOptions });
+  const readiness = createMaterialReadinessService(database, { now });
 
   function permission(principal, projectId) {
     if (!principal?.id) throw proposalError("PROJECT_NOT_FOUND", "项目不存在或你无权访问", 404);
@@ -33,7 +35,16 @@ export function createProposalService(database, options = {}) {
     if (!project) throw proposalError("PROJECT_NOT_FOUND", "项目不存在或你无权访问", 404);
     const dayStart = new Date(now()); dayStart.setUTCHours(0,0,0,0);
     const used = database.prepare("SELECT count(*) AS count FROM ai_usage_events WHERE project_id=? AND capability='generation' AND status IN ('reserved','succeeded','failed') AND created_at>=?").get(projectId, dayStart.toISOString()).count;
-    const eligibleMaterials = database.prepare(`SELECT m.id,m.display_name AS name,m.status,m.active_extraction_version AS extractionVersion,s.template_id AS updateTemplateId,s.template_version AS updateTemplateVersion,g.enabled AS generationEnabled,(SELECT count(*) FROM evidence_blocks e WHERE e.project_id=m.project_id AND e.material_id=m.id AND e.extraction_version=m.active_extraction_version) AS evidenceCount FROM project_materials m LEFT JOIN material_update_selections s ON s.project_id=m.project_id AND s.material_id=m.id LEFT JOIN material_generation_grants g ON g.project_id=m.project_id AND g.material_id=m.id WHERE m.project_id=? AND m.status<>'deleting' ORDER BY m.created_at DESC`).all(projectId).map(row=>({id:row.id,name:row.name,status:row.status,extractionVersion:row.extractionVersion,evidenceCount:row.evidenceCount,generation:{enabled:Boolean(row.generationEnabled)},updateTemplate:row.updateTemplateId?{id:row.updateTemplateId,version:row.updateTemplateVersion,label:proposalTemplates.find(item=>item.id===row.updateTemplateId)?.label??"更新模板不可用"}:null}));
+    const eligibleMaterials = database.prepare(`SELECT m.id,m.display_name AS name,m.status,m.active_extraction_version AS extractionVersion,s.template_id AS updateTemplateId,s.template_version AS updateTemplateVersion,g.enabled AS generationEnabled,(SELECT count(*) FROM evidence_blocks e WHERE e.project_id=m.project_id AND e.material_id=m.id AND e.extraction_version=m.active_extraction_version) AS evidenceCount FROM project_materials m LEFT JOIN material_update_selections s ON s.project_id=m.project_id AND s.material_id=m.id LEFT JOIN material_generation_grants g ON g.project_id=m.project_id AND g.material_id=m.id WHERE m.project_id=? AND m.status<>'deleting' ORDER BY m.created_at DESC`).all(projectId).map(row=>({
+      id: row.id,
+      name: row.name,
+      status: row.status,
+      extractionVersion: row.extractionVersion,
+      evidenceCount: row.evidenceCount,
+      generation: { enabled: Boolean(row.generationEnabled) },
+      updateTemplate: row.updateTemplateId ? { id: row.updateTemplateId, version: row.updateTemplateVersion, label: proposalTemplates.find(item=>item.id===row.updateTemplateId)?.label ?? "更新模板不可用" } : null,
+      readiness: row.updateTemplateId ? readiness.compute({ projectId, materialId: row.id, extractionVersion: row.extractionVersion, templateId: row.updateTemplateId, templateVersion: row.updateTemplateVersion }) : null
+    }));
     return { role: access.role, capabilities: { read: access.read, create: access.create, createTask: access.create, retry: access.create, manageGeneration: access.admin }, provider: { enabled: Boolean(generation.provider.configured) }, baseVersionId: project.baseVersionId, baseVersion: project.baseVersion, schemaVersion: "change-proposal-v1@1.0.0", limits: { maxMaterialsPerTask: 8, maxEvidenceBlocks: 48, maxPublishedBytes: 32*1024, maxEvidenceBytes: 64*1024, maxOutputBytes: 128*1024, maxChanges: 100, perMinute: 4, perDay: 100 }, usage: { today: used, remainingToday: Math.max(0,100-used) }, templates: proposalTemplates, eligibleMaterials };
   }
 

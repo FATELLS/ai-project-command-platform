@@ -158,3 +158,38 @@
 - 决策：作战单元的生命周期带（事前/事中/事后）由该单元自己的任务状态/progress/日期派生，不给 unit 加独立 stage 序列或 unit-stages 子表。
 - 原因：方向 X（unit 加独立 stage 集）与项目级 stage 窗口语义重叠，真实数据无独立 unit-stage 定义，数据模型扩展大。方向 Y 符合"分形"本质——同一范式下沉到 unit 层（由任务演进派生），而非给每 unit 造独立 stage 体系；零数据模型扩展。
 - 影响：unit 级带是纯投影派生，不引入新数据字段、不进 DTO、不改 loadUnits。派生规则用既有 task 的 state/progress/日期，无新状态机。
+
+## D-025 卡片泳道即项目路线图，退役独立活动路线
+
+- 状态：`accepted`
+- 决策：A 卡片泳道成为 Roadmap 模块的项目路线图主视图，不再并列提供独立“活动路线图”曲线视图。路线图切换器保留项目路线图、阶段卡片板、作战单元进度和依赖网络；旧 `?view=timeline` 与未知 view 兼容回落到项目路线图。
+- 原因：用户确认主任务时间线、按作战单元展开的副任务卡片及其收口本身已经完整表达项目路线；再保留一张独立曲线会重复表达同一结构并争夺认知入口。
+- 影响：删除 timeline 路由投影、SVG 路线节点和模块检查器的产品入口与实现；`stage/unit/task/anchor` 深链继续由卡片路线图承载。阶段卡片板、单元进度、依赖网络和独立甘特模块仍作为执行、比较、依赖和精确工期的辅助视图，不改变 published/draft/proposal 边界。
+
+## D-026 九类基础模块收敛为六个一级工作区
+
+- 状态：`accepted`
+- 决策：底层继续保留 Overview、Units、Roadmap、Task Network、Gantt、Outcomes、Risks、Metrics、Materials 九类固定安全模块；用户一级导航只呈现总览、项目路线图、作战单元/团队、排期甘特、项目健康和项目资料六个工作区。Task Network 不再单列，统一由 Roadmap 的依赖网络投影承载；Risks 与 Metrics 作为项目健康二级入口；Outcomes、材料台账与更新提案作为项目资料二级入口。
+- 原因：九个模块按技术实体平铺会把推进、协作、治理和沉淀混在同一层；Task Network 与 Roadmap 依赖网络读取相同任务依赖图，风险/指标在当前项目均为空但各占一级入口，成果与材料又缺少证据关系上的信息架构归属。
+- 影响：导航是显示层分组，不删除模块注册、API、数据库、模板配置、角色授权或既有深链。模块配置仍管理九类底层模块；六个工作区会根据当前发布版已启用模块自动出现，健康和资料二级导航只暴露可访问模块。页面显示名称统一为“项目路线图”“排期甘特”“项目资料”。
+
+## D-027 单进程部署随 Web 服务启动材料处理 Worker
+
+- 状态：`accepted`
+- 决策：当前单服务器部署由 `server.mjs` 在完成迁移和管理员初始化后启动一个串行材料处理 worker；启动时恢复遗留任务，空闲时轮询，异常时退避，进程退出时先停止 worker 再关闭数据库。
+- 原因：材料上传是 UI 的异步工作流，生产启动入口此前只提供 HTTP 服务，未消费已经进入队列的材料任务；测试 fixture 自行运行 processor 掩盖了真实启动缺口。
+- 影响：正式 UI 上传无需额外后台命令即可从队列进入证据就绪。当前仍坚持单 worker、同一 SQLite 事务域；未来多进程部署必须先引入可证明的租约/并发协调，不得直接复制本 worker。
+
+## D-028 真实 LLM 使用精确输出契约与服务端密钥配置
+
+- 状态：`accepted`
+- 决策：OpenAI-compatible generation provider 可通过服务端环境变量配置 base URL、模型、超时和 allowlist 内的 reasoning effort；API Key 只存在于忽略的本地环境文件或生产密钥设施。提示词必须携带精确的 `ChangeProposal` 根字段、change 字段、类型、枚举、ID、证据和警告契约，provider 输出仍由独立服务端 validator 失败关闭。
+- 原因：真实 GLM-5.2 接入证明只描述“返回 JSON”不足以约束内部 Schema；模型思考输出和较大证据上下文也需要显式的有界配置。密钥和 provider 差异不得泄漏到浏览器、项目数据或版本库。
+- 影响：provider-specific 参数只能来自服务端受控 allowlist，不能成为项目可执行配置。即使真实模型输出通过校验，也只能创建待审核提案；逐项审核、草稿合并和发布继续由独立人工 UI 动作完成。
+
+## D-029 跨平台分发采用自带运行时与空数据默认
+
+- 状态：`accepted`
+- 决策：Windows/Linux portable 和 RPM 都打包固定 Node.js 运行时；RPM 使用 systemd 单服务部署。Release 通过运行文件白名单组装，默认不包含任何项目夹具、运行数据库、上传材料、日志、备份或密钥。全新数据库只有显式配置 `PLATFORM_SEED_FIXTURE` 才导入指定脱敏夹具。
+- 原因：目标机器不应依赖预装 Node/npm，也不能把开发机的公司数据、真实 LLM 配置或运行状态带进 GitHub 与安装包；RPM 必须能用单条安装命令形成可管理服务。
+- 影响：源码保留脱敏迁移夹具用于等价测试，但 GitHub Release 明确排除 `fixtures/`、`.planning/` 与 `test/`。RPM 数据落在 `/var/lib/ai-project-command-platform`，配置落在 `/etc/ai-project-command-platform`；portable 数据只写解压目录。多机、容器编排和 PostgreSQL 仍不在本次范围。

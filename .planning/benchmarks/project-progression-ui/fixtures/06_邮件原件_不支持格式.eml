@@ -1,0 +1,8 @@
+From: benchmark@example.invalid
+To: pmo@example.invalid
+Date: Thu, 23 Jul 2026 17:00:00 +0800
+Subject: UI Benchmark unsupported EML
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+
+这是用于验证 UI 对不支持 .eml 文件是否给出明确错误、且不会在材料台账留下记录的负向样本。

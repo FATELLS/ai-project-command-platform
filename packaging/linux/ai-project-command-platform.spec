@@ -28,7 +28,7 @@ mkdir -p %{buildroot}/opt/ai-project-command-platform
 cp -a . %{buildroot}/opt/ai-project-command-platform/
 install -D -m 0644 %{SOURCE1} %{buildroot}/usr/lib/systemd/system/ai-project-command-platform.service
 install -D -m 0600 %{SOURCE2} %{buildroot}%{_sysconfdir}/ai-project-command-platform/platform.env
-install -d -m 0750 %{buildroot}%{_sharedstatedir}/ai-project-command-platform/data
+install -d -m 0750 %{buildroot}/var/lib/ai-project-command-platform/data
 
 %pre
 getent group aipcp >/dev/null || groupadd --system aipcp
@@ -36,7 +36,7 @@ getent passwd aipcp >/dev/null || useradd --system --gid aipcp --home-dir /var/l
 
 %post
 ENV_FILE="%{_sysconfdir}/ai-project-command-platform/platform.env"
-CREDENTIAL_FILE="%{_sharedstatedir}/ai-project-command-platform/bootstrap-credentials.txt"
+CREDENTIAL_FILE="/var/lib/ai-project-command-platform/bootstrap-credentials.txt"
 if ! grep -q '^PLATFORM_BOOTSTRAP_PASSWORD=.' "$ENV_FILE"; then
   PASSWORD="$(od -An -N18 -tx1 /dev/urandom | tr -d ' \n')"
   sed -i "s/^PLATFORM_BOOTSTRAP_PASSWORD=.*/PLATFORM_BOOTSTRAP_PASSWORD=$PASSWORD/" "$ENV_FILE"
@@ -44,7 +44,7 @@ if ! grep -q '^PLATFORM_BOOTSTRAP_PASSWORD=.' "$ENV_FILE"; then
   printf 'URL: http://127.0.0.1:4173\nUsername: admin\nPassword: %s\n' "$PASSWORD" > "$CREDENTIAL_FILE"
   chown root:root "$CREDENTIAL_FILE"
 fi
-chown -R aipcp:aipcp %{_sharedstatedir}/ai-project-command-platform
+chown -R aipcp:aipcp /var/lib/ai-project-command-platform
 systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable --now ai-project-command-platform.service >/dev/null 2>&1 || true
 if systemctl is-active --quiet ai-project-command-platform.service; then
@@ -64,10 +64,11 @@ systemctl daemon-reload >/dev/null 2>&1 || true
 %files
 %dir /opt/ai-project-command-platform
 /opt/ai-project-command-platform/*
+/opt/ai-project-command-platform/.env.example
 /usr/lib/systemd/system/ai-project-command-platform.service
 %config(noreplace) %attr(0600,root,root) %{_sysconfdir}/ai-project-command-platform/platform.env
-%dir %attr(0750,aipcp,aipcp) %{_sharedstatedir}/ai-project-command-platform
-%dir %attr(0750,aipcp,aipcp) %{_sharedstatedir}/ai-project-command-platform/data
+%dir %attr(0750,aipcp,aipcp) /var/lib/ai-project-command-platform
+%dir %attr(0750,aipcp,aipcp) /var/lib/ai-project-command-platform/data
 
 %changelog
 * Fri Jul 24 2026 Codex <noreply@example.invalid> - %{app_version}-1

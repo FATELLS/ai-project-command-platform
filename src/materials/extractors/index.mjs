@@ -7,7 +7,7 @@ import { extractText } from "./text.mjs";
 export async function extractMaterial(input, options = {}) {
   const limits = { ...extractionLimits, ...options.limits };
   let blocks;
-  if (input.manual || [".txt", ".md", ".csv", ".json"].includes(input.extension)) blocks = await extractText(input, limits);
+  if (input.manual || [".txt", ".md", ".csv", ".json", ".yaml"].includes(input.extension)) blocks = await extractText(input, limits);
   else if ([".docx", ".pptx", ".xlsx"].includes(input.extension)) blocks = await extractOoxml(input, limits);
   else if (input.extension === ".pdf") blocks = await extractPdf(input, limits, options.capabilities);
   else if ([".png", ".jpg", ".jpeg", ".webp"].includes(input.extension)) blocks = await extractImage(input, limits, options.capabilities);

@@ -456,15 +456,32 @@ function projectSwitcher(projects, currentId) {
   return select;
 }
 
+function moduleDisplayTitle(module) {
+  if (module.type === "roadmap") return "项目路线图";
+  if (module.type === "gantt") return "排期甘特";
+  if (module.type === "materials") return "项目资料";
+  return module.title;
+}
+
 function moduleNavigation(project, manifest, activeType) {
   const scrollBehavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-  const list = element("ul", {}, manifest.modules.map(module => {
-    const path = canonicalModulePath(project.id, module.type);
+  const modules = new Map(manifest.modules.map(module => [module.type, module]));
+  const groups = [
+    { types: ["overview"], title: modules.get("overview")?.title },
+    { types: ["roadmap", "task-network"], title: "项目路线图" },
+    { types: ["units"], title: modules.get("units")?.title },
+    { types: ["gantt"], title: "排期甘特" },
+    { types: ["risks", "metrics"], title: "项目健康" },
+    { types: ["outcomes", "materials"], title: "项目资料" }
+  ].map(group => ({ ...group, target: group.types.map(type => modules.get(type)).find(Boolean) })).filter(group => group.target);
+  const list = element("ul", {}, groups.map(group => {
+    const path = canonicalModulePath(project.id, group.target.type);
+    const active = group.types.includes(activeType);
     return element("li", {}, [element("a", {
       href: path,
-      className: module.type === activeType ? "active" : "",
-      ariaCurrent: module.type === activeType ? "page" : undefined,
-      text: module.title,
+      className: active ? "active" : "",
+      ariaCurrent: active ? "page" : undefined,
+      text: group.title,
       onClick: event => { event.preventDefault(); navigate(path); },
       onFocus: event => event.currentTarget.scrollIntoView({ inline: "nearest", block: "nearest" })
     })]);
@@ -482,6 +499,50 @@ function moduleNavigation(project, manifest, activeType) {
     list,
     element("button", { type: "button", className: "module-scroll-button next", ariaLabel: "向后滚动模块", text: "›", onClick: () => list.scrollBy({ left: 280, behavior: scrollBehavior }) })
   ]);
+}
+
+function moduleSectionNavigation(project, manifest, activeType) {
+  const modules = new Map(manifest.modules.map(module => [module.type, module]));
+  const query = new URLSearchParams(location.search);
+  const materialPath = `/projects/${encodeURIComponent(project.id)}/modules/materials`;
+  let label = "";
+  let entries = [];
+  if (["risks", "metrics"].includes(activeType)) {
+    label = "项目健康";
+    entries = [
+      modules.has("risks") ? { key: "risks", label: modules.get("risks").title, href: canonicalModulePath(project.id, "risks"), active: activeType === "risks" } : null,
+      modules.has("metrics") ? { key: "metrics", label: modules.get("metrics").title, href: canonicalModulePath(project.id, "metrics"), active: activeType === "metrics" } : null
+    ].filter(Boolean);
+  } else if (["outcomes", "materials"].includes(activeType)) {
+    const proposalView = activeType === "materials" && (
+      query.get("view") === "proposals" ||
+      location.pathname.includes("/materials/proposals/") ||
+      location.pathname.includes("/materials/generation-tasks/")
+    );
+    label = "项目资料";
+    entries = [
+      modules.has("outcomes") ? { key: "outcomes", label: modules.get("outcomes").title, href: canonicalModulePath(project.id, "outcomes"), active: activeType === "outcomes" } : null,
+      modules.has("materials") ? { key: "materials", label: "材料台账", href: `${materialPath}?view=ledger`, active: activeType === "materials" && !proposalView } : null,
+      modules.has("materials") ? { key: "proposals", label: "更新提案", href: `${materialPath}?view=proposals`, active: proposalView } : null
+    ].filter(Boolean);
+  }
+  if (entries.length < 2) return null;
+  const links = entries.map(entry => element("a", {
+    href: entry.href,
+    className: entry.active ? "active" : "",
+    ariaCurrent: entry.active ? "page" : undefined,
+    text: entry.label,
+    onClick: event => { event.preventDefault(); navigate(entry.href); }
+  }));
+  const section = element("nav", { className: "module-section-nav", ariaLabel: `${label}分区` }, links);
+  section.addEventListener("keydown", event => {
+    if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
+    const index = links.indexOf(document.activeElement);
+    if (index < 0) return;
+    event.preventDefault();
+    links[(index + (event.key === "ArrowRight" ? 1 : -1) + links.length) % links.length].focus();
+  });
+  return section;
 }
 
 function canConfigureModules(project) {
@@ -532,17 +593,19 @@ async function renderProject(projectId, requestedType = "overview", materialId =
     const module = manifest.modules.find(candidate => candidate.type === requestedType);
     if (!module) { projectNotFound(projectId); return; }
     const presentation = projectPresentation(project);
+    const displayModule = { ...module, title: moduleDisplayTitle(module) };
     state.projects = list.projects;
     const slot = element("section", { className: "module-content", ariaLive: "polite", ariaBusy: "true" }, [moduleSkeleton(requestedType)]);
     const breadcrumb = element("nav", { className: "breadcrumb", ariaLabel: "面包屑" }, [
       element("a", { href: "/projects", text: "Projects", onClick: event => { event.preventDefault(); navigate("/projects"); } }),
       element("span", { ariaHidden: "true", text: "/" }), element("span", { text: project.name }),
-      ...(requestedType === "overview" ? [] : [element("span", { ariaHidden: "true", text: "/" }), element("span", { text: module.title })])
+      ...(requestedType === "overview" ? [] : [element("span", { ariaHidden: "true", text: "/" }), element("span", { text: displayModule.title })])
     ]);
+    const sectionNavigation = moduleSectionNavigation(project, manifest, requestedType);
     const projectPage = element("div", { className: "project-route" }, [
       breadcrumb,
-      ...(requestedType === "overview" || materialId ? [] : [compactModuleHeading(project, module, presentation, manifest.version)]),
-      moduleNavigation(project, manifest, requestedType), slot
+      ...(requestedType === "overview" || materialId ? [] : [compactModuleHeading(project, displayModule, presentation, manifest.version)]),
+      moduleNavigation(project, manifest, requestedType), sectionNavigation, slot
     ]);
     const configAction = canConfigureModules(project) ? [element("button", { type: "button", className: "admin-entry module-config-entry", text: "模块配置", onClick: event => openModuleConfiguration(project, presentation, event.currentTarget) })] : [];
     app.replaceChildren(appFrame(projectPage, { projectMode: true, project, presentation, moduleTitle: module.title, switcher: projectSwitcher(list.projects, project.id), projectActions: configAction }));
@@ -556,7 +619,7 @@ async function renderProject(projectId, requestedType = "overview", materialId =
       if (!valid) slot.replaceChildren(unsupportedState(() => renderProject(projectId, requestedType)));
       else {
         const rendered = definition.render({
-          data: envelope.data, module: envelope.module, project, presentation, snapshot,
+          data: envelope.data, module: { ...envelope.module, title: moduleDisplayTitle(envelope.module) }, project, presentation, snapshot,
           query: new URLSearchParams(location.search), navigate, version: manifest.version,
           updatedAt: formatDate(snapshot.updatedAt || project.updatedAt), roleLabel: roleLabels[project.role] ?? project.role,
           templateLabel: templateLabels[project.templateId] ?? project.templateId,
@@ -564,12 +627,12 @@ async function renderProject(projectId, requestedType = "overview", materialId =
           api, showToast, session: state.session
         });
         slot.replaceChildren(rendered);
-        document.title = `${project.name} · ${module.title}`;
+        document.title = `${project.name} · ${displayModule.title}`;
       }
     } catch (error) {
       if (error.message === "AUTHENTICATION_REQUIRED" || requestId !== state.routeRequest) return;
       if (error.status === 404) { projectNotFound(projectId); return; }
-      slot.replaceChildren(moduleError(`无法加载${module.title}`, error.message, () => renderProject(projectId, requestedType)));
+      slot.replaceChildren(moduleError(`无法加载${displayModule.title}`, error.message, () => renderProject(projectId, requestedType)));
     } finally {
       clearTimeout(slowTimer);
       slot.setAttribute("aria-busy", "false");

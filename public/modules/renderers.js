@@ -22,15 +22,6 @@ function setQuery(navigate, changes) {
   navigate(`${location.pathname}${params.size ? `?${params}` : ""}`);
 }
 
-function routePath(points) {
-  if (!points.length) return "";
-  return points.slice(1).reduce((path, point, index) => {
-    const previous = points[index];
-    const dx = point.x - previous.x;
-    return `${path} C ${previous.x + dx / 2},${previous.y} ${point.x - dx / 2},${point.y} ${point.x},${point.y}`;
-  }, `M ${points[0].x},${points[0].y}`);
-}
-
 function isoDate(year, month, day) {
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
@@ -61,31 +52,13 @@ function overlapsWindow(task, window) {
   return (!window.end || start <= window.end) && (!window.start || end >= window.start);
 }
 
-function stageBranchGroups(context, stage) {
-  const window = parseStageWindow(stage.dateLabel);
-  const units = new Map((context.snapshot?.groups ?? []).map(unit => [unit.id, unit.name]));
-  const grouped = new Map();
-  for (const task of context.snapshot?.tasks ?? []) {
-    if (!overlapsWindow(task, window)) continue;
-    const unitId = task.groupId ?? task.unitId ?? "unknown";
-    const items = grouped.get(unitId) ?? [];
-    items.push(task);
-    grouped.set(unitId, items);
-  }
-  return [...grouped.entries()].map(([unitId, tasks]) => ({
-    unitId,
-    unitName: units.get(unitId) ?? unitId,
-    tasks: tasks.sort((left, right) => safeText(left.startDate, "9999").localeCompare(safeText(right.startDate, "9999")) || safeText(left.title).localeCompare(safeText(right.title)))
-  })).sort((left, right) => left.unitName.localeCompare(right.unitName, "zh-CN"));
-}
-
 function taskInlineDetail(context, task, unitName = "") {
   if (!task) return null;
   return el("article", { className: "inline-task-detail" }, [
     el("span", { className: "eyebrow", text: `${unitName ? `${unitName} · ` : ""}${context.presentation.task}` }),
     el("h4", { text: task.title }),
     definitionList([["状态", task.state], ["负责人", task.owner], ["开始", task.startDate], ["结束", task.endDate], ["进度", Number.isFinite(task.progress) ? `${task.progress}%` : ""], ["预期产出", task.expectedOutput], ["来源", task.source]]),
-    el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/task-network?task=${encodeURIComponent(task.id)}`, text: "在任务网络中查看" })
+    el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/roadmap?view=network&task=${encodeURIComponent(task.id)}`, text: "在依赖网络中查看" })
   ]);
 }
 
@@ -115,7 +88,7 @@ function unitRouteDetail(context, unit) {
       ])))
     ]))) : el("p", { className: "empty-source", text: `当前发布数据还没有能按时间窗口归入${unit.name}的路线任务。` }),
     el("div", { className: "detail-actions" }, [
-      el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/task-network?unit=${encodeURIComponent(unit.id)}`, text: "查看任务网络" }),
+      el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/roadmap?view=network&unit=${encodeURIComponent(unit.id)}`, text: "查看依赖网络" }),
       el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/gantt?unit=${encodeURIComponent(unit.id)}`, text: "查看甘特" })
     ])
   ]);
@@ -203,160 +176,21 @@ export function renderUnits(context) {
   ]);
 }
 
-function roadmapSvg(context, stages, selectedStageId, stageSummaries = new Map()) {
-  const width = Math.max(760, stages.length * 180 + 80);
-  const height = context.module.viewVariant === "campaign-network" ? 390 : 290;
-  const svg = svgEl("svg", { class: "roadmap-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-labelledby": "roadmap-svg-title roadmap-svg-desc" });
-  svg.append(svgEl("title", { id: "roadmap-svg-title" }, []), svgEl("desc", { id: "roadmap-svg-desc" }, []));
-  svg.querySelector("title").textContent = `${context.module.title}可视化`;
-  svg.querySelector("desc").textContent = `${stages.length} 个顺序阶段；点击节点下钻该阶段的${context.presentation.unit}模块。`;
-  const points = stages.map((_, index) => ({
-    x: stages.length === 1 ? width / 2 : 70 + index * ((width - 140) / (stages.length - 1)),
-    y: context.module.viewVariant === "campaign-network" ? 135 + (index % 2 ? 30 : -15) : 115
-  }));
-  if (stages.length > 1) {
-    svg.append(svgEl("path", { d: routePath(points), class: "route-line", fill: "none" }));
-  }
-  const unitTerm = context.presentation.unit;
-  const taskTerm = context.presentation.task;
-  stages.forEach((stage, index) => {
-    const { x, y } = points[index];
-    const group = svgEl("g", {
-      class: `route-node ${stateClass(stage.state, stage.id === context.data.currentStageId)}${stage.id === selectedStageId ? " selected" : ""}`,
-      tabindex: "0",
-      role: "button",
-      "aria-pressed": stage.id === selectedStageId ? "true" : "false",
-      "aria-label": `${index + 1}. ${stage.title}，${statusText(stage.state)}，${safeText(stage.dateLabel, "日期待确认")}`,
-      "data-stage-id": stage.id
-    });
-    group.append(svgEl("circle", { cx: x, cy: y, r: 28 }), svgEl("circle", { cx: x, cy: y, r: 40, class: "route-hit" }));
-    const number = svgEl("text", { x, y: y + 5, "text-anchor": "middle", class: "route-number" }); number.textContent = String(index + 1);
-    const label = svgEl("text", { x, y: y + 62, "text-anchor": "middle", class: "route-label" }); label.textContent = stage.title;
-    const date = svgEl("text", { x, y: y + 82, "text-anchor": "middle", class: "route-date" }); date.textContent = safeText(stage.dateLabel, "待确认");
-    group.append(number, label, date);
-    // Phase 8 模块化：粗主线不挂分支胶囊，节点下方放模块摘要芯片
-    const summary = stageSummaries.get(stage.id) ?? { units: 0, tasks: 0, progress: null };
-    const chipText = summary.tasks ? `${summary.units} ${unitTerm} · ${summary.tasks} ${taskTerm}${summary.progress != null ? ` · ${summary.progress}%` : ""}` : `无${taskTerm}`;
-    const chipWidth = Math.min(168, Math.max(108, [...chipText].length * 9 + 22));
-    const chipX = x - chipWidth / 2;
-    const chipY = y + 92;
-    const chip = svgEl("g", { class: `module-summary-chip${stage.id === selectedStageId ? " selected" : ""}`, "aria-hidden": "true", "pointer-events": "none" });
-    chip.append(svgEl("rect", { x: chipX, y: chipY, width: chipWidth, height: 30, rx: 15 }));
-    const chipLabel = svgEl("text", { x, y: chipY + 19, "text-anchor": "middle", class: "module-summary-label" });
-    chipLabel.textContent = chipText;
-    chip.append(chipLabel);
-    svg.append(group);
-    svg.append(chip);
-  });
-  return svg;
-}
-
 export function renderRoadmap(context) {
-  // Phase 8：四种受控视图通过同一路由的 ?view= 切换，共享 stage/unit/task 深链。
-  // timeline 采用粗主线（阶段节点 + 模块摘要芯片）+ 支线下钻（作战单元模块卡片）。
- // 用户反馈：默认改为「项目泳道」（主脊/副泳道反应式），原「活动路线图」曲线作为可切换视图保留。
- const defaultView = "swimlane";
-  const view = context.query.get("view");
-  const activeView = ["timeline", "board", "units", "network", "swimlane"].includes(view) ? view : defaultView;
+  // 卡片泳道就是项目路线图主视图；旧 timeline 深链与未知 view 均回落到路线图。
+  const requestedView = context.query.get("view");
+  const activeView = ["board", "units", "network"].includes(requestedView) ? requestedView : "swimlane";
   if (activeView === "board") return renderRoadmapBoard(context);
   if (activeView === "units") return renderRoadmapUnits(context);
   if (activeView === "network") return renderRoadmapNetwork(context);
-  if (activeView === "swimlane") return renderRoadmapSwimlane(context);
-  const stages = Array.isArray(context.data.stages) ? context.data.stages : [];
-  if (!stages.length) return emptyState(context.module.emptyState);
-  const requestedStageId = context.query.get("stage");
-  const selectedStage = stages.find(item => item.id === requestedStageId) ?? stages.find(item => item.id === context.data.currentStageId) ?? stages[0];
-  // 模块化：每个阶段的聚合摘要挂在粗主线节点上（单元数/任务数/进度）
-  const stageSummaries = new Map();
-  for (const stage of stages) stageSummaries.set(stage.id, stageModuleSummary(context, stage));
-  const visual = roadmapSvg(context, stages, selectedStage.id, stageSummaries);
-  visual.addEventListener("click", event => {
-    const stageId = event.target.closest?.("[data-stage-id]")?.dataset.stageId;
-    if (stageId) setQuery(context.navigate, { stage: stageId, unit: "", task: "" });
-  });
-  visual.addEventListener("keydown", event => {
-    if (!["Enter", " "].includes(event.key)) return;
-    const stageId = event.target.closest?.("[data-stage-id]")?.dataset.stageId;
-    if (stageId) { event.preventDefault(); setQuery(context.navigate, { stage: stageId, unit: "", task: "" }); }
-  });
-  return el("div", {}, [
-    el("section", { className: "module-primary-card roadmap-workbench" }, [
-      roadmapViewSwitcher(context),
-      el("header", { className: "roadmap-workbench-heading" }, [
-        cardHeading(context.module.viewVariant === "campaign-network" ? "CAMPAIGN ROUTE" : "LINEAR ROADMAP", context.module.title, `点击${context.presentation.stage}可切换到对应节点；主线只显示节点与模块摘要，支线作为${context.presentation.unit}模块下钻。`)
-      ]),
-      localScroller(`${context.module.title}路线图，可水平滚动`, visual)
-    ]),
-   buildModuleInspector(context, selectedStage)
- ]);
+  return renderRoadmapSwimlane(context);
 }
 
-// 模块化：单个阶段的作战单元/任务聚合摘要（粗主线芯片用）
-function stageModuleSummary(context, stage) {
-  const groups = stageBranchGroups(context, stage);
-  const tasks = groups.flatMap(group => group.tasks);
-  const units = groups.length;
-  const progress = tasks.length ? Math.round((tasks.filter(task => Number(task.progress) >= 100 || ["done", "completed", "完成", "已完成"].includes(String(task.state ?? "").toLowerCase())).length / tasks.length) * 100) : null;
-  return { units, tasks: tasks.length, progress };
-}
-
-// 模块化：阶段模块检查器——阶段说明 + 模块摘要条 + 作战单元模块卡片（点击单元下钻到任务）
-function buildModuleInspector(context, selectedStage) {
-  const unitTerm = context.presentation.unit;
-  const taskTerm = context.presentation.task;
-  const groups = stageBranchGroups(context, selectedStage);
-  const summary = stageModuleSummary(context, selectedStage);
-  const selectedUnitId = context.query.get("unit");
-  const selectedTaskId = context.query.get("task");
-  const stageAssets = Array.isArray(selectedStage.previewAssets) ? selectedStage.previewAssets : [];
-  const orderedGroups = selectedUnitId ? [...groups].sort((left, right) => (right.unitId === selectedUnitId) - (left.unitId === selectedUnitId)) : groups;
-  const unitCards = orderedGroups.map(group => {
-    const isSelected = group.unitId === selectedUnitId;
-    const selectUnit = () => setQuery(context.navigate, { unit: group.unitId, task: "" });
-    const unitProgress = group.tasks.length ? Math.round((group.tasks.filter(task => Number(task.progress) >= 100 || ["done", "completed", "完成", "已完成"].includes(String(task.state ?? "").toLowerCase())).length / group.tasks.length) * 100) : null;
-    return el("article", {
-      className: `unit-module-card${isSelected ? " selected" : ""}`,
-      "data-unit-id": group.unitId,
-      tabIndex: 0,
-      role: "button",
-      ariaLabel: `${group.unitName}，${group.tasks.length}${taskTerm}${unitProgress != null ? `，完成度 ${unitProgress}%` : ""}`,
-      onClick: selectUnit,
-      onKeyDown: event => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); selectUnit(); } }
-    }, [
-      el("header", {}, [el("h4", { text: group.unitName }), el("span", { className: "badge neutral", text: `${group.tasks.length}${taskTerm}` })]),
-      unitProgress != null ? el("div", { className: "unit-progress-bar" }, [el("div", { className: "unit-progress-fill", style: `width:${unitProgress}%` }), el("span", { text: `${unitProgress}%` })]) : null,
-      isSelected && group.tasks.length ? el("ul", { className: "unit-module-tasks" }, group.tasks.map(task => el("li", { className: `stage-task-item${task.id === selectedTaskId ? " selected" : ""}` }, [
-        el("button", { type: "button", className: "stage-task-chip", ariaPressed: task.id === selectedTaskId ? "true" : "false", onClick: event => { event.stopPropagation(); setQuery(context.navigate, { unit: group.unitId, task: task.id }); } }, [el("strong", { text: task.title }), el("small", { text: `${safeText(task.startDate, "待排期")} → ${safeText(task.endDate, "待确认")} · ${statusText(task.state)}` })]),
-        task.id === selectedTaskId ? taskInlineDetail(context, task, group.unitName) : null
-      ]))) : null
-    ]);
-  });
-  const modulesSection = groups.length ? el("section", { className: "unit-module-section" }, [
-    el("header", {}, [el("span", { className: "eyebrow", text: "MODULES" }), el("h3", { text: `${unitTerm}模块（点击展开${taskTerm}）` })]),
-    el("div", { className: "unit-module-grid" }, unitCards)
-  ]) : el("section", { className: "unit-module-section empty-preview" }, [el("h3", { text: `暂无映射到该${context.presentation.stage}的${unitTerm}模块` }), el("p", { text: "当前发布数据未提供可按时间窗口归入该节点的任务；后续材料可通过提案补充任务日期或更明确的阶段归属。" })]);
-  return el("section", { className: "selection-detail stage-node-detail module-inspector", tabIndex: -1 }, [
-    el("div", { className: "stage-node-copy" }, [
-      el("span", { className: `badge ${["complete", "current"].includes(stateClass(selectedStage.state, selectedStage.id === context.data.currentStageId)) ? "active" : "archived"}`, text: statusText(selectedStage.state) }),
-      el("h2", { text: selectedStage.title }),
-      definitionList([["日期", selectedStage.dateLabel], ["说明", selectedStage.description], ["预期产出", selectedStage.expectedOutput]]),
-      el("p", { className: "module-summary-strip", text: summary.tasks ? `${summary.units} 个${unitTerm} · ${summary.tasks} 个${taskTerm}${summary.progress != null ? ` · 整体 ${summary.progress}%` : ""}` : `该${context.presentation.stage}暂无${taskTerm}` })
-    ]),
-    el("article", { className: "stage-preview" }, [
-      el("h3", { text: safeText(selectedStage.previewTitle, `${context.presentation.stage}预览`) }),
-      el("p", { text: safeText(selectedStage.previewCaption, "暂无节点预览说明") }),
-      stageAssets.length ? el("div", { className: "stage-preview-grid" }, stageAssets.map((asset, index) => el("button", { type: "button", className: "stage-preview-thumb", onClick: event => openLightbox(context, stageAssets, index, event.currentTarget) }, [
-        el("img", { src: asset.startsWith("/") ? asset : `/${asset.replace(/^\.\//, "")}`, alt: `${selectedStage.title}预览 ${index + 1}` })
-      ]))) : el("small", { text: "无本地预览" })
-    ]),
-    modulesSection
-  ]);
-}
-
-// Phase 8：四种视图切换器（segmented control）。view 与 stage/unit/task 深链正交。
+// 路线图主视图 + 三个辅助投影。view 与 stage/unit/task 深链正交。
 function roadmapViewSwitcher(context) {
-  const current = context.query.get("view") || "swimlane";
-  const views = [["timeline", "活动路线图"], ["swimlane", "项目泳道"], ["board", "阶段卡片板"], ["units", `${context.presentation.unit}进度`], ["network", "依赖网络"]];
+  const requestedView = context.query.get("view");
+  const current = ["board", "units", "network"].includes(requestedView) ? requestedView : "swimlane";
+  const views = [["swimlane", "项目路线图"], ["board", "阶段卡片板"], ["units", `${context.presentation.unit}进度`], ["network", "依赖网络"]];
   return el("nav", { className: "roadmap-view-switcher", ariaLabel: "路线图视图" }, views.map(([value, label]) => {
     const params = new URLSearchParams(context.query.toString());
     if (value === "swimlane") params.delete("view"); else params.set("view", value);
@@ -578,7 +412,7 @@ function isoFromDay(dayNumber) {
   return new Date(dayNumber * 86_400_000).toISOString().slice(0, 10);
 }
 
-function renderRoadmapSwimlane(context) {
+function renderRoadmapSwimlaneLegacy(context) {
   const stages = Array.isArray(context.data.stages) ? context.data.stages : [];
   const units = Array.isArray(context.data.units) ? context.data.units : [];
   const tasks = Array.isArray(context.data.tasks) ? context.data.tasks : [];
@@ -839,6 +673,300 @@ function renderRoadmapSwimlane(context) {
  ]);
 }
 
+function renderRoadmapSwimlane(context) {
+  const stages = Array.isArray(context.data.stages) ? context.data.stages : [];
+  const units = Array.isArray(context.data.units) ? context.data.units : [];
+  const tasks = Array.isArray(context.data.tasks) ? context.data.tasks : [];
+  const closures = Array.isArray(context.data.closures) ? context.data.closures : [];
+  if (!stages.length) return emptyState(context.module.emptyState);
+
+  const stageTerm = context.presentation.stage;
+  const unitTerm = context.presentation.unit;
+  const taskTerm = context.presentation.task;
+  const bandLabels = {
+    prepare: context.presentation.lifecyclePrepare || "事前 · 待启",
+    active: context.presentation.lifecycleActive || "事中 · 当前",
+    converged: context.presentation.lifecycleConverged || "事后 · 已交付"
+  };
+  const phaseStages = stages.map(stage => ({
+    ...stage,
+    window: parseStageWindow(stage.dateLabel),
+    band: lifecycleBandOf(stage.state)
+  }));
+  const stageById = new Map(phaseStages.map(stage => [stage.id, stage]));
+  const stageIndex = new Map(phaseStages.map((stage, index) => [stage.id, index]));
+  const taskById = new Map(tasks.map(task => [task.id, task]));
+  const unitById = new Map(units.map(unit => [unit.id, unit]));
+  const requestedStageId = context.query.get("stage");
+  const selectedUnitId = context.query.get("unit");
+  const selectedTaskId = context.query.get("task");
+  const selectedAnchorId = context.query.get("anchor");
+  const selectedTask = taskById.get(selectedTaskId) ?? null;
+
+  function phaseOf(task) {
+    const start = task?.startDate;
+    if (start) {
+      const stage = phaseStages.find(item => item.window.start && item.window.end && start >= item.window.start && start <= item.window.end);
+      if (stage) return stage.id;
+    }
+    return phaseStages.find(item => overlapsWindow({
+      startDate: task?.startDate || task?.endDate,
+      endDate: task?.endDate || task?.startDate
+    }, item.window))?.id ?? null;
+  }
+
+  const selectedTaskStageId = selectedTask ? phaseOf(selectedTask) : null;
+  const openStageId = stageById.has(requestedStageId)
+    ? requestedStageId
+    : selectedTaskStageId;
+  const openStage = stageById.get(openStageId) ?? null;
+  const stageTasks = openStage
+    ? tasks.filter(task => phaseOf(task) === openStage.id)
+      .sort((left, right) => safeText(left.startDate, "9999").localeCompare(safeText(right.startDate, "9999")) || safeText(left.title).localeCompare(safeText(right.title), "zh-CN"))
+    : [];
+  const stageTaskIds = new Set(stageTasks.map(task => task.id));
+  const involvedUnits = units.filter(unit => stageTasks.some(task => task.unitId === unit.id));
+
+  const childrenOf = new Map();
+  for (const task of tasks) {
+    if (!task.parentId) continue;
+    const childIds = childrenOf.get(task.parentId) ?? [];
+    childIds.push(task.id);
+    childrenOf.set(task.parentId, childIds);
+  }
+  function decompositionChain(taskId) {
+    if (!taskId) return new Set();
+    const chain = new Set([taskId]);
+    for (let parentId = taskById.get(taskId)?.parentId; parentId; parentId = taskById.get(parentId)?.parentId) chain.add(parentId);
+    const pending = [...(childrenOf.get(taskId) ?? [])];
+    while (pending.length) {
+      const id = pending.pop();
+      chain.add(id);
+      pending.push(...(childrenOf.get(id) ?? []));
+    }
+    return chain;
+  }
+  const activeChain = selectedTaskId ? decompositionChain(selectedTaskId) : new Set();
+  const expansionAlign = index => index <= 0 ? "start" : index >= phaseStages.length - 1 ? "end" : "center";
+
+  const toggleStage = id => {
+    if (openStageId === id) {
+      setQuery(context.navigate, { stage: "", unit: "", task: "", anchor: "", spine: "" });
+      return;
+    }
+    setQuery(context.navigate, { stage: id, unit: "", task: "", anchor: "", spine: "" });
+  };
+  const toggleTask = (task, unitId) => {
+    if (selectedTaskId === task.id) {
+      setQuery(context.navigate, { stage: openStageId, unit: "", task: "" });
+      return;
+    }
+    setQuery(context.navigate, { stage: phaseOf(task), unit: unitId, task: task.id, anchor: "" });
+  };
+  const selectAnchor = id => setQuery(context.navigate, { anchor: id, task: "" });
+
+  const stageCards = phaseStages.map((stage, index) => {
+    const selected = stage.id === openStageId;
+    const taskCount = tasks.filter(task => phaseOf(task) === stage.id).length;
+    return el("div", {
+      className: "swimlane-stage-cell",
+      style: `--stage-column:${index + 1}`,
+      dataset: { stageId: stage.id, expandAlign: expansionAlign(index) }
+    }, [
+      el("button", {
+        type: "button",
+        className: `swimlane-stage-card band-${stage.band}${selected ? " selected" : ""}${stage.id === context.data.currentStageId ? " current" : ""}`,
+        ariaExpanded: selected ? "true" : "false",
+        ariaLabel: `${stage.title}，${bandLabels[stage.band]}，${safeText(stage.dateLabel, "时间待确认")}${selected ? "，已展开" : "，点击展开"}`,
+        title: selected ? "点击收起" : `${safeText(stage.dateLabel, "时间待确认")} · ${bandLabels[stage.band]}`,
+        onClick: () => toggleStage(stage.id)
+      }, [
+        el("strong", { className: "swimlane-stage-title", text: stage.title }),
+        selected ? el("span", { className: "swimlane-stage-status", text: `${safeText(stage.dateLabel, "时间待确认")} · ${bandLabels[stage.band]}${taskCount ? ` · ${taskCount} ${taskTerm}` : ""}` }) : null,
+        selected ? el("span", { className: "swimlane-stage-description", text: safeText(stage.description, "阶段说明待补充") }) : null,
+        selected ? el("span", { className: "swimlane-stage-output", text: `预期产出：${safeText(stage.expectedOutput, "待确认")}` }) : null
+      ])
+    ]);
+  });
+
+  const closureNodes = closures.map(closure => {
+    const related = (closure.between ?? []).map(id => stageIndex.get(id)).filter(Number.isInteger);
+    if (!related.length) return null;
+    const column = Math.max(0, Math.round(related.reduce((sum, value) => sum + value, 0) / related.length));
+    return el("button", {
+      type: "button",
+      className: `closure-anchor${closure.id === selectedAnchorId ? " selected" : ""}`,
+      style: `--stage-column:${column + 1}`,
+      dataset: { anchor: closure.id },
+      ariaLabel: `${closure.title}，收口锚点`,
+      onClick: () => selectAnchor(closure.id)
+    }, [
+      el("span", { className: "closure-anchor-mark", ariaHidden: "true", text: "◆" }),
+      el("span", { className: "closure-anchor-label", text: closure.title })
+    ]);
+  }).filter(Boolean);
+
+  function taskVisualState(task) {
+    if (Number(task.progress) >= 100 || /done|completed|完成|已完成|closed|mitigated/i.test(String(task.state ?? ""))) return "complete";
+    const today = new Date().toISOString().slice(0, 10);
+    if (task.endDate && task.endDate < today) return "overdue";
+    if (/risk|block|风险|阻塞|超时/i.test(String(task.state ?? ""))) return "risk";
+    if (task.startDate) return "active";
+    return "planned";
+  }
+
+  function taskCard(task, unit, colorIndex) {
+    const expanded = task.id === selectedTaskId;
+    const parent = taskById.get(task.parentId);
+    const childCount = (childrenOf.get(task.id) ?? []).length;
+    const inChain = activeChain.has(task.id);
+    const visualState = taskVisualState(task);
+    return el("article", {
+      className: `swimlane-task-card-shell unit-color-${colorIndex}${expanded ? " expanded" : ""}${inChain ? " chain" : ""}`,
+      dataset: { taskId: task.id, parent: task.parentId || "" }
+    }, [
+      el("button", {
+        type: "button",
+        className: `swimlane-task-card state-${visualState}${task.parentId ? " has-parent" : ""}`,
+        ariaExpanded: expanded ? "true" : "false",
+        ariaLabel: `${task.title}，${unit.name}，${statusText(task.state)}，起始 ${safeText(task.startDate, "待排期")}${task.parentId ? `，拆解自 ${parent?.title ?? task.parentId}` : ""}`,
+        title: expanded ? "点击收起任务详情" : `${unit.name} · ${visualState === "overdue" ? "超时" : statusText(task.state)}`,
+        onClick: () => toggleTask(task, unit.id)
+      }, [
+        el("strong", { className: "swimlane-task-title", text: task.title })
+      ]),
+      expanded ? el("div", { className: "swimlane-task-detail" }, [
+        parent ? el("p", { className: "swimlane-decomposition-note", text: `拆解自：${parent.title}` }) : null,
+        childCount ? el("p", { className: "swimlane-decomposition-note", text: `已拆解出 ${childCount} 个同单元子任务` }) : null,
+        taskInlineDetail(context, task, unit.name)
+      ]) : null
+    ]);
+  }
+
+  const unitRows = involvedUnits.map(unit => {
+    const colorIndex = Math.max(0, units.findIndex(item => item.id === unit.id)) % 7;
+    const unitTasks = stageTasks.filter(task => task.unitId === unit.id);
+    const unitBand = unitLifecycleBandOf(tasks.filter(task => task.unitId === unit.id));
+    return el("section", {
+      className: `swimlane-card-row unit-color-${colorIndex} unit-band-${unitBand}${unit.id === selectedUnitId ? " selected" : ""}`,
+      dataset: { unitId: unit.id },
+      ariaLabel: `${unit.name}副泳道`
+    }, [
+      el("header", { className: "swimlane-card-row-label" }, [
+        el("span", { className: "swimlane-unit-color", ariaHidden: "true" }),
+        el("strong", { text: unit.name }),
+        el("small", { text: `${bandLabels[unitBand]} · ${unitTasks.length} ${taskTerm}` })
+      ]),
+      el("div", {
+        className: "swimlane-task-stack swimlane-task-grid",
+        role: "list",
+        ariaLabel: `${openStage.title} · ${unit.name}${taskTerm}`
+      }, unitTasks.map(task => taskCard(task, unit, colorIndex)))
+    ]);
+  });
+
+  const legend = el("ul", { className: "swimlane-legend", ariaLabel: "图例" }, [
+    el("li", { className: "band-prepare" }, [el("i", { className: "dot" }), bandLabels.prepare]),
+    el("li", { className: "band-active" }, [el("i", { className: "dot" }), bandLabels.active]),
+    el("li", { className: "band-converged" }, [el("i", { className: "dot" }), bandLabels.converged]),
+    el("li", {}, [el("span", { className: "anchor-glyph", text: "◆", ariaHidden: "true" }), "收口"]),
+    el("li", {}, [el("span", { className: "anchor-glyph decomp-glyph", text: "⇢", ariaHidden: "true" }), "同单元拆解"]),
+    el("li", {}, [el("span", { className: "status-glyph overdue", text: "!", ariaHidden: "true" }), "超时"])
+  ]);
+
+  const mainLane = el("section", { className: "swimlane-main-row", ariaLabel: "主任务时间线" }, [
+    el("header", { className: "swimlane-main-row-label" }, [
+      el("span", { className: "eyebrow", text: "MAIN ROUTE" }),
+      el("strong", { text: "主任务线" }),
+      el("small", { text: `按时间推进 · 点击${stageTerm}展开` })
+    ]),
+    el("div", { className: "swimlane-main-cards", style: `--stage-count:${phaseStages.length}` }, stageCards)
+  ]);
+  const closureLane = closureNodes.length ? el("div", { className: "swimlane-closure-row" }, [
+    el("span", { className: "swimlane-closure-label", text: "闭环" }),
+    el("div", { className: "swimlane-closure-track", style: `--stage-count:${phaseStages.length}` }, closureNodes)
+  ]) : null;
+  const expansion = openStage
+    ? el("div", { className: "swimlane-card-expansion", dataset: { openStage: openStage.id } }, [
+      el("div", { className: "swimlane-child-track", style: `--stage-count:${phaseStages.length}` }, [
+        el("div", {
+          className: "swimlane-child-focus",
+          style: `--stage-column:${(stageIndex.get(openStage.id) ?? 0) + 1}`,
+          dataset: { expandAlign: expansionAlign(stageIndex.get(openStage.id) ?? 0) }
+        }, [
+          svgEl("svg", {
+            class: "swimlane-child-slope",
+            viewBox: "0 0 420 54",
+            preserveAspectRatio: "none",
+            ariaHidden: "true"
+          }, [
+            svgEl("path", { d: "M 0 52 C 76 52 118 38 148 3" }),
+            svgEl("path", { d: "M 272 3 C 302 38 344 52 420 52" })
+          ]),
+          el("section", {
+            className: "swimlane-child-panel",
+            ariaLabel: `${openStage.title}子任务面板`
+          }, [
+            el("div", { className: "swimlane-expansion-summary" }, [
+              el("strong", { text: `${openStage.title} · 副任务卡片` }),
+              el("span", { text: stageTasks.length ? `${involvedUnits.length} 个${unitTerm} · ${stageTasks.length} ${taskTerm}` : `暂无归入本${stageTerm}的${taskTerm}` })
+            ]),
+            unitRows.length
+              ? el("div", { className: "swimlane-card-rows", role: "rowgroup" }, unitRows)
+              : el("p", { className: "swimlane-card-empty", text: `本${stageTerm}暂无副任务卡片。` })
+          ])
+        ])
+      ])
+    ])
+    : el("div", { className: "swimlane-card-empty", role: "status" }, [
+      el("strong", { text: `选择上方${stageTerm}` }),
+      el("span", { text: `未选择时隐藏全部${unitTerm}与副任务；选中后只展开相关卡片。` })
+    ]);
+
+  let detail = null;
+  if (selectedAnchorId) {
+    const closure = closures.find(item => item.id === selectedAnchorId);
+    detail = closure ? el("article", { className: "inline-task-detail" }, [
+      el("span", { className: "eyebrow", text: "收口锚点 · 战果闭环" }),
+      el("h4", { text: closure.title }),
+      definitionList([["状态", closure.state], ["日期", closure.dateLabel], ["关联阶段", (closure.between ?? []).join(" → ")], ["结果", closure.result], ["说明", closure.description], ["来源", closure.source]])
+    ]) : null;
+  }
+
+  const desktopBoardMinWidth = 140 + 18 + 48 + phaseStages.length * 146 + Math.max(0, phaseStages.length - 1) * 14;
+  const mobileBoardMinWidth = 124 + 10 + 32 + phaseStages.length * 178 + Math.max(0, phaseStages.length - 1) * 14;
+  const board = el("div", {
+    className: "swimlane-card-board",
+    style: `--swimlane-board-min-width:${desktopBoardMinWidth}px;--swimlane-board-mobile-min-width:${mobileBoardMinWidth}px`,
+    dataset: { openStage: openStage?.id ?? "", stageCount: String(phaseStages.length) }
+  }, [mainLane, closureLane, expansion]);
+
+  const section = el("section", { className: "module-primary-card roadmap-workbench roadmap-swimlane roadmap-card-swimlane" }, [
+    roadmapViewSwitcher(context),
+    cardHeading("PROJECT ROADMAP", context.module.title, `主任务组成项目路线；点击${stageTerm}后，相关${unitTerm}以不同颜色的卡片集合展开，副任务不按工期拉长。`),
+    legend,
+    localScroller("卡片式项目路线图，可水平滚动", board),
+    detail
+  ]);
+  if (openStage) {
+    requestAnimationFrame(() => {
+      const selectedCard = board.querySelector(".swimlane-task-card-shell.expanded")
+        ?? board.querySelector(".swimlane-stage-card.selected");
+      const scroller = board.closest(".visual-scroll");
+      if (!selectedCard || !scroller) return;
+      const cardRect = selectedCard.getBoundingClientRect();
+      const scrollerRect = scroller.getBoundingClientRect();
+      const safeInset = 28;
+      if (cardRect.left < scrollerRect.left + safeInset || cardRect.right > scrollerRect.right - safeInset) {
+        const cardCenter = cardRect.left + cardRect.width / 2;
+        const scrollerCenter = scrollerRect.left + scrollerRect.width / 2;
+        scroller.scrollLeft += cardCenter - scrollerCenter;
+      }
+    });
+  }
+  return section;
+}
+
 function taskDetails(context, node) {
   const snapshotTask = (context.snapshot?.tasks ?? []).find(task => task.id === node.id) ?? {};
   const predecessors = (context.data.edges ?? []).filter(edge => edge.to === node.id).map(edge => context.data.nodes.find(item => item.id === edge.from)?.title ?? edge.from);
@@ -1080,6 +1208,7 @@ function locatorLabel(evidence = {}) {
   if (Number.isInteger(location.line)) return `第 ${location.line} 行`;
   if (location.type === "manual" && location.field) return `人工材料 · ${location.field === "title" ? "标题" : location.field === "body" ? "正文" : safeText(location.field)}`;
   if (location.type === "json" && location.pointer) return `JSON · ${safeText(location.pointer)}`;
+  if (location.type === "sheet-cell" && location.cell) return `${safeText(location.sheet, "工作表")} · 单元格 ${safeText(location.cell)}`;
   if (location.sheet || location.range) return `${safeText(location.sheet, "工作表")} · ${safeText(location.table, "表 1")} · ${safeText(location.range, "范围待确认")}`;
   if (Number.isInteger(location.image)) return `图 ${location.image}${location.region ? ` · ${location.region}` : ""}`;
   if (Number.isInteger(evidence.ordinal)) return `第 ${evidence.ordinal + 1} 段`;
@@ -1114,10 +1243,14 @@ function materialErrorMessage(error) {
     mime_mismatch: "文件内容与扩展名不一致，已停止上传。请确认文件来源后重试。",
     magic_mismatch: "文件内容与扩展名不一致，已停止上传。请确认文件来源后重试。",
     PROJECT_MATERIAL_LIMIT: "项目材料配额已用完，当前无法继续上传。",
+    project_material_limit: "项目材料配额已用完，当前无法继续上传。",
     project_capacity: "项目材料配额已用完，当前无法继续上传。",
+    project_capacity_limit: "项目材料配额已用完，当前无法继续上传。",
     DUPLICATE_MATERIAL: "相同内容已归档",
+    duplicate_material: "相同内容已归档",
     upload_rate_limited: "上传过于频繁，请稍后重试。",
     upload_concurrent: "已有材料正在上传或预处理，请等待后再试。",
+    upload_concurrency_limited: "已有材料正在上传或预处理，请等待后再试。",
     zip_bomb: "文件展开后超过安全限制，已停止处理。请压缩内容或拆分文件后重试。"
   };
   return copy[error?.code] ?? error?.message ?? "请求失败，请稍后重试";
@@ -1265,7 +1398,9 @@ function openGenerationSheet(context, originatingMaterial, returnFocus) {
               ["今日剩余", `${usage.remainingToday ?? usage.generationRemainingToday ?? "—"} 次`],
               ["重置时间", uiDate(usage.resetTime ?? capabilityEnvelope.resetTime)]
             ].flatMap(([term, value]) => [el("dt", { text: term }), el("dd", { text: String(value) })]));
-            create.disabled = !canCreate || !providerEnabled || chosen.length < 1 || evidenceCount < 1 || evidenceCount > maxEvidence;
+            // The server safely locks at most maxEvidence blocks. A material may
+            // contain more blocks without becoming ineligible for generation.
+            create.disabled = !canCreate || !providerEnabled || chosen.length < 1 || evidenceCount < 1;
             if (focusId) selection.querySelector(`[data-material-id="${CSS.escape(focusId)}"] input`)?.focus();
           };
           const form = el("form", { className: "material-form generation-form", onSubmit: async event => {

@@ -1,0 +1,21 @@
+[Unit]
+Description=AI Project Command Platform
+After=network.target
+
+[Service]
+Type=simple
+User=aipcp
+Group=aipcp
+WorkingDirectory=/opt/ai-project-command-platform
+EnvironmentFile=/etc/ai-project-command-platform/platform.env
+ExecStart=/opt/ai-project-command-platform/runtime/bin/node --env-file-if-exists=/etc/ai-project-command-platform/platform.env /opt/ai-project-command-platform/server.mjs
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ai-project-command-platform
+
+[Install]
+WantedBy=multi-user.target

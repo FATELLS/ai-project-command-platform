@@ -1,6 +1,6 @@
 {
   "name": "ai-project-command-platform",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "description": "多项目、模板化、AI 辅助更新的项目作战管理平台",
@@ -8,7 +8,7 @@
     "node": ">=24.15"
   },
   "scripts": {
-    "start": "node server.mjs",
+    "start": "node --env-file-if-exists=.env --env-file-if-exists=.env.local server.mjs",
     "migrate": "node scripts/migrate-db.mjs",
     "import:xugu": "node scripts/import-project.mjs --fixture fixtures/projects/xugu-agentic-group.json --project xugu-agentic-group",
     "export:xugu": "node scripts/export-project.mjs --project xugu-agentic-group --stdout",

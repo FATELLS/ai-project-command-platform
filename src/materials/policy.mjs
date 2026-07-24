@@ -17,6 +17,10 @@ export const materialLimits = Object.freeze({
 
 const types = Object.freeze({
   ".txt": { mime: "text/plain", detected: null },
+  ".md": { mime: "text/markdown", acceptedMimes: ["text/markdown", "text/plain"], detected: null },
+  ".csv": { mime: "text/csv", acceptedMimes: ["text/csv", "text/plain"], detected: null },
+  ".json": { mime: "application/json", acceptedMimes: ["application/json", "text/json", "text/plain"], detected: null },
+  ".yaml": { mime: "application/yaml", acceptedMimes: ["application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml", "text/plain"], detected: null },
   ".pdf": { mime: "application/pdf", detected: "pdf" },
   ".docx": { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", detected: "docx" },
   ".pptx": { mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation", detected: "pptx" },
@@ -47,14 +51,14 @@ export function declaredMaterialType(filename, mime) {
   const expected = types[extension];
   if (!expected) throw new MaterialGateError("unsupported_type", "File extension is not allowed");
   const normalizedMime = String(mime ?? "").split(";", 1)[0].trim().toLowerCase();
-  if (normalizedMime !== expected.mime) {
+  if (!(expected.acceptedMimes ?? [expected.mime]).includes(normalizedMime)) {
     throw new MaterialGateError("mime_mismatch", "Declared content type does not match the extension");
   }
   return { extension, mime: expected.mime, detected: expected.detected };
 }
 
 export async function validateMagic(probe, declared) {
-  if (declared.extension === ".txt") {
+  if (declared.detected === null) {
     if (probe.includes(0)) throw new MaterialGateError("magic_mismatch", "Text material contains binary bytes");
     try { new TextDecoder("utf-8", { fatal: true }).decode(probe); }
     catch { throw new MaterialGateError("invalid_encoding", "Text material must be UTF-8"); }

@@ -14,6 +14,7 @@ export function validateProviderConfig(config) {
   const allowed = new Set(config.allowedHosts ?? []);
   if (!allowed.has(url.hostname)) throw new TypeError("AI provider hostname is not allowlisted");
   if (!config.apiKey || !config.model) throw new TypeError("AI provider key and model are required");
+  if (config.reasoningEffort && !new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max"]).has(config.reasoningEffort)) throw new TypeError("AI provider reasoning effort is invalid");
   return url;
 }
 
@@ -25,7 +26,7 @@ export function createOpenAiCompatibleProvider(config, options = {}) {
       const deadline = AbortSignal.timeout(config.timeoutMs ?? 45_000); const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
       let response;
       try {
-        response = await fetchImpl(endpoint, { method: "POST", headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ model: config.model, messages: request.messages, temperature: 0.1, max_tokens: Math.min(config.maxOutputTokens ?? 1_200, 8_000), stream: false, response_format: request.responseFormat }), signal: combined });
+        response = await fetchImpl(endpoint, { method: "POST", headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ model: config.model, messages: request.messages, temperature: 0.1, max_tokens: Math.min(config.maxOutputTokens ?? 1_200, 8_000), stream: false, response_format: request.responseFormat, ...(config.reasoningEffort ? { reasoning_effort: config.reasoningEffort } : {}) }), signal: combined });
       } catch (error) {
         if (signal?.aborted) throw signal.reason; if (attempt === 0 && error?.name !== "AbortError") { await sleep(1); continue; } throw safeProviderError(error?.name === "AbortError" ? "AI_PROVIDER_TIMEOUT" : "AI_PROVIDER_NETWORK_ERROR");
       }

@@ -6,9 +6,10 @@ import { accounts, loginViaForm } from "./helpers.mjs";
 test.describe("认证与平台导航", () => {
   test("管理员登录后进入项目作战台并看到两个授权项目", async ({ page }) => {
     await page.goto("/projects");
-    await expect(page.locator(".project-grid")).toBeVisible();
-    await expect(page.locator(".project-id", { hasText: "xugu-agentic-group" })).toBeVisible();
-    await expect(page.locator(".project-id", { hasText: "standard-project-sample" })).toBeVisible();
+    const results = page.locator(".project-grid[aria-live]");
+    await expect(results).toBeVisible();
+    await expect(results.locator(".project-id", { hasText: "xugu-agentic-group" })).toBeVisible();
+    await expect(results.locator(".project-id", { hasText: "standard-project-sample" })).toBeVisible();
   });
 
   test("未登录访问受保护路由会跳转登录", async ({ browser }) => {
@@ -36,7 +37,7 @@ test.describe("认证与平台导航", () => {
     const context = await browser.newContext({ storageState: undefined });
     const page = await context.newPage();
     await loginViaForm(page, accounts.admin);
-    await expect(page.locator(".project-grid")).toBeVisible();
+    await expect(page.locator(".project-grid[aria-live]")).toBeVisible();
     await context.close();
   });
 
@@ -47,5 +48,25 @@ test.describe("认证与平台导航", () => {
     await page.goto("/projects/standard-project-sample");
     await expect(page).toHaveURL(/\/projects\/standard-project-sample/);
     await expect(page.locator(".project-id", { hasText: "standard-project-sample" })).toBeVisible();
+  });
+
+  test("一级导航收敛为六个工作区并保留健康与资料二级入口", async ({ page }) => {
+    await page.goto("/projects/xugu-agentic-group/modules/roadmap");
+    const primary = page.locator(".project-nav a");
+    await expect(primary).toHaveCount(6);
+    await expect(primary).toHaveText(["作战总览", "项目路线图", "作战单元", "排期甘特", "项目健康", "项目资料"]);
+    await expect(page.locator(".project-nav a", { hasText: "任务网络" })).toHaveCount(0);
+
+    await page.getByRole("link", { name: "项目健康", exact: true }).click();
+    await expect(page).toHaveURL(/\/modules\/risks$/);
+    await expect(page.locator(".module-section-nav a")).toHaveText(["风险台账", "效果指标"]);
+
+    await page.getByRole("link", { name: "项目资料", exact: true }).click();
+    await expect(page).toHaveURL(/\/modules\/outcomes$/);
+    await expect(page.locator(".module-section-nav a")).toHaveText(["战果档案", "材料台账", "更新提案"]);
+    await page.locator(".module-section-nav a", { hasText: "更新提案" }).click();
+    await expect(page).toHaveURL(/\/modules\/materials\?view=proposals$/);
+    await expect(page.locator(".project-nav a.active")).toHaveText("项目资料");
+    await expect(page.locator(".module-section-nav a.active")).toHaveText("更新提案");
   });
 });

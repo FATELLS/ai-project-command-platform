@@ -33,13 +33,17 @@ test("DOCX, PPTX and XLSX adapters preserve paragraph, slide and cell boundaries
   const root = mkdtempSync(join(tmpdir(), "extract-office-"));
   const docx = makeZip(join(root, "docx"), { "word/document.xml": '<w:document><w:p><w:r><w:t>第一段</w:t></w:r></w:p><w:p><w:r><w:t>第二段</w:t></w:r></w:p></w:document>' }, "sample.docx");
   const pptx = makeZip(join(root, "pptx"), { "ppt/slides/slide2.xml": '<p:sld><a:p><a:r><a:t>第二页</a:t></a:r></a:p></p:sld>', "ppt/slides/slide1.xml": '<p:sld><a:p><a:r><a:t>第一页</a:t></a:r></a:p></p:sld>' }, "sample.pptx");
-  const xlsx = makeZip(join(root, "xlsx"), { "xl/sharedStrings.xml": '<sst><si><t>指标值</t></si></sst>', "xl/worksheets/sheet1.xml": '<worksheet><sheetData><row r="1"><c r="B1" t="s"><v>0</v></c></row></sheetData></worksheet>' }, "sample.xlsx");
+  const xlsx = makeZip(join(root, "xlsx"), {
+    "xl/sharedStrings.xml": '<x:sst xmlns:x="urn:spreadsheet"><x:si><x:t>指标值</x:t></x:si></x:sst>',
+    "xl/worksheets/sheet1.xml": '<x:worksheet xmlns:x="urn:spreadsheet"><x:sheetData><x:row r="1"><x:c r="B1" t="s"><x:v>0</x:v></x:c><x:c r="C1" t="str"><x:v>直接字符串</x:v></x:c></x:row></x:sheetData></x:worksheet>'
+  }, "sample.xlsx");
   const doc = await extractMaterial({ path: docx, extension: ".docx" });
   assert.deepEqual(doc.blocks.map(block => block.location.paragraph), [1, 2]); assert.equal(doc.blocks[0].kind, expected.docx.kind);
   const deck = await extractMaterial({ path: pptx, extension: ".pptx" });
   assert.deepEqual(deck.blocks.map(block => [block.location.slide, block.text]), [[1, "第一页"], [2, "第二页"]]);
   const sheet = await extractMaterial({ path: xlsx, extension: ".xlsx" });
   assert.deepEqual(sheet.blocks[0].location, { type: "sheet-cell", sheet: "Sheet1", cell: "B1", part: 0, charStart: 0, charEnd: 3 });
+  assert.equal(sheet.blocks[1].text, "直接字符串");
 });
 
 test("PDF and image subprocess adapters are bounded and expose typed page/OCR locators", async () => {

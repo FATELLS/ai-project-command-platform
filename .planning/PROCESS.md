@@ -734,7 +734,7 @@
 
 ## 2026-07-24 平滑拆解坡线与 Windows/Linux 分发
 
-状态：`implemented / release pending`
+状态：`completed / released`
 
 - 用户指出作战单元不应继续占据子任务区左侧整列，主卡向下拆解也不应使用生硬竖线。
 - 作战单元名称、生命周期和差异色收成每组顶部小色标；任务网格使用完整宽度并从两列升级为三列，5 个任务呈现 `3+2`。
@@ -743,3 +743,6 @@
 - Release 采用运行文件白名单，明确排除 `.planning`、`fixtures`、`test`、数据库、材料、日志和密钥；全新数据库不再自动导入 Xugu 项目，只有显式 `PLATFORM_SEED_FIXTURE` 才执行脱敏迁移。
 - README 增加私有 GitHub Release 下载、RPM 一行安装、Windows/Linux 启停、数据目录、密钥和备份说明。
 - 全量 `npm run verify` 通过：157 项后台测试、35 项 Playwright E2E、浏览器证据、迁移/安全/分发检查和参考项目只读校验全部通过。
+- 私有仓库已创建为 `FATELLS/ai-project-command-platform`；PR #1 合并正式功能，PR #2 修正原生 runner 暴露的 Windows npm 调用和 RPM 路径/清单问题。
+- `v0.8.0` 原生构建全部通过并发布：Windows x64 ZIP、Linux x64 tar.gz、x86_64 RPM 与 `SHA256SUMS.txt`。Windows 与 Linux portable 都在 runner 上实际启动并通过 `/health`，RPM 在 x64 runner 上构建成功。
+- Release：`https://github.com/FATELLS/ai-project-command-platform/releases/tag/v0.8.0`

@@ -42,6 +42,8 @@
 - 默认数据库为 `data/platform.sqlite`，测试与统一验证只使用临时目录。
 - 参考项目位于 `../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console/`，必须继续只读。
 - `.planning/benchmarks/project-progression-ui/` 是当前材料推进基准：5 个正向材料、EML/重复两个负向用例和 BM-08 真实 LLM 生成发布闭环均已从 UI 跑通；运行证据见其中 `RESULT.md`。
+- GitHub 私有仓库：`https://github.com/FATELLS/ai-project-command-platform`；正式 Release：`https://github.com/FATELLS/ai-project-command-platform/releases/tag/v0.8.0`。
+- `v0.8.0` 包含 Windows x64 ZIP、Linux x64 tar.gz、x86_64 RPM 和 SHA-256 清单；原生 Windows/Linux runner 已完成启动健康检查，RPM 已在 x64 runner 构建。
 - 正式 `server.mjs` 必须保留材料 worker 启动与优雅停止；否则材料会在 UI 上传后停留于队列。当前本机使用忽略的 `.env.local` 配置 GLM-5.2，正式部署必须改用受控密钥注入。
 - BM-08 证明真实 provider 只产生结构化提案：任务 `1267c566-207d-42cb-837e-f49aedc2bc89` 一次成功、4317 Token；三项建议由管理员逐项接受、事务合并并人工发布为 `v4.3`。
 

@@ -28,7 +28,7 @@ await mkdir(output, { recursive: true });
 for (const entry of ["server.mjs", "package.json", "package-lock.json", "README.md", ".env.example", "public", "src"]) {
   await cp(join(root, entry), join(output, entry), { recursive: true });
 }
-await cp(runtime, join(output, "runtime"), { recursive: true, dereference: false });
+await cp(runtime, join(output, "runtime"), { recursive: true, dereference: false, verbatimSymlinks: true });
 await mkdir(join(output, "data"), { recursive: true });
 
 if (target === "windows-x64") {
@@ -49,9 +49,12 @@ if (!skipInstall) {
   const install = spawnSync(npm, ["ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund"], {
     cwd: output,
     encoding: "utf8",
-    stdio: "pipe"
+    stdio: "pipe",
+    shell: process.platform === "win32"
   });
-  if (install.status !== 0) throw new Error(`production dependency install failed\n${install.stdout}\n${install.stderr}`);
+  if (install.status !== 0) {
+    throw new Error(`production dependency install failed\n${install.error?.message ?? ""}\n${install.stdout ?? ""}\n${install.stderr ?? ""}`);
+  }
 }
 
 const forbiddenNames = new Set([

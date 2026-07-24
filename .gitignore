@@ -1,9 +1,16 @@
 .DS_Store
 node_modules/
 dist/
+artifacts/
+release/
 coverage/
 *.log
 *.zip
+*.tar.gz
+*.tgz
+*.rpm
+*.msi
+*.exe
 
 # Local runtime and credentials
 data/*
@@ -14,6 +21,20 @@ data/*
 .env
 .env.*
 !.env.example
+first-run-credentials.txt
+bootstrap-credentials.txt
+server.pid
+
+# Runtime project/company data and generated operational material
+uploads/
+processed/
+backups/
+diagnostics/
+exports/
+*.backup
+*.dump
+_capture_*.mjs
+.planning/sketches/
 
 .idea/
 .vscode/

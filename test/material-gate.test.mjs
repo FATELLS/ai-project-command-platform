@@ -8,6 +8,7 @@ import { openDatabase } from "../src/db/database.mjs";
 import { applyMigrations } from "../src/db/migrate.mjs";
 import { createMaterialIngestService } from "../src/materials/ingest-service.mjs";
 import { createMaterialRepository } from "../src/materials/material-repository.mjs";
+import { declaredMaterialType } from "../src/materials/policy.mjs";
 import { createMaterialStorage } from "../src/materials/storage.mjs";
 
 function setup(overrides = {}) {
@@ -41,6 +42,13 @@ function upload(service, body, options = {}) {
 function storedFiles(root) {
   return readdirSync(root, { recursive: true }).map(name => join(root, name)).filter(path => statSync(path).isFile()).sort();
 }
+
+test("text-like gate formats match the file types offered by the UI", () => {
+  assert.deepEqual(declaredMaterialType("notes.md", "text/markdown"), { extension: ".md", mime: "text/markdown", detected: null });
+  assert.deepEqual(declaredMaterialType("ledger.csv", "text/csv"), { extension: ".csv", mime: "text/csv", detected: null });
+  assert.deepEqual(declaredMaterialType("status.json", "application/json"), { extension: ".json", mime: "application/json", detected: null });
+  assert.deepEqual(declaredMaterialType("status.yaml", "application/yaml"), { extension: ".yaml", mime: "application/yaml", detected: null });
+});
 
 test("secure intake streams a valid file into one project-scoped receipt and sanitizes its display name", async () => {
   const { database, service } = setup();

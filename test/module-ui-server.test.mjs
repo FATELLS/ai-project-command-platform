@@ -33,6 +33,18 @@ test("route and envelope state contract fails closed without mixing stale module
   assert.match(app, /replaceChildren/);
 });
 
+test("project navigation groups nine safe modules into six user-facing work areas", () => {
+  for (const copy of ["项目路线图", "排期甘特", "项目健康", "项目资料", "材料台账", "更新提案"]) {
+    assert.match(app, new RegExp(copy));
+  }
+  assert.match(app, /types: \["roadmap", "task-network"\]/);
+  assert.match(app, /types: \["risks", "metrics"\]/);
+  assert.match(app, /types: \["outcomes", "materials"\]/);
+  assert.match(app, /moduleSectionNavigation/);
+  assert.match(css, /\.module-section-nav/);
+  assert.doesNotMatch(app, /manifest\.modules\.map\(module => \{\s*const path = canonicalModulePath/);
+});
+
 test("safe DOM and SVG renderers never accept project markup or executable URLs", () => {
   for (const source of [app, registry, shared, renderers]) {
     assert.doesNotMatch(source, /\.innerHTML\s*=/);
@@ -56,17 +68,14 @@ test("overview, units, roadmap, network, gantt and outcomes are DTO-driven with 
   assert.match(renderers, /Math\.max\(820/);
   assert.match(renderers, /dayNumber/);
   assert.match(renderers, /previewAssets/);
-  assert.match(renderers, /data-stage-id/);
-  assert.match(renderers, /stage-node-detail/);
+  assert.match(renderers, /dataset: \{ stageId/);
   assert.match(renderers, /stage-task-chip/);
-  assert.match(renderers, /module-summary-chip/);
-  assert.match(renderers, /module-inspector/);
-  assert.match(renderers, /unit-module-card/);
-  assert.match(renderers, /data-unit-id/);
-  assert.match(renderers, /aria-pressed/);
+  assert.match(renderers, /dataset: \{ unitId/);
+  assert.match(renderers, /ariaPressed/);
   assert.match(renderers, /unit-card-detail/);
   assert.match(renderers, /inline-task-detail/);
-  assert.match(renderers, /点击\$\{context\.presentation\.stage\}可切换/);
+  assert.match(renderers, /项目路线图/);
+  assert.doesNotMatch(renderers, /\["timeline", "活动路线图"\]/);
   assert.doesNotMatch(renderers, /data-closure-id/);
 });
 
@@ -96,10 +105,8 @@ test("responsive and accessibility CSS keeps local scrolling and Xugu frame", ()
     /\.public-header\s*\{[^}]*height:\s*76px/,
     /\.public-header\s*\{[^}]*padding-inline:\s*32px/,
     /\.visual-scroll[^}]*overflow:\s*auto/,
-    /\.module-summary-chip\s*rect/,
-    /\.module-summary-chip\.selected rect/,
-    /\.unit-module-card\s*\{[^}]*cursor:\s*pointer/,
-    /\.unit-module-card\.selected/,
+    /\.swimlane-main-cards\s*\{/,
+    /\.swimlane-task-card\s*\{/,
     /\.module-config-sheet/,
     /@media \(max-width: 1279px\)/,
     /@media \(max-width: 767px\)/,
@@ -109,4 +116,37 @@ test("responsive and accessibility CSS keeps local scrolling and Xugu frame", ()
   assert.match(css, /grid-template-columns:\s*1\.25fr \.85fr/);
   assert.match(css, /min-height:\s*40px/);
   assert.doesNotMatch(css, /@import|url\(["']?https?:/);
+});
+
+test("roadmap card swimlane keeps the main route and two-level task projection fixed", () => {
+  for (const contract of [
+    /function renderRoadmapSwimlane\(context\)/,
+    /className: "swimlane-main-cards"/,
+    /className: "swimlane-card-expansion"/,
+    /className: "swimlane-child-focus"/,
+    /class: "swimlane-child-slope"/,
+    /className: "swimlane-child-panel"/,
+    /className: "swimlane-task-stack swimlane-task-grid"/,
+    /className: "swimlane-task-detail"/,
+    /未选择时隐藏全部/,
+    /副任务不按工期拉长/,
+    /scroller\.scrollLeft \+= cardCenter - scrollerCenter/,
+    /--swimlane-board-min-width:\$\{desktopBoardMinWidth\}px/,
+    /expandAlign: expansionAlign\(index\)/,
+    /querySelector\("\.swimlane-task-card-shell\.expanded"\)/
+  ]) assert.match(renderers, contract);
+  for (const contract of [
+    /\.swimlane-main-cards\s*\{[^}]*grid-template-columns:\s*repeat\(var\(--stage-count\)/,
+    /\.swimlane-task-card-shell\s*\{[^}]*border-left:\s*4px solid var\(--unit-accent\)/,
+    /\.swimlane-task-card\s*\{[^}]*width:\s*100%/,
+    /\.swimlane-card-board\s*\{[^}]*min-width:\s*var\(--swimlane-board-min-width/,
+    /\.swimlane-card-board\[data-open-stage\][^}]*background:\s*rgba\(15,\s*43,\s*76,\s*\.18\)/,
+    /\.swimlane-stage-card\.selected\s*\{[^}]*width:\s*min\(420px,[^}]*backdrop-filter:\s*blur\(9px\)/,
+    /\.swimlane-child-focus\s*\{[^}]*width:\s*min\(420px,/,
+    /\.swimlane-child-panel\s*\{[^}]*width:\s*100%[^}]*background:\s*rgba\(241,\s*246,\s*255,\s*\.82\)/,
+    /\.swimlane-child-slope path\s*\{[^}]*stroke:\s*rgba\(30,\s*101,\s*204,\s*\.58\)/,
+    /\.swimlane-task-stack\s*\{[^}]*grid-template-columns:\s*repeat\(3,/,
+    /\.swimlane-task-card-shell\.expanded\s*\{[^}]*grid-column:\s*1\s*\/\s*-1[^}]*width:\s*100%/,
+    /\.unit-color-6\s*\{/
+  ]) assert.match(css, contract);
 });

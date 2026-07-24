@@ -60,7 +60,8 @@
 - 打开主任务时，路线画布使用 18% 深蓝灰遮罩降亮非当前区域；选中主卡与同宽副任务面板保持前景。
 - 主任务玻璃背景增强为约 76–84% 实色与 9px 模糊；副任务在 420px 面板内按三列紧凑排列，作战单元收成组顶部小色标，二级详情横跨整组但不越界。
 - 主卡到副任务面板采用对称 SVG 平滑双坡线，已移除垂直硬连接与横向分割线。
-- 版本提升到 `0.8.0`；Windows/Linux portable 和 RPM 分发、私有 GitHub Release 工作流、运行白名单与空数据库首次启动边界已实现，等待 GitHub 原生 runner 构建发布。
+- 版本提升到 `0.8.0`；Windows/Linux portable 和 RPM 分发、私有 GitHub Release 工作流、运行白名单与空数据库首次启动边界已实现。
+- `FATELLS/ai-project-command-platform` 私有仓库与 `v0.8.0` Release 已发布；Windows/Linux 原生 x64 runner 启动冒烟和 RPM 构建全部通过。
 - 全量 `npm run verify` 通过：157 项后台测试、35 项 Playwright E2E、浏览器证据、迁移/安全/分发检查和参考项目只读校验全部通过。
 
 ## 2026-07-20 Phase 8 完成

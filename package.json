@@ -5,7 +5,24 @@
   "type": "module",
   "description": "多项目、模板化、AI 辅助更新的项目作战管理平台",
   "engines": {
-    "node": ">=24.15"
+    "node": ">=22.0"
+  },
+  "bin": {
+    "ai-platform": "./server.mjs"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*",
+      "src/db/migrations/*.sql",
+      "fixtures/**/*"
+    ],
+    "targets": [
+      "node22-linux-x64",
+      "node22-macos-x64",
+      "node22-macos-arm64",
+      "node22-win-x64"
+    ],
+    "outputPath": "dist"
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env --env-file-if-exists=.env.local server.mjs",
@@ -17,13 +34,28 @@
     "verify": "node scripts/verify.mjs",
     "test": "node --test \"test/*.test.mjs\"",
     "test:e2e": "npx playwright test --reporter=list",
-    "e2e:install": "npx playwright install chromium"
+    "e2e:install": "npx playwright install chromium",
+    "build:pkg": "node scripts/build-native.mjs",
+    "build:deb": "node scripts/build-packages.mjs deb",
+    "build:rpm": "node scripts/build-packages.mjs rpm",
+    "build:macos": "node scripts/build-packages.mjs macos",
+    "build:win": "node scripts/build-packages.mjs win",
+    "build:all": "node scripts/build-packages.mjs all",
+    "build:xugu:deb": "node scripts/build-packages.mjs deb --with-xugu",
+    "build:xugu:rpm": "node scripts/build-packages.mjs rpm --with-xugu",
+    "build:xugu:macos": "node scripts/build-packages.mjs macos --with-xugu",
+    "build:xugu:win": "node scripts/build-packages.mjs win --with-xugu",
+    "build:xugu:all": "node scripts/build-packages.mjs all --with-xugu"
   },
   "dependencies": {
     "file-type": "22.0.1",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^4.10.38",
     "yauzl": "3.4.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.1"
+    "@playwright/test": "^1.61.1",
+    "docx": "^9.7.1",
+    "exceljs": "^4.4.0"
   }
 }

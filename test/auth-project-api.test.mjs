@@ -283,12 +283,14 @@ async function stopChild(child) {
   await new Promise(resolve => child.once("exit", resolve));
 }
 
-test("bootstrap server requires first-run secret and later restarts without it", async () => {
+test("bootstrap server defaults to admin/admin123 when no password is set", async () => {
   const dataDirectory = mkdtempSync(join(tmpdir(), "platform-bootstrap-server-"));
   const baseEnv = { ...process.env, PLATFORM_DATA_DIR: dataDirectory, HOST: "127.0.0.1", PORT: "0" };
-  const missing = spawnSync(process.execPath, ["server.mjs"], { cwd: new URL("..", import.meta.url), env: baseEnv, encoding: "utf8" });
-  assert.equal(missing.status, 1);
-  assert.match(missing.stderr, /PLATFORM_BOOTSTRAP_PASSWORD/);
+  const missing = spawn(process.execPath, ["server.mjs"], {
+    cwd: new URL("..", import.meta.url), env: baseEnv, stdio: ["ignore", "pipe", "pipe"]
+  });
+  await waitForOutput(missing, /默认管理员已创建/);
+  await stopChild(missing);
 
   const first = spawn(process.execPath, ["server.mjs"], {
     cwd: new URL("..", import.meta.url),

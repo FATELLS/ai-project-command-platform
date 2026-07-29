@@ -52,16 +52,15 @@ export function createModuleService(database) {
   }
 
   function resolvedModules(graph) {
-    if (graph.modules.length !== moduleTypes.length) throw new ModuleValidationError("modules: incomplete module registry");
-    const types = graph.modules.map(module => module.type);
+    const registeredTypes = new Set(moduleTypes);
+    const filteredModules = graph.modules.filter(module => registeredTypes.has(module.type));
+    const types = filteredModules.map(module => module.type);
     if (new Set(types).size !== types.length || !sameMembers(types, moduleTypes)) {
-      throw new ModuleValidationError("modules: must contain exactly the nine registered module types");
+      throw new ModuleValidationError("modules: must contain exactly the registered module types");
     }
-    return graph.modules.map((stored, position) => {
+    return filteredModules.map((stored, position) => {
       const definition = getModuleDefinition(stored.type);
-      if (!definition || stored.externalId !== stored.type || stored.position !== position) {
-        throw new ModuleValidationError(`modules[${position}]: identity or position is invalid`);
-      }
+      if (!definition) throw new ModuleValidationError(`modules[${position}]: unknown type ${stored.type}`);
       validateStoredModuleConfiguration(stored.configuration, definition, position);
       const templateModule = graph.template.config.modules.find(module => module.type === stored.type);
       if (!templateModule) throw new ModuleValidationError(`modules[${position}]: missing template definition`);

@@ -15,10 +15,10 @@ test("fresh and repeated migrations are deterministic", () => {
   const directory = mkdtempSync(join(tmpdir(), "platform-db-"));
   const database = openDatabase(join(directory, "platform.sqlite"));
   try {
-    assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql", "004_materials_evidence.sql", "005_structured_change_proposals.sql", "006_review_publish_operations.sql", "007_release_hardening_readiness_observability.sql"]);
+    assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql", "004_materials_evidence.sql", "005_structured_change_proposals.sql", "006_review_publish_operations.sql", "007_release_hardening_readiness_observability.sql", "008_password_reset.sql", "009_platform_settings.sql", "010_unified_cards.sql"]);
     assert.deepEqual(applyMigrations(database), []);
     assert.equal(database.prepare("PRAGMA foreign_keys").get().foreign_keys, 1);
-    assert.equal(database.prepare("PRAGMA journal_mode").get().journal_mode, "wal");
+    assert.equal(database.prepare("PRAGMA journal_mode").get().journal_mode, "delete");
     const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map(row => row.name);
     for (const table of ["projects", "project_versions", "project_units", "project_tasks", "task_links", "project_risks", "project_metrics", "change_proposals", "project_materials", "material_artifacts", "material_jobs", "evidence_blocks", "material_qa_grants", "material_generation_grants", "material_upload_attempts", "ai_usage_events", "generation_jobs", "generation_job_materials", "generation_job_evidence", "generation_attempts", "change_proposal_items", "change_proposal_evidence", "material_readiness_snapshots", "operation_traces", "error_events", "product_test_runs", "product_test_case_results"]) {
       assert.ok(tables.includes(table), `missing table ${table}`);

@@ -24,7 +24,8 @@ function principalFromSession(session) {
     displayName: session.displayName,
     loginName: session.loginName,
     isPlatformAdmin: Boolean(session.isPlatformAdmin),
-    csrfToken: session.csrfToken
+    csrfToken: session.csrfToken,
+    mustResetPassword: Boolean(session.mustResetPassword)
   };
 }
 
@@ -46,29 +47,36 @@ export function createAuthService(database, options = {}) {
     return repository.countPlatformAdmins() > 0;
   }
 
-  function ensureBootstrapAdmin(input) {
-    if (repository.countPlatformAdmins() > 0) return { created: false };
-    const loginName = normalizeLoginName(input.loginName ?? "admin");
-    if (!/^[a-z0-9][a-z0-9._-]{2,63}$/.test(loginName)) throw new Error("初始管理员账号格式无效");
-    const password = validatePassword(input.password);
-    return withTransaction(database, () => {
-      if (repository.countPlatformAdmins() > 0) return { created: false };
-      const createdAt = timestamp();
-      const passwordRecord = hashPassword(password);
-      const userId = `usr_${randomUUID()}`;
-      repository.insertUser({
-        id: userId,
-        displayName: String(input.displayName ?? "平台管理员").trim() || "平台管理员",
-        loginName,
-        ...passwordRecord,
-        isPlatformAdmin: true,
-        createdAt,
-        updatedAt: createdAt
-      });
-      audit({ userId, action: "auth.bootstrap", targetType: "user", targetId: userId });
-      return { created: true, userId, loginName };
-    });
-  }
+ function ensureBootstrapAdmin(input) {
+   if (repository.countPlatformAdmins() > 0) return { created: false };
+   const loginName = normalizeLoginName(input.loginName ?? "admin");
+   if (!/^[a-z0-9][a-z0-9._-]{2,63}$/.test(loginName)) throw new Error("初始管理员账号格式无效");
+    // Default to admin/admin123 for first-run convenience; env override still works
+    const isDefault = !input.password;
+    const password = isDefault ? "admin123" : validatePassword(input.password);
+   return withTransaction(database, () => {
+     if (repository.countPlatformAdmins() > 0) return { created: false };
+   const createdAt = timestamp();
+    // When using the short default password (admin123), skip length validation
+    // since the user is forced to change it on first login.
+    const record = isDefault
+      ? hashPassword(password, { skipValidate: true })
+      : hashPassword(password);
+    const userId = `usr_${randomUUID()}`;
+    repository.insertUser({
+      id: userId,
+      displayName: String(input.displayName ?? "平台管理员").trim() || "平台管理员",
+      loginName,
+      ...record,
+      isPlatformAdmin: true,
+       mustResetPassword: isDefault,
+       createdAt,
+       updatedAt: createdAt
+     });
+     audit({ userId, action: "auth.bootstrap", targetType: "user", targetId: userId });
+      return { created: true, userId, loginName, usedDefaultPassword: isDefault };
+   });
+ }
 
   function authenticate(input) {
     const loginName = normalizeLoginName(input.loginName);
@@ -106,7 +114,8 @@ export function createAuthService(database, options = {}) {
         displayName: user.displayName,
         loginName: user.loginName,
         isPlatformAdmin: Boolean(user.isPlatformAdmin),
-        csrfToken: secrets.csrfToken
+        csrfToken: secrets.csrfToken,
+        mustResetPassword: Boolean(user.mustResetPassword)
       }
     };
   }
@@ -152,5 +161,20 @@ export function createAuthService(database, options = {}) {
     return deleted;
   }
 
-  return { hasPlatformAdmin, ensureBootstrapAdmin, authenticate, resolveSession, verifyCsrf, logout, repository };
+  function changePassword(principal, input) {
+    const user = repository.findUserByLogin(principal.loginName);
+    if (!user) return { ok: false, error: "账号不存在" };
+    const verified = verifyPassword(input.currentPassword, user);
+    if (!verified) return { ok: false, error: "当前密码不正确" };
+    const newPassword = validatePassword(input.newPassword);
+    const passwordRecord = hashPassword(newPassword);
+    const at = timestamp();
+    withTransaction(database, () => {
+      repository.updatePassword(user.id, passwordRecord, at);
+      audit({ userId: user.id, action: "auth.password_changed", targetType: "user", targetId: user.id });
+    });
+    return { ok: true };
+  }
+
+  return { hasPlatformAdmin, ensureBootstrapAdmin, authenticate, resolveSession, verifyCsrf, logout, changePassword, repository };
 }

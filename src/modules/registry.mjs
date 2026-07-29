@@ -1,5 +1,5 @@
 import {
-  loadGantt, loadMaterials, loadMetrics, loadOutcomes, loadOverview,
+  loadGantt, loadMaterials, loadMetrics, loadOverview,
   loadRisks, loadRoadmap, loadTaskNetwork, loadUnits
 } from "./loaders.mjs";
 
@@ -9,7 +9,6 @@ const definitions = [
   ["units", "Units", ["campaign-cards", "team-cards"], loadUnits],
   ["task-network", "Task Network", ["branching-network", "dependency-list"], loadTaskNetwork],
   ["gantt", "Gantt", ["branching", "lanes"], loadGantt],
-  ["outcomes", "Outcomes", ["closure-detail", "archive-grid"], loadOutcomes],
   ["risks", "Risks", ["risk-register"], loadRisks],
   ["metrics", "Metrics", ["metric-cards"], loadMetrics],
   ["materials", "Materials", ["materials-empty"], loadMaterials]

@@ -27,11 +27,11 @@ function validateJson(value, label, depth = 0) {
 export function parseProposal(raw) {
   let value;
   if (typeof raw === "string") {
-    if (Buffer.byteLength(raw) > 128 * 1024) fail("提案输出过大");
-    try { value = JSON.parse(raw); } catch { fail("提案不是有效 JSON"); }
+    if (Buffer.byteLength(raw) > 128 * 1024) fail("输出内容过大");
+    try { value = JSON.parse(raw); } catch { fail("输出不是有效的 JSON"); }
   } else { value = structuredClone(raw); }
   exact(value, ["schemaVersion", "projectId", "baseVersionId", "template", "materialIds", "summary", "changes", "warnings"], "proposal");
-  if (value.schemaVersion !== PROPOSAL_SCHEMA_VERSION) fail("提案 Schema 版本无效");
+  if (value.schemaVersion !== PROPOSAL_SCHEMA_VERSION) fail("版本信息无效");
   if (typeof value.projectId !== "string" || !stableId.test(value.projectId)) fail("projectId 无效");
   if (!Number.isSafeInteger(value.baseVersionId) || value.baseVersionId < 1) fail("baseVersionId 无效");
   exact(value.template, ["id", "version"], "template");

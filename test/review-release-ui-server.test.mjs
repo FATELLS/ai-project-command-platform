@@ -7,7 +7,7 @@ const css=readFileSync(new URL("../public/styles.css",import.meta.url),"utf8");
 const app=readFileSync(new URL("../src/http/app.mjs",import.meta.url),"utf8");
 
 test("review UI presents original, proposed, evidence, decisions and atomic merge",()=>{
-  for(const copy of ["原值","建议值","审核编辑值","引用证据","语义类型","置信度","接受此项","驳回此项","编辑后接受","接受 ${module} 模块","事务合并到草稿","任一校验失败将整体回滚"])assert.match(renderers,new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
+  for(const copy of ["原值","建议值","审核编辑值","引用内容","语义类型","置信度","接受此项","驳回此项","编辑后接受","接受 ${module} 模块","应用到草稿","任一校验失败将整体回滚"])assert.match(renderers,new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")));
   for(const route of ["/review/","/review/modules/","/merge"])assert.match(renderers,new RegExp(route.replaceAll("/","\\/")));
   for(const segment of ["segments[5] === \"review\"","segments[5] === \"merge\""])assert.ok(app.includes(segment));
 });

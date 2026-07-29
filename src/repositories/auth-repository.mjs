@@ -1,44 +1,52 @@
 export function createAuthRepository(database) {
   const findUserByLoginStatement = database.prepare(`
-    SELECT id, display_name AS displayName, status, login_name AS loginName,
-           password_salt AS passwordSalt, password_hash AS passwordHash,
-           password_params_json AS passwordParamsJson,
-           is_platform_admin AS isPlatformAdmin
-    FROM users WHERE login_name = ?
-  `);
-  const findSessionStatement = database.prepare(`
-    SELECT s.id, s.token_hash AS tokenHash, s.user_id AS userId, s.csrf_token AS csrfToken,
-           s.created_at AS createdAt, s.last_seen_at AS lastSeenAt,
-           s.idle_expires_at AS idleExpiresAt, s.absolute_expires_at AS absoluteExpiresAt,
-           u.display_name AS displayName, u.login_name AS loginName, u.status,
-           u.is_platform_admin AS isPlatformAdmin
-    FROM sessions s JOIN users u ON u.id = s.user_id
-    WHERE s.token_hash = ?
-  `);
+  SELECT id, display_name AS displayName, status, login_name AS loginName,
+         password_salt AS passwordSalt, password_hash AS passwordHash,
+         password_params_json AS passwordParamsJson,
+         is_platform_admin AS isPlatformAdmin,
+         must_reset_password AS mustResetPassword
+   FROM users WHERE login_name = ?
+ `);
+ const findSessionStatement = database.prepare(`
+   SELECT s.id, s.token_hash AS tokenHash, s.user_id AS userId, s.csrf_token AS csrfToken,
+          s.created_at AS createdAt, s.last_seen_at AS lastSeenAt,
+          s.idle_expires_at AS idleExpiresAt, s.absolute_expires_at AS absoluteExpiresAt,
+          u.display_name AS displayName, u.login_name AS loginName, u.status,
+          u.is_platform_admin AS isPlatformAdmin,
+          u.must_reset_password AS mustResetPassword
+   FROM sessions s JOIN users u ON u.id = s.user_id
+   WHERE s.token_hash = ?
+ `);
 
   function countPlatformAdmins() {
     return database.prepare("SELECT count(*) AS count FROM users WHERE is_platform_admin = 1").get().count;
   }
 
-  function insertUser(user) {
-    database.prepare(`
-      INSERT INTO users (
-        id, display_name, status, created_at, updated_at, login_name,
-        password_salt, password_hash, password_params_json, is_platform_admin
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      user.id, user.displayName, user.status ?? "active", user.createdAt, user.updatedAt,
-      user.loginName, user.passwordSalt, user.passwordHash, user.passwordParamsJson,
-      user.isPlatformAdmin ? 1 : 0
-    );
-  }
+ function insertUser(user) {
+  database.prepare(`
+    INSERT INTO users (
+      id, display_name, status, created_at, updated_at, login_name,
+      password_salt, password_hash, password_params_json, is_platform_admin, must_reset_password
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    user.id, user.displayName, user.status ?? "active", user.createdAt, user.updatedAt,
+    user.loginName, user.passwordSalt, user.passwordHash, user.passwordParamsJson,
+    user.isPlatformAdmin ? 1 : 0,
+    user.mustResetPassword ? 1 : 0
+  );
+ }
 
   function findUserByLogin(loginName) {
     return findUserByLoginStatement.get(loginName);
   }
 
-  function setUserStatus(userId, status, updatedAt) {
-    database.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?").run(status, updatedAt, userId);
+ function setUserStatus(userId, status, updatedAt) {
+   database.prepare("UPDATE users SET status = ?, updated_at = ? WHERE id = ?").run(status, updatedAt, userId);
+ }
+  function updatePassword(userId, passwordRecord, updatedAt) {
+    database.prepare(`
+      UPDATE users SET password_salt = ?, password_hash = ?, password_params_json = ?, must_reset_password = 0, updated_at = ? WHERE id = ?
+    `).run(passwordRecord.passwordSalt, passwordRecord.passwordHash, passwordRecord.passwordParamsJson, updatedAt, userId);
   }
 
   function insertSession(session) {
@@ -85,16 +93,17 @@ export function createAuthRepository(database) {
     `).all();
   }
 
-  return {
-    countPlatformAdmins,
+ return {
+   countPlatformAdmins,
     insertUser,
     findUserByLogin,
     setUserStatus,
+    updatePassword,
     insertSession,
-    findSessionByTokenHash,
-    touchSession,
-    deleteSessionByTokenHash,
-    insertAudit,
-    listAudit
-  };
+   findSessionByTokenHash,
+   touchSession,
+   deleteSessionByTokenHash,
+   insertAudit,
+   listAudit
+ };
 }

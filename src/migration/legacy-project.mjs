@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { withTransaction } from "../db/database.mjs";
+import { insertOrIgnore } from "../db/sql-dialect.mjs";
 import { validateLegacyFixture } from "../domain/project-validator.mjs";
 import { createProjectRepository } from "../repositories/project-repository.mjs";
 import { resolveTemplate, templateConfigJson } from "../templates/catalog.mjs";
@@ -48,25 +49,68 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
     JSON.stringify({ schemaVersion: module.schemaVersion, viewVariant: module.viewVariant })
   ));
 
+  // 检测是否有 project_cards 统一表
+  const hasCardsTable = database.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='project_cards'"
+  ).get();
+
   const insertUnit = database.prepare(`
     INSERT INTO project_units (version_id, external_id, position, name, data_json) VALUES (?, ?, ?, ?, ?)
   `);
+  const insertUnitCard = hasCardsTable ? database.prepare(`
+    INSERT OR IGNORE INTO project_cards (
+      version_id, external_id, element_type, position, title, owner, state, objective, card_attrs, created_at, updated_at
+    ) VALUES (?, ?, 'unit', ?, ?, ?, ?, ?, ?, ?, ?)
+  `) : null;
   snapshot.groups.forEach((unit, position) => {
-    insertUnit.run(versionId, unit.id, position, unit.name, JSON.stringify(without(unit, new Set(["id", "name"]))));
+    const data = without(unit, new Set(["id", "name"]));
+    insertUnit.run(versionId, unit.id, position, unit.name, JSON.stringify(data));
+    if (insertUnitCard) {
+      insertUnitCard.run(
+        versionId, unit.id, position, unit.name,
+        data.owner ?? "", data.status ?? "", data.objective ?? "",
+        JSON.stringify(data), now, now
+      );
+    }
   });
 
   const insertStage = database.prepare(`
     INSERT INTO project_stages (version_id, external_id, position, title, date_label, data_json) VALUES (?, ?, ?, ?, ?, ?)
   `);
+  const insertStageCard = hasCardsTable ? database.prepare(`
+    INSERT OR IGNORE INTO project_cards (
+      version_id, external_id, element_type, position, title, state, start_date, end_date, card_attrs, created_at, updated_at
+    ) VALUES (?, ?, 'stage', ?, ?, ?, ?, ?, ?, ?, ?)
+  `) : null;
   snapshot.stages.forEach((stage, position) => {
-    insertStage.run(versionId, stage.id, position, stage.title, stage.date ?? "", JSON.stringify(without(stage, new Set(["id", "title", "date"]))));
+    const data = without(stage, new Set(["id", "title", "date"]));
+    insertStage.run(versionId, stage.id, position, stage.title, stage.date ?? "", JSON.stringify(data));
+    if (insertStageCard) {
+      insertStageCard.run(
+        versionId, stage.id, position, stage.title,
+        data.state ?? "", data.startDate ?? "", data.endDate ?? "",
+        JSON.stringify(data), now, now
+      );
+    }
   });
 
   const insertClosure = database.prepare(`
     INSERT INTO project_closures (version_id, external_id, position, title, date_label, data_json) VALUES (?, ?, ?, ?, ?, ?)
   `);
+  const insertOutcomeCard = hasCardsTable ? database.prepare(`
+    INSERT OR IGNORE INTO project_cards (
+      version_id, external_id, element_type, position, title, state, card_attrs, created_at, updated_at
+    ) VALUES (?, ?, 'outcome', ?, ?, ?, ?, ?, ?)
+  `) : null;
   (snapshot.closures ?? []).forEach((closure, position) => {
-    insertClosure.run(versionId, closure.id, position, closure.title, closure.date ?? "", JSON.stringify(without(closure, new Set(["id", "title", "date"]))));
+    const data = without(closure, new Set(["id", "title", "date"]));
+    insertClosure.run(versionId, closure.id, position, closure.title, closure.date ?? "", JSON.stringify(data));
+    if (insertOutcomeCard) {
+      insertOutcomeCard.run(
+        versionId, closure.id, position, closure.title,
+        data.state ?? "", JSON.stringify(data), now, now
+      );
+    }
   });
 
   const insertTask = database.prepare(`
@@ -75,12 +119,28 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
       start_date, end_date, progress, data_json
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+  const insertTaskCard = hasCardsTable ? database.prepare(`
+    INSERT OR IGNORE INTO project_cards (
+      version_id, external_id, element_type, position, title, owner, state, objective,
+      start_date, end_date, progress, health, unit_id, parent_id, depends_on, card_attrs, created_at, updated_at
+    ) VALUES (?, ?, 'task', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `) : null;
   snapshot.tasks.forEach((task, position) => {
     const data = without(task, new Set(["id", "groupId", "parentId", "dependsOn", "title", "startDate", "endDate", "progress"]));
     insertTask.run(
       versionId, task.id, task.groupId, task.parentId || null, position, task.title,
       task.startDate ?? "", task.endDate ?? "", task.progress ?? null, JSON.stringify(data)
     );
+    if (insertTaskCard) {
+      insertTaskCard.run(
+        versionId, task.id, position, task.title,
+        data.owner ?? "", data.state ?? "", data.objective ?? "",
+        task.startDate ?? "", task.endDate ?? "", task.progress ?? null, data.health ?? "",
+        task.groupId ?? "", task.parentId ?? null,
+        JSON.stringify(task.dependsOn ?? []),
+        JSON.stringify(data), now, now
+      );
+    }
   });
 
   const insertTaskLink = database.prepare(`
@@ -96,11 +156,24 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
   const insertWorkstreamTask = database.prepare(`
     INSERT INTO workstream_tasks (version_id, workstream_external_id, task_external_id, position) VALUES (?, ?, ?, ?)
   `);
+  const insertWorkstreamCard = hasCardsTable ? database.prepare(`
+    INSERT OR IGNORE INTO project_cards (
+      version_id, external_id, element_type, position, title, card_attrs, created_at, updated_at
+    ) VALUES (?, ?, 'workstream', ?, ?, ?, ?, ?)
+  `) : null;
   (snapshot.companyWorkstreams ?? []).forEach((workstream, position) => {
+    const data = without(workstream, new Set(["id", "title", "taskIds"]));
     insertWorkstream.run(
       versionId, workstream.id, position, workstream.title,
-      JSON.stringify(without(workstream, new Set(["id", "title", "taskIds"])))
+      JSON.stringify(data)
     );
+    if (insertWorkstreamCard) {
+      const cardData = { ...data, members: workstream.taskIds ?? [] };
+      insertWorkstreamCard.run(
+        versionId, workstream.id, position, workstream.title,
+        JSON.stringify(cardData), now, now
+      );
+    }
     (workstream.taskIds ?? []).forEach((taskId, taskPosition) => {
       insertWorkstreamTask.run(versionId, workstream.id, taskId, taskPosition);
     });
@@ -128,9 +201,11 @@ export function importLegacyProject(database, fixture, options = {}) {
     const templateVersion = options.templateVersion ?? "1.0.0";
     const template = resolveTemplate(templateId, templateVersion);
     const projectName = options.name ?? fixture.published.title;
-    database.prepare(`
-      INSERT OR IGNORE INTO templates (id, version, name, config_json, created_at) VALUES (?, ?, ?, ?, ?)
-    `).run(template.id, template.version, template.name, templateConfigJson(template), now);
+    insertOrIgnore(database, "templates",
+      ["id", "version", "name", "config_json", "created_at"],
+      [template.id, template.version, template.name, templateConfigJson(template), now],
+      ["id", "version"]
+    );
     const storedTemplate = database.prepare(
       "SELECT name, config_json AS configJson FROM templates WHERE id = ? AND version = ?"
     ).get(template.id, template.version);

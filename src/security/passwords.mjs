@@ -30,7 +30,7 @@ function derive(password, salt, params = PASSWORD_PARAMS) {
 }
 
 export function hashPassword(password, options = {}) {
-  const value = validatePassword(password);
+  const value = options.skipValidate ? String(password ?? "") : validatePassword(password);
   const salt = options.salt ?? randomBytes(16);
   const derived = derive(value, salt);
   return {

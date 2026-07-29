@@ -1,0 +1,46 @@
+; ============================================================
+; 虚谷数据库 — 嵌入式最小配置 (~200MB 内存)
+; 用于打包进 RPM/DEB/PKG/MSI 原生安装包
+; ============================================================
+
+; ---- 网络侦听 ----
+listen_port = 5138;
+max_conn_num = 50;
+max_act_conn_num = 0;
+use_std_nio = TRUE;
+
+; ---- 线程/并行度 (最小化) ----
+task_thd_num = 4;
+tcp_thd_num = 1;
+max_parallel = 1;
+cata_parti_num = 4;
+
+; ---- 内存缓冲区 (最小化, 总计 ~200MB) ----
+data_buff_mem = 64;
+swap_buff_mem = 64;
+max_hash_mem = 32;
+max_malloc_once = 128;
+ena_share_sga = TRUE;
+
+; ---- 存储 (小磁盘) ----
+def_data_space_size = 64;
+def_temp_space_size = 64;
+def_undo_space_size = 64;
+init_data_space_num = 1;
+init_temp_space_num = 1;
+init_undo_space_num = 1;
+size_per_chunk = 8;
+
+; ---- 事务 ----
+def_auto_commit = TRUE;
+def_iso_level = 1;
+checkpoint_delay = 30;
+
+; ---- 日志 ----
+error_level = 3;
+errlog_size = 10;
+is_zh = TRUE;
+
+; ---- 兼容性 ----
+def_charset = UTF8;
+def_timezone = 'GMT+08:00';

@@ -28,6 +28,13 @@ export function cloneVersion(database, input) {
     ["project_risks","external_id,position,title,severity,status,owner,mitigation,due_date,source"],
     ["project_metrics","external_id,position,name,value_json,unit,status,as_of,target_json,source"]
   ]) database.exec(`INSERT INTO ${table} (version_id,${columns}) SELECT ${target},${columns} FROM ${table} WHERE version_id=${Number(source.id)}`);
+
+  // 克隆 project_cards 统一卡片表（如果存在）
+  try {
+    database.prepare("SELECT 1 FROM project_cards LIMIT 1").get();
+    database.exec(`INSERT INTO project_cards (version_id,external_id,element_type,position,title,owner,state,objective,start_date,end_date,progress,health,unit_id,parent_id,depends_on,card_attrs,created_at,updated_at) SELECT ${target},external_id,element_type,position,title,owner,state,objective,start_date,end_date,progress,health,unit_id,parent_id,depends_on,card_attrs,created_at,updated_at FROM project_cards WHERE version_id=${Number(source.id)}`);
+    database.exec(`INSERT INTO project_card_links (version_id,card_external_id,depends_on_external_id,relation_type,position) SELECT ${target},card_external_id,depends_on_external_id,relation_type,position FROM project_card_links WHERE version_id=${Number(source.id)}`);
+  } catch { /* project_cards table not present — skip */ }
   return target;
 }
 

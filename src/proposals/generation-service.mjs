@@ -11,7 +11,7 @@ import { validateProposal } from "./validator.mjs";
 
 function requestHash(context) { return createHash("sha256").update(context.digest).digest("hex"); }
 function safeCode(error) { return /^[A-Z][A-Z0-9_]{1,80}$/.test(String(error?.code ?? "")) ? error.code : "GENERATION_FAILED"; }
-function repairable(error) { return new Set(["PROPOSAL_SCHEMA_INVALID", "PROPOSAL_ENVELOPE_MISMATCH", "EVIDENCE_NOT_ALLOWED", "PATCH_FIELD_NOT_ALLOWED", "INVALID_CHANGE_ENUM"]).has(error?.code); }
+function repairable(error) { return new Set(["PROPOSAL_SCHEMA_INVALID", "PROPOSAL_ENVELOPE_MISMATCH", "EVIDENCE_NOT_ALLOWED", "PATCH_FIELD_NOT_ALLOWED", "INVALID_CHANGE_ENUM", "INVALID_DATE", "INVALID_DATE_RANGE", "TARGET_NOT_FOUND", "DUPLICATE_TARGET", "DUPLICATE_CHANGE_ID", "CONFLICTING_CHANGES", "TASK_UNIT_NOT_FOUND", "TASK_LINK_NOT_FOUND", "TASK_LINK_CROSS_UNIT", "TASK_GRAPH_CYCLE", "DUPLICATE_NAME"]).has(error?.code); }
 function retryable(error) { return error?.status === 429 || error?.status === 503 || /TIMEOUT|NETWORK|HTTP_5|DISABLED|BUSY|UNAVAILABLE/.test(String(error?.code ?? "")); }
 
 function pricedUsage(usage, pricing) {
@@ -50,7 +50,7 @@ export function createGenerationService(database, options = {}) {
     const context = buildGenerationContext(database, { projectId: job.projectId, materialIds: job.materials.map(item => item.id), baseVersionId: job.baseVersionId });
     const actual = context.evidence.map(item => `${item.evidenceId}:${item.contentHash}`);
     const locked = job.evidence.map(item => `${item.evidenceId}:${item.contentHash}`);
-    if (actual.length !== locked.length || actual.some((value, index) => value !== locked[index])) throw proposalError("GENERATION_CONTEXT_STALE", "材料证据代际已变化", 409);
+    if (actual.length !== locked.length || actual.some((value, index) => value !== locked[index])) throw proposalError("GENERATION_CONTEXT_STALE", "材料内容已更新，请重新生成", 409);
     return context;
   }
 
@@ -77,7 +77,7 @@ export function createGenerationService(database, options = {}) {
           break;
         } catch (error) {
           repository.addAttempt(projectId, jobId, { id: attemptId, attemptNumber: providerCalls, kind, outcome: "failed", providerLabel: provider.safeLabel ?? (provider.configured ? "configured" : "disabled"), latencyMs: Math.max(0, now() - started), resultCode: safeCode(error), costStatus: "unpriced" });
-          if (pass === 0 && repairable(error)) { validationCodes = [safeCode(error)]; continue; }
+          if (pass === 0 && repairable(error)) { validationCodes = [safeCode(error), ...(error.details ? [`${safeCode(error)}: ${JSON.stringify(error.details)}`] : [])]; continue; }
           throw error;
         }
       }

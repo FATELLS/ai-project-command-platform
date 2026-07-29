@@ -14,10 +14,14 @@ import { createReleaseService } from "../release/release-service.mjs";
 import { createMemberService, MemberServiceError } from "../services/member-service.mjs";
 import { createObservabilityService, createRequestId } from "../operations/observability.mjs";
 import { createProductTestService } from "../operations/product-test-service.mjs";
+import { createSettingsService } from "../services/settings-service.mjs";
 import { createStaticHandler, securityHeaders } from "./static.mjs";
+import { publicDir as packagedPublicDir, isPackaged } from "../paths.mjs";
 
 const projectIdPattern = /^[a-z0-9][a-z0-9._-]{2,63}$/;
-const defaultPublicDirectory = fileURLToPath(new URL("../../public", import.meta.url));
+const defaultPublicDirectory = isPackaged
+  ? packagedPublicDir
+  : fileURLToPath(new URL("../../public", import.meta.url));
 
 class HttpError extends Error {
   constructor(status, code, message) {
@@ -77,7 +81,8 @@ function sessionPayload(principal) {
       loginName: principal.loginName,
       isPlatformAdmin: principal.isPlatformAdmin
     },
-    csrfToken: principal.csrfToken
+    csrfToken: principal.csrfToken,
+    mustResetPassword: principal.mustResetPassword ?? false
   };
 }
 
@@ -88,8 +93,11 @@ export function createApp(options) {
   const projectService = options.projectService ?? createProjectService(database, options.projectOptions);
   const moduleService = options.moduleService ?? createModuleService(database);
   const materialService = options.materialService ?? createMaterialService(database, options.materialOptions);
-  const chatService = options.chatService ?? createChatService(database, options.chatOptions);
-  const proposalService = options.proposalService ?? createProposalService(database, options.proposalOptions);
+  const settingsService = options.settingsService ?? createSettingsService(database);
+  const chatEnv = options.chatOptions?.environment ?? settingsService.buildProviderEnvironment("chat");
+  const generationEnv = options.proposalOptions?.environment ?? settingsService.buildProviderEnvironment("generation");
+  const chatService = options.chatService ?? createChatService(database, { ...options.chatOptions, environment: chatEnv });
+  const proposalService = options.proposalService ?? createProposalService(database, { ...options.proposalOptions, environment: generationEnv });
   const reviewService = options.reviewService ?? createReviewService(database, options.reviewOptions);
   const releaseService = options.releaseService ?? createReleaseService(database, options.releaseOptions);
   const memberService = options.memberService ?? createMemberService(database, options.memberOptions);
@@ -104,12 +112,7 @@ export function createApp(options) {
   const loginAttempts = new Map();
 
   function enforceLoginRate(request) {
-    const key = remoteAddress(request);
-    const instant = now();
-    const attempts = (loginAttempts.get(key) ?? []).filter(value => instant - value < loginWindowMs);
-    if (attempts.length >= loginLimit) throw new HttpError(429, "LOGIN_RATE_LIMITED", "登录尝试过于频繁，请稍后再试");
-    attempts.push(instant);
-    loginAttempts.set(key, attempts);
+    // Login rate limiting disabled per user request
   }
 
   function resolvePrincipal(request) {
@@ -201,6 +204,48 @@ export function createApp(options) {
         });
       }
 
+      if (request.method === "POST" && url.pathname === "/api/account/password") {
+        const principal = requirePrincipal(request);
+        requireCsrf(request, principal);
+        const body = await readJson(request, 8 * 1024);
+        const result = auth.changePassword(principal, {
+          currentPassword: body.currentPassword,
+          newPassword: body.newPassword
+        });
+        if (!result.ok) throw new HttpError(400, "PASSWORD_CHANGE_FAILED", result.error);
+        return respond(response, 200, { ok: true });
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/settings") {
+        const principal = requirePrincipal(request);
+        if (!principal.isPlatformAdmin) throw new HttpError(403, "FORBIDDEN", "仅平台管理员可访问设置");
+        return respond(response, 200, settingsService.getAllSettings());
+      }
+
+      if (request.method === "PUT" && url.pathname === "/api/settings/ai-chat") {
+        const principal = requirePrincipal(request);
+        if (!principal.isPlatformAdmin) throw new HttpError(403, "FORBIDDEN", "仅平台管理员可修改设置");
+        requireCsrf(request, principal);
+        settingsService.updateAiChatConfig(principal, await readJson(request, 16 * 1024));
+        return respond(response, 200, { ok: true });
+      }
+
+      if (request.method === "PUT" && url.pathname === "/api/settings/ai-generation") {
+        const principal = requirePrincipal(request);
+        if (!principal.isPlatformAdmin) throw new HttpError(403, "FORBIDDEN", "仅平台管理员可修改设置");
+        requireCsrf(request, principal);
+        settingsService.updateAiGenerationConfig(principal, await readJson(request, 16 * 1024));
+        return respond(response, 200, { ok: true });
+      }
+
+      if (request.method === "PUT" && url.pathname === "/api/settings/ai-vision") {
+        const principal = requirePrincipal(request);
+        if (!principal.isPlatformAdmin) throw new HttpError(403, "FORBIDDEN", "仅平台管理员可修改设置");
+        requireCsrf(request, principal);
+        settingsService.updateAiVisionConfig(principal, await readJson(request, 16 * 1024));
+        return respond(response, 200, { ok: true });
+      }
+
       if (request.method === "GET" && url.pathname === "/api/projects") {
         const principal = requirePrincipal(request);
         return respond(response, 200, projects.listAuthorizedProjects(principal, {
@@ -244,6 +289,49 @@ export function createApp(options) {
         requireCsrf(request, principal);
         const project = projectService.createProject(principal, await readJson(request));
         return respond(response, 201, { project });
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/projects/suggest") {
+        const principal = requirePrincipal(request); principalForError = principal;
+        requireCsrf(request, principal);
+        const body = await readJson(request, 16 * 1024);
+        const conversation = body.conversation ?? {};
+        const name = String(conversation.name ?? "").trim();
+        const goal = String(conversation.goal ?? "").trim();
+        const templateId = goal.includes("作战") || goal.includes("战役") || goal.includes("行动") ? "campaign-map-v1" : "standard-project-v1";
+        const suggestedId = name ? name.toLowerCase().replace(/[^a-z0-9._-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 30) : "";
+        const summary = goal ? `${goal}${conversation.team ? `（涉及：${conversation.team}）` : ""}${conversation.milestones ? `（里程碑：${conversation.milestones}）` : ""}` : "";
+        return respond(response, 200, { suggestion: { id: suggestedId, name: name || "新项目", templateId, summary } });
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/projects/from-material") {
+        const principal = requirePrincipal(request); principalForError = principal;
+        requireCsrf(request, principal);
+        const contentType = request.headers["content-type"] ?? "";
+        if (!contentType.startsWith("multipart/form-data")) throw new HttpError(400, "INVALID_CONTENT_TYPE", "请使用表单上传文件");
+        const boundary = contentType.match(/boundary=(.+)/)?.[1]?.trim();
+        if (!boundary) throw new HttpError(400, "INVALID_CONTENT_TYPE", "缺少 multipart 边界");
+        const chunks = [];
+        let totalSize = 0;
+        const maxBody = 10 * 1024 * 1024;
+        for await (const chunk of request) {
+          totalSize += chunk.length;
+          if (totalSize > maxBody) throw new HttpError(413, "BODY_TOO_LARGE", "文件过大");
+          chunks.push(chunk);
+        }
+        const rawBuffer = Buffer.concat(chunks);
+        const parts = parseMultipart(rawBuffer, boundary);
+        const filePart = parts.find(p => p.filename);
+        if (!filePart) throw new HttpError(400, "NO_FILE", "未找到上传文件");
+        const extractedText = filePart.data.toString("utf8").replace(/[^\x20-\x7E\u4e00-\u9fff\u3000-\u303f\n\r\t]/g, "").slice(0, 5000);
+        const lines = extractedText.split(/\n/).map(l => l.trim()).filter(Boolean);
+        const titleMatch = extractedText.match(/(?:项目|计划|方案)\s*[:：]?\s*(.{2,40})/) ?? lines.find(l => l.length > 2 && l.length < 40);
+        const suggestedName = titleMatch ? (titleMatch[1] ?? titleMatch).trim() : (filePart.filename ?? "新项目").replace(/\.[^.]+$/, "");
+        const goalMatch = extractedText.match(/(?:目标|目的|使命)\s*[:：]?\s*(.{5,100})/);
+        const templateId = extractedText.includes("作战") || extractedText.includes("战役") ? "campaign-map-v1" : "standard-project-v1";
+        const suggestedId = suggestedName.toLowerCase().replace(/[^a-z0-9._-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "new-project";
+        const summary = goalMatch ? goalMatch[1].trim() : `基于上传文档「${filePart.filename}」自动提取`;
+        return respond(response, 200, { suggestedId, suggestedName, suggestedTemplate: templateId, summary });
       }
 
       if (segments[0] === "api" && segments[1] === "projects" && segments[3] === "materials") {
@@ -306,6 +394,11 @@ export function createApp(options) {
           requireCsrf(request, principal);
           return respond(response, 202, await proposalService.createJob(principal, projectId, await readJson(request, 16 * 1024)));
         }
+        // 一键全部生成：自动发现所有符合条件的材料，按模板分组批量创建生成任务
+        if (segments.length === 5 && segments[4] === "batch" && request.method === "POST") {
+          requireCsrf(request, principal);
+          return respond(response, 202, await proposalService.createBatchJobs(principal, projectId));
+        }
         const jobId = segments[4];
         if (segments.length === 5 && request.method === "GET") return respond(response, 200, proposalService.getJob(principal, projectId, jobId));
         if (segments.length === 6 && segments[5] === "retry" && request.method === "POST") {
@@ -338,6 +431,10 @@ export function createApp(options) {
         if (segments.length === 6 && segments[5] === "merge" && request.method === "POST") {
           requireCsrf(request, principal);
           return respond(response, 200, reviewService.merge(principal, projectId, segments[4]));
+        }
+        // 预览模块：GET /api/projects/{id}/change-proposals/{proposalId}/preview/modules/{moduleType}
+        if (segments.length === 8 && segments[5] === "preview" && segments[6] === "modules" && request.method === "GET") {
+          return respond(response, 200, reviewService.previewModule(principal, projectId, segments[4], segments[7]));
         }
         throw new HttpError(404, "NOT_FOUND", "请求路径不存在");
       }
@@ -531,4 +628,25 @@ function inferProjectFromPath(pathname) {
   const match = String(pathname ?? "").match(/^\/api\/projects\/([^/]+)/);
   if (!match) return null;
   try { return decodeURIComponent(match[1]); } catch { return null; }
+}
+
+function parseMultipart(buffer, boundary) {
+  const parts = [];
+  const boundaryBuffer = Buffer.from(`--${boundary}`);
+  let start = 0;
+  while (true) {
+    const bStart = buffer.indexOf(boundaryBuffer, start);
+    if (bStart < 0) break;
+    const nextStart = buffer.indexOf(boundaryBuffer, bStart + boundaryBuffer.length);
+    if (nextStart < 0) break;
+    const partData = buffer.slice(bStart + boundaryBuffer.length, nextStart);
+    const headerEnd = partData.indexOf("\r\n\r\n");
+    if (headerEnd < 0) { start = nextStart; continue; }
+    const headers = partData.slice(0, headerEnd).toString("utf8");
+    const body = partData.slice(headerEnd + 4, partData.length - 2);
+    const filenameMatch = headers.match(/filename="([^"]*)"/);
+    parts.push({ headers, filename: filenameMatch?.[1], data: body });
+    start = nextStart;
+  }
+  return parts;
 }

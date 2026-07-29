@@ -2,14 +2,51 @@ function optional(value) {
   return value === "" || value === undefined ? null : value;
 }
 
+// 从任务的日期范围自动推导战役阶段（stages）。
+// 当项目尚无显式 stages（AI 只生成了任务网络），把有日期的任务
+// 按时间窗口聚合成阶段，让路线图（roadmap）可以正常渲染。
+function deriveStagesFromTasks(tasks) {
+  const scheduled = tasks.filter(task => task.startDate || task.endDate)
+    .sort((a, b) => String(a.startDate || a.endDate || "").localeCompare(String(b.startDate || b.endDate || "")));
+  if (!scheduled.length) return [];
+  return scheduled.map((task, index) => {
+    const start = task.startDate || task.endDate;
+    const end = task.endDate || task.startDate;
+    const dateLabel = start === end ? start : `${start}–${end}`;
+    return {
+      id: `derived-stage-${index + 1}`,
+      title: task.title,
+      state: task.state || (Number(task.progress) >= 100 ? "已完成" : "进行中"),
+      dateLabel,
+      description: task.expectedOutput || "",
+      expectedOutput: task.expectedOutput || ""
+    };
+  });
+}
+
+function resolveStages(graph) {
+  if (graph.stages && graph.stages.length) return graph.stages;
+  return deriveStagesFromTasks(graph.tasks ?? []);
+}
+
 function currentStageId(graph) {
+  const stages = resolveStages(graph);
   const value = graph.metadata.currentStage;
-  if (Number.isInteger(value)) return graph.stages[value]?.id ?? null;
-  if (typeof value === "string" && graph.stages.some(stage => stage.id === value)) return value;
+  if (Number.isInteger(value)) return stages[value]?.id ?? null;
+  if (typeof value === "string" && stages.some(stage => stage.id === value)) return value;
   return null;
 }
 
+// ============================================================
+// 统一卡片加载器
+// 接收 graph 对象（由 project-repository 从 project_cards 表组装）
+// graph 结构: { metadata, modules, units, tasks, stages, closures,
+//              workstreams, risks, metrics }
+// 每种卡片类型的元素来自 graph 中对应的数组
+// ============================================================
+
 export function loadOverview(graph) {
+  const stages = resolveStages(graph);
   return {
     goal: optional(graph.metadata.goal),
     summary: optional(graph.metadata.summary),
@@ -19,8 +56,7 @@ export function loadOverview(graph) {
     facts: [
       { id: "units", value: graph.units.length },
       { id: "tasks", value: graph.tasks.length },
-      { id: "stages", value: graph.stages.length },
-      { id: "outcomes", value: graph.closures.length }
+      { id: "stages", value: stages.length }
     ]
   };
 }
@@ -41,9 +77,10 @@ export function loadUnits(graph) {
 }
 
 export function loadRoadmap(graph) {
+  const stages = resolveStages(graph);
   return {
     currentStageId: currentStageId(graph),
-    stages: graph.stages.map(stage => ({
+    stages: stages.map(stage => ({
       id: stage.id,
       title: stage.title,
       state: optional(stage.state),
@@ -54,10 +91,9 @@ export function loadRoadmap(graph) {
       previewCaption: optional(stage.previewCaption),
       previewAssets: Array.isArray(stage.previewImages) ? [...stage.previewImages] : []
     })),
-    // Phase 8：四种视图共享同一版本图。units/tasks/edges 让活动路线图的时间列、
-    // 阶段卡片板的任务卡、作战单元进度和依赖网络投影到同一数据（VIS-05）。
     units: graph.units.map(unit => ({ id: unit.id, name: unit.name, status: optional(unit.status), owner: optional(unit.owner), objective: optional(unit.objective) })),
     tasks: graph.tasks.map(task => ({
+      ...task,
       id: task.id,
       unitId: task.unitId,
       parentId: optional(task.parentId),
@@ -129,21 +165,6 @@ export function loadGantt(graph) {
       dependencyIds: [...task.dependsOn]
     })),
     unscheduledIds: graph.tasks.filter(task => !task.startDate || !task.endDate).map(task => task.id)
-  };
-}
-
-export function loadOutcomes(graph) {
-  return {
-    outcomes: graph.closures.map(closure => ({
-      id: closure.id,
-      title: closure.title,
-      dateLabel: optional(closure.dateLabel),
-      state: optional(closure.state),
-      description: optional(closure.description),
-      result: optional(closure.result),
-      source: optional(closure.source),
-      previewAssets: [...closure.previewAssets]
-    }))
   };
 }
 

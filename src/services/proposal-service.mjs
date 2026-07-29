@@ -5,7 +5,7 @@ import { validateProposal } from "../proposals/validator.mjs";
 import { boundedPublished, MAX_EVIDENCE, MAX_EVIDENCE_BYTES } from "../proposals/context-builder.mjs";
 import { createProjectRepository } from "../repositories/project-repository.mjs";
 import { createMaterialReadinessService } from "../materials/readiness-service.mjs";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 function timestamp(now) { return new Date(now()).toISOString(); }
 
@@ -57,6 +57,42 @@ export function createProposalService(database, options = {}) {
     return { task: result };
   }
 
+  // 一键全部生成：自动发现所有符合条件的材料，按模板分组，每组创建一个生成任务。
+  // 过滤条件：status=ready + 有 updateTemplate + generationEnabled + readiness 非 blocked。
+  async function createBatchJobs(principal, projectId) {
+    const access = permission(principal, projectId);
+    if (!access.create) throw proposalError("GENERATION_JOB_NOT_FOUND", "生成任务不存在或你无权访问", 404);
+    const envelope = capabilityEnvelope(principal, projectId);
+    const eligible = (envelope.eligibleMaterials ?? []).filter(item =>
+      item.status === "ready" && item.updateTemplate?.id && item.generation?.enabled && item.readiness?.status !== "blocked" && Number(item.evidenceCount) > 0
+    );
+    if (!eligible.length) throw proposalError("INVALID_MATERIAL_SELECTION", "当前没有可用于批量生成的材料", 422);
+    // 按模板分组（templateId@templateVersion）
+    const groups = new Map();
+    for (const item of eligible) {
+      const key = `${item.updateTemplate.id}@${item.updateTemplate.version}`;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(item.id);
+    }
+    const results = [];
+    for (const [key, materialIds] of groups) {
+      const safeKey = key.replace(/[^a-zA-Z0-9._-]/g, "-").slice(0, 32);
+      // 每组最多 8 份材料（服务端上限）
+      for (let i = 0; i < materialIds.length; i += 8) {
+        const batch = materialIds.slice(i, i + 8);
+        const idempotencyKey = `batch-${safeKey}-${i}-${randomUUID()}`;
+        const job = generation.createJob(principal, { projectId, materialIds: batch, idempotencyKey });
+        audit(principal, "generation.batch_created", projectId, "generation_job", job.id, { template: key, materials: batch.length, batch: true });
+        const result = options.autoProcess === false ? job : await generation.processJob(projectId, job.id);
+        if (result.state !== job.state) audit(principal, "generation.batch_completed", projectId, "generation_job", job.id, { state: result.state, errorCode: result.errorCode, proposalId: result.proposalId, batch: true });
+        results.push(result);
+      }
+    }
+    const succeeded = results.filter(r => r.state === "succeeded").length;
+    const failed = results.filter(r => ["failed_terminal", "failed_retryable", "stale"].includes(r.state)).length;
+    return { tasks: results, summary: { total: results.length, succeeded, failed, groups: groups.size } };
+  }
+
   function listJobs(principal,projectId){permission(principal,projectId);return {items:generation.repository.listJobs(projectId),capabilities:capabilityEnvelope(principal,projectId).capabilities};}
   function getJob(principal,projectId,id){permission(principal,projectId);const task=generation.repository.getJob(projectId,id);if(!task)throw proposalError("GENERATION_JOB_NOT_FOUND","生成任务不存在或你无权访问",404);return {task,capabilities:capabilityEnvelope(principal,projectId).capabilities};}
   async function retryJob(principal,projectId,id,input){const access=permission(principal,projectId);if(!access.create)throw proposalError("GENERATION_JOB_NOT_FOUND","生成任务不存在或你无权访问",404);const task=generation.retryJob(principal,projectId,id,input.idempotencyKey);audit(principal,"generation.retried",projectId,"generation_job",task.id,{retryOf:id});const result=options.autoProcess===false?task:await generation.processJob(projectId,task.id);return {task:result};}
@@ -91,7 +127,7 @@ export function createProposalService(database, options = {}) {
     const placeholders = materialIds.map(() => "?").join(",");
     const rows = database.prepare(`SELECT id, display_name AS name, active_extraction_version AS extractionVersion, status FROM project_materials WHERE project_id=? AND id IN (${placeholders})`).all(projectId, ...materialIds);
     if (rows.length !== materialIds.length) throw proposalError("MATERIAL_NOT_FOUND", "材料不存在或你无权访问", 404);
-    if (rows.some(row => row.status !== "ready" || !row.extractionVersion)) throw proposalError("MATERIAL_NOT_READY", "所选材料证据尚未就绪", 409);
+    if (rows.some(row => row.status !== "ready" || !row.extractionVersion)) throw proposalError("MATERIAL_NOT_READY", "所选材料尚未处理完成", 409);
     const byMaterial = new Map(rows.map(row => [row.id, row]));
     const requestedEvidence = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(id => String(id ?? "").trim()) : [];
     const selectEvidence = database.prepare(`SELECT external_id AS evidenceId, material_id AS materialId, kind, location_json AS locationJson, text, summary, content_hash AS contentHash, extraction_version AS extractionVersion FROM evidence_blocks WHERE project_id=? AND external_id=?`);
@@ -109,5 +145,5 @@ export function createProposalService(database, options = {}) {
     }
     return Object.freeze({ materialIds, evidence });
   }
-  return Object.freeze({capabilities:capabilityEnvelope,createJob,listJobs,getJob,retryJob,listProposals,getProposal,createInteractionProposal,generation});
+  return Object.freeze({capabilities:capabilityEnvelope,createJob,createBatchJobs,listJobs,getJob,retryJob,listProposals,getProposal,createInteractionProposal,generation});
 }

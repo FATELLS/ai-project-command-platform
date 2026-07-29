@@ -63,10 +63,12 @@ test.describe("认证与平台导航", () => {
 
     await page.getByRole("link", { name: "项目资料", exact: true }).click();
     await expect(page).toHaveURL(/\/modules\/outcomes$/);
-    await expect(page.locator(".module-section-nav a")).toHaveText(["战果档案", "材料台账", "更新提案"]);
-    await page.locator(".module-section-nav a", { hasText: "更新提案" }).click();
+    await expect(page.locator(".module-section-nav a", { hasText: "战果档案" })).toHaveCount(1);
+    await expect(page.locator(".module-section-nav a", { hasText: "项目材料" })).toHaveCount(1);
+    await expect(page.locator(".module-section-nav a", { hasText: "更新建议" })).toHaveCount(1);
+    await page.locator(".module-section-nav a", { hasText: "更新建议" }).click();
     await expect(page).toHaveURL(/\/modules\/materials\?view=proposals$/);
     await expect(page.locator(".project-nav a.active")).toHaveText("项目资料");
-    await expect(page.locator(".module-section-nav a.active")).toHaveText("更新提案");
+    await expect(page.locator(".module-section-nav a.active")).toHaveText("更新建议");
   });
 });

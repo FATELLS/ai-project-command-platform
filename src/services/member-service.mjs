@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { withTransaction } from "../db/database.mjs";
+import { upsert } from "../db/sql-dialect.mjs";
 import { hashPassword, normalizeLoginName, validatePassword } from "../security/passwords.mjs";
 
 const roles = new Set(["project_admin", "project_editor", "viewer"]);
@@ -94,8 +95,12 @@ export function createMemberService(database, options = {}) {
     if (!user || user.status !== "active") fail(404, "USER_NOT_FOUND", "可用用户不存在");
     return withTransaction(database, () => {
       const prior = database.prepare("SELECT role FROM project_members WHERE project_id=? AND user_id=?").get(projectId, userId);
-      database.prepare(`INSERT INTO project_members (project_id,user_id,role,created_at) VALUES (?,?,?,?) ON CONFLICT(project_id,user_id) DO UPDATE SET role=excluded.role`)
-        .run(projectId, userId, role, clock());
+      upsert(database, "project_members",
+        ["project_id", "user_id", "role", "created_at"],
+        [projectId, userId, role, clock()],
+        ["project_id", "user_id"],
+        ["role"]
+      );
       audit(principal, projectId, prior ? "project.member_role_changed" : "project.member_added", userId, { from: prior?.role ?? null, to: role });
       return { userId, role };
     });

@@ -92,7 +92,7 @@ function iconButton(label, text, onClick, className = "ghost-button") {
 }
 
 function safeIntendedPath(pathname = location.pathname) {
-  return /^\/projects(?:\/[a-z0-9][a-z0-9._-]{2,63}(?:\/modules\/(?:overview|roadmap|units|task-network|gantt|outcomes|risks|metrics|materials)(?:\/(?:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}|(?:generation-tasks|proposals)\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}))?)?)?$/.test(pathname) ? `${pathname}${location.search}` : "/projects";
+  return /^\/projects(?:\/[a-z0-9][a-z0-9._-]{2,63}(?:\/modules\/(?:overview|roadmap|units|task-network|gantt|risks|metrics|materials)(?:\/(?:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}|(?:generation-tasks|proposals)\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}))?)?)?$/.test(pathname) ? `${pathname}${location.search}` : "/projects";
 }
 
 function formatDate(value) {
@@ -100,6 +100,14 @@ function formatDate(value) {
   const instant = new Date(value);
   if (Number.isNaN(instant.valueOf())) return String(value);
   return new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(instant);
+}
+
+function bytes(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0) return "—";
+  if (number < 1024) return `${number} B`;
+  if (number < 1024 ** 2) return `${(number / 1024).toFixed(1)} KiB`;
+  return `${(number / 1024 ** 2).toFixed(1)} MiB`;
 }
 
 function showToast(message) {
@@ -202,7 +210,7 @@ function renderLogin() {
     element("section", { className: "login-brand", ariaLabel: "产品介绍" }, [
       element("div", { className: "product-lockup" }, [element("div", { className: "brand-mark", ariaHidden: "true", text: "AI" }), element("span", { text: "PROJECT COMMAND" })]),
       element("div", { className: "brand-copy" }, [
-        element("span", { className: "eyebrow", text: "ONE PLATFORM · MANY MISSIONS" }),
+        element("span", { className: "eyebrow", text: "多项目统一管理" }),
         element("h2", { text: "让每个项目都有清晰的作战现场" }),
         element("p", { text: "统一组织项目、团队与事实数据，让 AI 辅助更新始终可审计、可审核、可回退。" }),
         trust
@@ -211,11 +219,11 @@ function renderLogin() {
     ]),
     element("section", { className: "login-form-panel" }, [
       element("div", { className: "login-form-wrap" }, [
-        element("span", { className: "eyebrow", text: "WELCOME BACK" }),
+        element("span", { className: "eyebrow", text: "欢迎回来" }),
         element("h1", { text: "登录项目作战平台" }),
         element("p", { text: "进入你获授权的项目空间。" }),
         form,
-        element("p", { className: "form-note", text: "首次部署请由运维人员在服务端配置启动管理员密码；浏览器不会生成或展示该密码。" })
+        element("p", { className: "form-note", text: "默认账号 admin / admin123，首次登录后需修改密码。" })
       ])
     ])
   ]));
@@ -247,16 +255,107 @@ function appFrame(mainContent, options = {}) {
     element("a", { className: options.projectMode ? "" : "active", href: "/projects", text: "项目作战台", onClick: event => { event.preventDefault(); navigate("/projects"); } }),
     ...(options.projectMode ? [element("a", { className: "active", href: location.pathname, text: options.moduleTitle ?? presentation.overviewLabel })] : [])
   ]);
+  const chatWidget = options.projectMode ? createHeaderChat(options.project, options.presentation) : null;
   const actions = element("div", { className: "header-actions" }, [
     ...(options.switcher ? [element("div", { className: "header-switcher" }, [element("span", { text: "当前项目" }), options.switcher])] : []),
     ...(options.projectActions ?? []),
+    ...(chatWidget ? [chatWidget.toggleButton] : []),
+    ...(user.isPlatformAdmin ? [iconButton("平台设置", "设置", () => navigate("/settings"), "admin-entry")] : []),
     element("span", { className: "update-time" }, [element("i", { ariaHidden: "true" }), element("span", { text: user.displayName })]),
     iconButton("退出登录", "退出", logout, "admin-entry")
   ]);
   return element("div", { className: "public-app app-shell" }, [
     element("header", { className: "public-header" }, [brandLink, navigation, actions]),
-    element("main", { className: "public-main content" }, [mainContent])
+    element("main", { className: "public-main content" }, [mainContent]),
+    ...(chatWidget ? [chatWidget.container] : [])
   ]);
+}
+
+function createHeaderChat(project, presentation) {
+  const qaLabel = presentation.kind === "campaign" ? "战情问答" : "项目问答";
+  const assistant = presentation.kind === "campaign" ? "作战参谋" : "项目助手";
+  const suggestions = presentation.kind === "campaign"
+    ? ["当前战役路线进行到哪里？", "哪些行动任务存在风险？", "最近归档了哪些战果依据？"]
+    : ["当前项目里程碑进展如何？", "哪些任务存在风险？", "最近有哪些交付物依据？"];
+
+  const toggleButton = element("button", { type: "button", className: "chat-header-btn", ariaLabel: qaLabel, ariaExpanded: "false", text: qaLabel });
+
+  const overlay = element("div", { className: "chat-dropdown-overlay", hidden: true });
+  const panel = element("section", { className: "chat-dropdown-panel", role: "dialog", ariaModal: "false", ariaLabel: qaLabel });
+  const conversation = element("div", { className: "qa-conversation", ariaLive: "polite" }, [
+    element("article", { className: "qa-message assistant" }, [
+      element("strong", { text: assistant }),
+      element("p", { text: "只读取当前项目已发布状态和已授权材料；回答不会修改项目数据。" })
+    ])
+  ]);
+  const questionInput = element("textarea", { className: "chat-dropdown-input", rows: 3, maxLength: 1000, placeholder: presentation.kind === "campaign" ? "询问当前战况、作战单元、节点或行动任务…" : "询问当前项目、团队、里程碑或任务…" });
+  const sendBtn = element("button", { type: "submit", className: "primary-button chat-dropdown-send", text: "发送" });
+  const errorMsg = element("p", { className: "form-error", role: "alert" });
+  const closeButton = iconButton("关闭问答", "×", () => closePanel(), "chat-dropdown-close");
+
+  const form = element("form", { className: "chat-dropdown-form", onSubmit: async event => {
+    event.preventDefault();
+    const value = questionInput.value.trim();
+    if (!value) { errorMsg.textContent = "请输入问题"; return; }
+    errorMsg.textContent = "";
+    sendBtn.disabled = true;
+    sendBtn.textContent = "查找中…";
+    conversation.append(element("article", { className: "qa-message user" }, [element("strong", { text: "你" }), element("p", { text: value })]));
+    questionInput.value = "";
+    try {
+      const answer = await api(`/api/projects/${encodeURIComponent(project.id)}/chat`, { method: "POST", mutation: true, body: { question: value } });
+      const msg = element("article", { className: "qa-message assistant" }, [
+        element("strong", { text: assistant }),
+        element("p", { text: answer.answer || "现有资料不足以回答这个问题。" })
+      ]);
+      if (answer.caveat && answer.caveat !== answer.answer) msg.append(element("p", { className: "qa-caveat", text: answer.caveat }));
+      if (answer.citations?.length) {
+        msg.append(element("h4", { text: "引用来源" }));
+        msg.append(element("ol", { className: "citation-list" }, answer.citations.map((citation, index) => {
+          const href = `/projects/${encodeURIComponent(project.id)}/modules/materials/${encodeURIComponent(citation.materialId)}?evidence=${encodeURIComponent(citation.evidenceId)}`;
+          return element("li", {}, [element("a", { href, onClick: event => { event.preventDefault(); closePanel(); navigate(href); } }, [element("strong", { text: `[${index + 1}]` }), element("span", { text: citation.claim })])]);
+        })));
+      }
+      conversation.append(msg);
+      conversation.scrollTop = conversation.scrollHeight;
+    } catch (err) {
+      questionInput.value = value;
+      if (err.status === 429) errorMsg.textContent = "项目问答配额已用完，请稍后再试。";
+      else if (err.code === "AI_PROVIDER_DISABLED") errorMsg.textContent = "项目问答当前未启用。";
+      else errorMsg.textContent = "暂时无法完成问答，请稍后重试。";
+    } finally {
+      sendBtn.disabled = false;
+      sendBtn.textContent = "发送";
+    }
+  } }, [questionInput, errorMsg, sendBtn]);
+
+  const suggestionsNode = element("div", { className: "chat-dropdown-suggestions" }, suggestions.map(s => element("button", { type: "button", className: "secondary-button chat-dropdown-suggestion", text: s, onClick: () => { questionInput.value = s; questionInput.focus(); } })));
+
+  panel.append(
+    element("header", { className: "chat-dropdown-header" }, [element("div", {}, [element("span", { className: "eyebrow", text: "READ-ONLY" }), element("h3", { text: qaLabel })]), closeButton]),
+    suggestionsNode,
+    conversation,
+    form
+  );
+  overlay.append(panel);
+
+  function openPanel() {
+    overlay.hidden = false;
+    toggleButton.setAttribute("aria-expanded", "true");
+    toggleButton.classList.add("active");
+    questionInput.focus();
+  }
+  function closePanel() {
+    overlay.hidden = true;
+    toggleButton.setAttribute("aria-expanded", "false");
+    toggleButton.classList.remove("active");
+  }
+
+  toggleButton.addEventListener("click", () => { overlay.hidden ? openPanel() : closePanel(); });
+  overlay.addEventListener("click", event => { if (event.target === overlay) closePanel(); });
+  document.addEventListener("keydown", event => { if (event.key === "Escape" && !overlay.hidden) closePanel(); });
+
+  return { toggleButton, container: element("div", { className: "chat-header-container" }, [overlay]) };
 }
 
 function statusControls(current, onSelect) {
@@ -382,7 +481,7 @@ async function renderProjects() {
   const page = element("div", {}, [
     element("header", { className: "page-head command-center-hero" }, [
       element("div", {}, [
-        element("span", { className: "eyebrow", text: "PROJECT COMMAND CENTER" }),
+        element("span", { className: "eyebrow", text: "项目控制中心" }),
         element("h1", { text: "项目作战台" }),
         element("p", { text: "查看获授权的项目，快速切换作战现场，并管理平台级项目生命周期。" })
       ]),
@@ -459,7 +558,7 @@ function projectSwitcher(projects, currentId) {
 function moduleDisplayTitle(module) {
   if (module.type === "roadmap") return "项目路线图";
   if (module.type === "gantt") return "排期甘特";
-  if (module.type === "materials") return "项目资料";
+  if (module.type === "materials") return "项目材料";
   return module.title;
 }
 
@@ -472,11 +571,27 @@ function moduleNavigation(project, manifest, activeType) {
     { types: ["units"], title: modules.get("units")?.title },
     { types: ["gantt"], title: "排期甘特" },
     { types: ["risks", "metrics"], title: "项目健康" },
-    { types: ["outcomes", "materials"], title: "项目资料" }
+    { types: ["materials"], title: "项目材料" },
+    { types: ["materials"], title: "项目更新", sectionOverride: "updates" }
   ].map(group => ({ ...group, target: group.types.map(type => modules.get(type)).find(Boolean) })).filter(group => group.target);
   const list = element("ul", {}, groups.map(group => {
-    const path = canonicalModulePath(project.id, group.target.type);
-    const active = group.types.includes(activeType);
+    let path = canonicalModulePath(project.id, group.target.type);
+    let active;
+    if (group.sectionOverride === "updates") {
+      path = `/projects/${encodeURIComponent(project.id)}/modules/materials?view=proposals`;
+      const currentView = new URLSearchParams(location.search).get("view");
+      active = activeType === "materials" && (
+        currentView === "proposals" ||
+        currentView === "release" ||
+        location.pathname.includes("/materials/proposals/") ||
+        location.pathname.includes("/materials/generation-tasks/")
+      );
+    } else if (group.types.includes("materials")) {
+      active = activeType === "materials" && new URLSearchParams(location.search).get("view") !== "proposals"
+        && new URLSearchParams(location.search).get("view") !== "release";
+    } else {
+      active = group.types.includes(activeType);
+    }
     return element("li", {}, [element("a", {
       href: path,
       className: active ? "active" : "",
@@ -505,6 +620,9 @@ function moduleSectionNavigation(project, manifest, activeType) {
   const modules = new Map(manifest.modules.map(module => [module.type, module]));
   const query = new URLSearchParams(location.search);
   const materialPath = `/projects/${encodeURIComponent(project.id)}/modules/materials`;
+  const role = project.role;
+  const canReview = ["platform_admin", "project_admin", "project_editor"].includes(role);
+  const canOperate = ["platform_admin", "project_admin"].includes(role);
   let label = "";
   let entries = [];
   if (["risks", "metrics"].includes(activeType)) {
@@ -513,18 +631,25 @@ function moduleSectionNavigation(project, manifest, activeType) {
       modules.has("risks") ? { key: "risks", label: modules.get("risks").title, href: canonicalModulePath(project.id, "risks"), active: activeType === "risks" } : null,
       modules.has("metrics") ? { key: "metrics", label: modules.get("metrics").title, href: canonicalModulePath(project.id, "metrics"), active: activeType === "metrics" } : null
     ].filter(Boolean);
-  } else if (["outcomes", "materials"].includes(activeType)) {
-    const proposalView = activeType === "materials" && (
-      query.get("view") === "proposals" ||
-      location.pathname.includes("/materials/proposals/") ||
-      location.pathname.includes("/materials/generation-tasks/")
-    );
-    label = "项目资料";
-    entries = [
-      modules.has("outcomes") ? { key: "outcomes", label: modules.get("outcomes").title, href: canonicalModulePath(project.id, "outcomes"), active: activeType === "outcomes" } : null,
-      modules.has("materials") ? { key: "materials", label: "材料台账", href: `${materialPath}?view=ledger`, active: activeType === "materials" && !proposalView } : null,
-      modules.has("materials") ? { key: "proposals", label: "更新提案", href: `${materialPath}?view=proposals`, active: proposalView } : null
-    ].filter(Boolean);
+  } else if (activeType === "materials") {
+    const currentView = query.get("view") ?? "ledger";
+    const isProposalView = currentView === "proposals" || location.pathname.includes("/materials/proposals/") || location.pathname.includes("/materials/generation-tasks/");
+    const isReleaseView = currentView === "release";
+    const isOperationsView = currentView === "operations";
+    const isLedger = !isProposalView && !isReleaseView && !isOperationsView;
+    if (isProposalView || isReleaseView) {
+      label = "项目更新";
+      entries = [
+        { key: "proposals", label: "更新建议", href: `${materialPath}?view=proposals`, active: isProposalView },
+        canReview ? { key: "release", label: "审核与发布", href: `${materialPath}?view=release`, active: isReleaseView } : null
+      ].filter(Boolean);
+    } else {
+      label = "项目材料";
+      entries = [
+        { key: "materials", label: "项目材料", href: `${materialPath}?view=ledger`, active: isLedger },
+        canOperate && isOperationsView ? { key: "operations", label: "运维自检", href: `${materialPath}?view=operations`, active: isOperationsView } : null
+      ].filter(Boolean);
+    }
   }
   if (entries.length < 2) return null;
   const links = entries.map(entry => element("a", {
@@ -553,9 +678,9 @@ function compactModuleHeading(project, module, presentation, version) {
   const materials = module.type === "materials";
   return element("header", { className: "module-page-heading" }, [
     element("div", {}, [
-      element("span", { className: "eyebrow", text: materials ? (presentation.kind === "campaign" ? "BATTLE MATERIAL INTAKE" : "PROJECT MATERIAL INTAKE") : (presentation.kind === "campaign" ? "PUBLISHED CAMPAIGN MODULE" : "PUBLISHED PROJECT MODULE") }),
+      element("span", { className: "eyebrow", text: materials ? (presentation.kind === "campaign" ? "项目材料" : "项目材料") : (presentation.kind === "campaign" ? "作战模块" : "项目模块") }),
       element("h1", { text: module.title }),
-      element("p", { text: materials ? `归档 ${project.name} 的材料，形成可定位证据并进行只读项目问答。` : `查看 ${project.name} 当前已发布的${module.title}事实。` })
+      element("p", { text: materials ? `归档 ${project.name} 的材料，形成可追溯内容并进行只读项目问答。` : `查看 ${project.name} 当前已发布的${module.title}事实。` })
     ]),
     element("div", { className: "module-heading-meta" }, [element("span", { className: "badge version", text: version }), element("span", { text: `更新于 ${formatDate(project.updatedAt)}` })])
   ]);
@@ -671,7 +796,7 @@ async function openModuleConfiguration(project, presentation, returnFocus) {
   };
   const closeButton = iconButton("关闭模块配置", "×", confirmDiscard, "dialog-close");
   sheet.replaceChildren(element("header", { className: "sheet-header" }, [
-    element("div", {}, [element("span", { className: "eyebrow", text: "DRAFT CONFIGURATION" }), element("h2", { id: "module-config-title", text: "模块配置" })]), closeButton
+    element("div", {}, [element("span", { className: "eyebrow", text: "草稿配置" }), element("h2", { id: "module-config-title", text: "模块配置" })]), closeButton
   ]), element("p", { className: "draft-banner", text: "正在配置草稿模块；当前发布页面不会立即变化。" }), moduleSkeleton("units"));
   closeButton.focus();
 
@@ -739,7 +864,7 @@ async function openModuleConfiguration(project, presentation, returnFocus) {
     renderRows();
     sheet.setAttribute("aria-busy", "false");
     sheet.replaceChildren(
-      element("header", { className: "sheet-header" }, [element("div", {}, [element("span", { className: "eyebrow", text: "DRAFT CONFIGURATION" }), element("h2", { id: "module-config-title", text: "模块配置" })]), closeButton]),
+      element("header", { className: "sheet-header" }, [element("div", {}, [element("span", { className: "eyebrow", text: "草稿配置" }), element("h2", { id: "module-config-title", text: "模块配置" })]), closeButton]),
       element("p", { className: "draft-banner", text: "正在配置草稿模块；当前发布页面不会立即变化。" }),
       element("p", { className: "sheet-copy", text: `配置 ${project.name} 的九个固定模块。禁用不会删除${presentation.task}或其他事实。` }),
       list, error, element("footer", { className: "sheet-actions" }, [cancel, save])
@@ -811,8 +936,54 @@ function fieldControl({ id, name, label, value = "", help = "", type = "text", r
 }
 
 function openCreateDialog(refresh) {
+  const backdrop = element("div", { className: "dialog-backdrop" });
+  const dialog = element("section", { className: "dialog create-dialog", role: "dialog", ariaModal: "true", ariaLabelledby: "create-dialog-title" });
+  const closeButton = iconButton("关闭对话框", "×", () => { backdrop.remove(); state.dialogReturnFocus?.focus?.(); }, "dialog-close");
+  state.dialogReturnFocus = document.activeElement;
+
+  const startForm = () => {
+    backdrop.remove();
+    openCreateFormDialog(refresh);
+  };
+  const startMaterial = () => {
+    backdrop.remove();
+    openCreateFromMaterialDialog(refresh);
+  };
+  const startConversational = () => {
+    backdrop.remove();
+    openCreateConversationalDialog(refresh);
+  };
+
+  const choices = [
+    { icon: "\u{1F4C4}", title: "上传材料创建", desc: "上传项目启动会纪要、计划等文档，系统自动提取项目信息并生成骨架。", onClick: startMaterial, badge: "推荐" },
+    { icon: "\u{1F4AC}", title: "对话式创建", desc: "通过 AI 引导的对话逐步描述项目目标、团队和里程碑，自动生成项目结构。", onClick: startConversational, badge: "AI 引导" },
+    { icon: "\u{270F}\u{FE0F}", title: "手动填写创建", desc: "直接填写项目 ID、名称和模板，适合已规划好的项目。", onClick: startForm }
+  ];
+
+  dialog.append(
+    element("header", {}, [element("h2", { id: "create-dialog-title", text: "新建项目" }), closeButton]),
+    element("p", { className: "dialog-copy", text: "选择适合的创建方式。三种方式最终都生成标准项目实体和模板配置。" }),
+    element("div", { className: "create-choice-grid" }, choices.map(choice => {
+      const card = element("button", { type: "button", className: "create-choice-card", onClick: choice.onClick }, [
+        element("span", { className: "create-choice-icon", text: choice.icon }),
+        element("div", { className: "create-choice-content" }, [
+          element("strong", { text: choice.title }),
+          element("p", { text: choice.desc })
+        ]),
+        ...(choice.badge ? [element("span", { className: "create-choice-badge", text: choice.badge })] : [])
+      ]);
+      return card;
+    }))
+  );
+  backdrop.append(dialog);
+  backdrop.addEventListener("keydown", event => { if (event.key === "Escape") { backdrop.remove(); state.dialogReturnFocus?.focus?.(); } });
+  document.body.append(backdrop);
+  closeButton.focus();
+}
+
+function openCreateFormDialog(refresh) {
   openDialog({
-    title: "新建项目",
+    title: "手动填写创建",
     copy: "创建独立的发布版与草稿版，并将你设为项目管理员。",
     submitLabel: "创建并进入项目",
     fields: [
@@ -829,6 +1000,212 @@ function openCreateDialog(refresh) {
       navigate(`/projects/${encodeURIComponent(payload.project.id)}`);
     }
   });
+}
+
+function openCreateFromMaterialDialog(refresh) {
+  const backdrop = element("div", { className: "dialog-backdrop" });
+  const dialog = element("section", { className: "dialog create-material-dialog", role: "dialog", ariaModal: "true", ariaLabelledby: "create-material-title" });
+  const closeButton = iconButton("关闭", "×", () => { backdrop.remove(); state.dialogReturnFocus?.focus?.(); }, "dialog-close");
+  state.dialogReturnFocus = document.activeElement;
+
+  const input = element("input", { type: "file", accept: ".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.json", multiple: false });
+  const drop = element("div", { className: "upload-drop create-material-drop", tabIndex: 0, role: "button", ariaLabel: "选择或拖入文件" }, [
+    element("button", { type: "button", className: "secondary-button", text: "选择文件", onClick: () => input.click() }),
+    element("p", { text: "上传项目启动会纪要、计划或概要文档" }),
+    input
+  ]);
+  for (const ev of ["dragenter", "dragover"]) drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("active"); });
+  for (const ev of ["dragleave", "drop"]) drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("active"); });
+  drop.addEventListener("drop", e => { if (e.dataTransfer?.files?.length) { input.files = e.dataTransfer.files; updateFileList(); } });
+  drop.addEventListener("keydown", e => { if (["Enter", " "].includes(e.key)) { e.preventDefault(); input.click(); } });
+
+  const fileList = element("div", { className: "upload-queue", ariaLive: "polite" });
+  const updateFileList = () => {
+    fileList.replaceChildren(...[...input.files].map(f => element("article", { className: "upload-queue-row" }, [element("strong", { text: f.name }), element("span", { text: bytes(f.size) })])));
+  };
+  input.addEventListener("change", updateFileList);
+
+  const error = element("p", { className: "form-error", role: "alert" });
+  const analyzeBtn = element("button", { type: "submit", className: "primary-button", text: "分析并创建项目" });
+  const cancelBtn = element("button", { type: "button", className: "secondary-button", text: "取消", onClick: () => { backdrop.remove(); state.dialogReturnFocus?.focus?.(); } });
+
+  const form = element("form", { onSubmit: async event => {
+    event.preventDefault();
+    error.textContent = "";
+    const file = input.files?.[0];
+    if (!file) { error.textContent = "请先选择一份项目文档"; return; }
+    analyzeBtn.disabled = true; analyzeBtn.textContent = "正在分析文档…";
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await fetch("/api/projects/from-material", { method: "POST", headers: { "x-csrf-token": state.session.csrfToken }, credentials: "same-origin", body: formData });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error ?? "分析失败");
+      backdrop.remove();
+      openConfirmProjectDialog(refresh, {
+        id: payload.suggestedId ?? "",
+        name: payload.suggestedName ?? "",
+        templateId: payload.suggestedTemplate ?? "standard-project-v1",
+        summary: payload.summary ?? "",
+        sourceHint: `基于上传的「${file.name}」自动提取`
+      });
+    } catch (err) {
+      error.textContent = err.message;
+      analyzeBtn.disabled = false; analyzeBtn.textContent = "分析并创建项目";
+    }
+  } }, [drop, fileList, error, element("footer", { className: "sheet-actions" }, [cancelBtn, analyzeBtn])]);
+
+  // 内容要素清单——与提示词的 P0/P1/P2 提取规则对称。提取端要什么，输入端就提示什么。
+  const elementGuide = element("section", { className: "element-guide" }, [
+    element("p", { className: "element-guide-title", text: "项目卡片由你的材料填充。材料越完整，卡片越准确。请尽量包含以下要素：" }),
+    element("div", { className: "element-guide-level" }, [
+      element("span", { className: "element-badge badge-required", text: "必选" }),
+      element("ul", {}, [
+        element("li", {}, [element("strong", { text: "目标/范围" }), " — 这个项目/任务要达成什么（一句话目的）"]),
+        element("li", {}, [element("strong", { text: "时间节点" }), " — 关键截止日期、里程碑时间（格式：2026-08-15）"]),
+        element("li", {}, [element("strong", { text: "人员" }), " — 谁负责、谁参与、谁是相关方"])
+      ])
+    ]),
+    element("div", { className: "element-guide-level" }, [
+      element("span", { className: "element-badge badge-conditional", text: "有就写" }),
+      element("ul", {}, [
+        element("li", {}, [element("strong", { text: "交付物" }), " — 要产出的具体东西（如：需求文档、原型、合同）"]),
+        element("li", {}, [element("strong", { text: "风险/阻塞" }), " — 遇到的问题、卡点"])
+      ])
+    ]),
+    element("div", { className: "element-guide-level" }, [
+      element("span", { className: "element-badge badge-optional", text: "可选" }),
+      element("ul", {}, [
+        element("li", {}, [element("strong", { text: "验收标准、关键决策" }), " — 后续材料逐步补充即可"])
+      ])
+    ])
+  ]);
+
+  dialog.append(
+    element("header", {}, [element("h2", { id: "create-material-title", text: "上传材料创建项目" }), closeButton]),
+    element("p", { className: "dialog-copy", text: "上传项目文档，系统会自动提取项目名称、目标和关键信息，生成项目骨架供你确认。" }),
+    elementGuide,
+    form
+  );
+  backdrop.append(dialog);
+  backdrop.addEventListener("keydown", e => { if (e.key === "Escape") { backdrop.remove(); state.dialogReturnFocus?.focus?.(); } });
+  document.body.append(backdrop);
+  closeButton.focus();
+}
+
+function openConfirmProjectDialog(refresh, suggested) {
+  const idField = fieldControl({ id: "confirm-project-id", name: "id", label: "稳定项目 ID", value: suggested.id, help: "仅小写字母、数字、点、下划线或连字符。" });
+  const nameField = fieldControl({ id: "confirm-project-name", name: "name", label: "项目名称", value: suggested.name });
+  const templateField = fieldControl({ id: "confirm-project-template", name: "templateId", label: "项目模板", value: suggested.templateId, options: [
+    { value: "standard-project-v1", label: "标准项目" }, { value: "campaign-map-v1", label: "作战地图" }
+  ] });
+  openDialog({
+    title: "确认项目信息",
+    copy: suggested.sourceHint ?? "请确认提取的项目信息。",
+    submitLabel: "创建项目",
+    fields: [idField, nameField, templateField, fieldControl({ id: "confirm-project-summary", name: "summary", label: "项目摘要（可选）", value: suggested.summary ?? "", type: "text", required: false })],
+    onSubmit: async values => {
+      const payload = await api("/api/projects", { method: "POST", mutation: true, body: values });
+      showToast("项目创建成功");
+      await refresh?.();
+      navigate(`/projects/${encodeURIComponent(payload.project.id)}`);
+    }
+  });
+}
+
+function openCreateConversationalDialog(refresh) {
+  const backdrop = element("div", { className: "dialog-backdrop create-convo-backdrop" });
+  const dialog = element("section", { className: "dialog create-convo-dialog", role: "dialog", ariaModal: "true", ariaLabelledby: "create-convo-title" });
+  const closeButton = iconButton("关闭", "×", () => { backdrop.remove(); state.dialogReturnFocus?.focus?.(); }, "dialog-close");
+  state.dialogReturnFocus = document.activeElement;
+
+  const conversation = element("div", { className: "qa-conversation", ariaLive: "polite" }, [
+    element("article", { className: "qa-message assistant" }, [
+      element("strong", { text: "项目创建助手" }),
+      element("p", { text: "你好！我来帮你创建项目。请告诉我：你的项目叫什么？主要目标是什么？" })
+    ])
+  ]);
+  const input = element("textarea", { className: "chat-fab-input", rows: 3, maxLength: 1000, placeholder: "描述你的项目…" });
+  const error = element("p", { className: "form-error", role: "alert" });
+  const sendBtn = element("button", { type: "submit", className: "primary-button", text: "发送" });
+
+  let collectedInfo = { name: "", goal: "", team: "", milestones: "" };
+  let step = 0;
+  const steps = [
+    "项目叫什么名称？",
+    "项目的主要目标是什么？",
+    "项目涉及哪些团队或角色？（可选）",
+    "有关键里程碑或时间节点吗？（可选）"
+  ];
+
+  const send = async () => {
+    const value = input.value.trim();
+    if (!value) return;
+    error.textContent = "";
+    conversation.append(element("article", { className: "qa-message user" }, [element("strong", { text: "你" }), element("p", { text: value })]));
+    input.value = "";
+
+    if (step === 0) collectedInfo.name = value;
+    else if (step === 1) collectedInfo.goal = value;
+    else if (step === 2) collectedInfo.team = value;
+    else if (step === 3) collectedInfo.milestones = value;
+
+    step++;
+    sendBtn.disabled = true; sendBtn.textContent = "思考中…";
+
+    try {
+      if (step < steps.length) {
+        conversation.append(element("article", { className: "qa-message assistant" }, [element("strong", { text: "项目创建助手" }), element("p", { text: steps[step] })]));
+      } else {
+        const suggestion = await api("/api/projects/suggest", {
+          method: "POST", mutation: true, body: { conversation: collectedInfo }
+        });
+        const suggested = suggestion.suggestion ?? {};
+        conversation.append(element("article", { className: "qa-message assistant" }, [
+          element("strong", { text: "项目创建助手" }),
+          element("p", { text: `好的！根据你提供的信息，我建议创建以下项目：` }),
+          element("p", { text: `名称：${suggested.name ?? collectedInfo.name}` }),
+          element("p", { text: `模板：${suggested.templateId === "campaign-map-v1" ? "作战地图" : "标准项目"}` }),
+          ...(suggested.summary ? [element("p", { text: `摘要：${suggested.summary}` })] : [])
+        ]));
+        const confirmBtn = element("button", { type: "button", className: "primary-button", text: "确认创建", onClick: () => {
+          backdrop.remove();
+          openConfirmProjectDialog(refresh, {
+            id: suggested.id ?? "",
+            name: suggested.name ?? collectedInfo.name,
+            templateId: suggested.templateId ?? "standard-project-v1",
+            summary: suggested.summary ?? collectedInfo.goal,
+            sourceHint: "基于对话引导自动生成"
+          });
+        } });
+        const cancelBtn = element("button", { type: "button", className: "secondary-button", text: "重新对话", onClick: () => {
+          step = 0;
+          collectedInfo = { name: "", goal: "", team: "", milestones: "" };
+          conversation.append(element("article", { className: "qa-message assistant" }, [element("strong", { text: "项目创建助手" }), element("p", { text: "好的，让我们重新开始。你的项目叫什么？" })]));
+        } });
+        conversation.append(element("div", { className: "convo-actions" }, [confirmBtn, cancelBtn]));
+      }
+      conversation.scrollTop = conversation.scrollHeight;
+    } catch (err) {
+      error.textContent = err.message;
+    } finally {
+      sendBtn.disabled = false; sendBtn.textContent = "发送";
+    }
+  };
+
+  const form = element("form", { onSubmit: e => { e.preventDefault(); void send(); } }, [input, error, sendBtn]);
+
+  dialog.append(
+    element("header", {}, [element("h2", { id: "create-convo-title", text: "对话式创建项目" }), closeButton]),
+    element("p", { className: "dialog-copy", text: "通过对话描述你的项目，AI 会引导你完成信息收集并生成项目结构。" }),
+    conversation,
+    form
+  );
+  backdrop.append(dialog);
+  backdrop.addEventListener("keydown", e => { if (e.key === "Escape") { backdrop.remove(); state.dialogReturnFocus?.focus?.(); } });
+  document.body.append(backdrop);
+  input.focus();
 }
 
 function openEditDialog(project, refresh) {
@@ -884,6 +1261,370 @@ function openRestoreDialog(project, refresh) {
   });
 }
 
+
+async function renderSettings() {
+  if (!state.session.user.isPlatformAdmin) {
+    showToast("仅平台管理员可访问设置");
+    navigate("/projects", { replace: true });
+    return;
+  }
+  const appContent = element("div", { className: "route-loading", ariaBusy: "true" }, [element("h1", { text: "平台设置" })]);
+  app.replaceChildren(appFrame(appContent, { projectMode: false }));
+
+  let settings;
+  try {
+    settings = await api("/api/settings");
+  } catch (error) {
+    appContent.replaceChildren(element("div", { className: "module-error error-panel", role: "alert" }, [
+      element("h2", { text: "无法加载设置" }),
+      element("p", { text: error.message }),
+      element("button", { type: "button", className: "primary-button", text: "重试", onClick: () => renderSettings() })
+    ]));
+    return;
+  }
+
+  function providerForm(label, config, endpoint) {
+    const providerSelect = element("select", { id: `${label}-provider` }, [
+      element("option", { value: "disabled", text: "未启用", selected: config.provider === "disabled" }),
+      element("option", { value: "openai-compatible", text: "OpenAI 兼容", selected: config.provider === "openai-compatible" })
+    ]);
+    const baseUrl = element("input", { type: "text", id: `${label}-base-url`, value: config.baseUrl ?? "", placeholder: "api.example.com/v1" });
+    const apiKey = element("input", { type: "password", id: `${label}-api-key`, value: "", placeholder: config.apiKeySet ? `已配置（${config.apiKeyMasked}）` : "输入 API Key" });
+    const model = element("input", { type: "text", id: `${label}-model`, value: config.model ?? "", placeholder: "glm-5.2 / gpt-4o 等" });
+    const allowedHosts = element("input", { type: "text", id: `${label}-hosts`, value: config.allowedHosts ?? "", placeholder: "api.example.com" });
+    const err = element("p", { className: "form-error", role: "alert" });
+    const save = element("button", { type: "submit", className: "primary-button", text: "保存" });
+
+    const form = element("form", { className: "settings-form" });
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      err.textContent = "";
+      save.disabled = true;
+      save.textContent = "保存中…";
+      try {
+        await api(endpoint, {
+          method: "PUT",
+          mutation: true,
+          body: {
+            provider: providerSelect.value,
+            baseUrl: baseUrl.value.trim(),
+            apiKey: apiKey.value.trim(),
+            model: model.value.trim(),
+            allowedHosts: allowedHosts.value.trim()
+          }
+        });
+        showToast("设置已保存，重启后生效");
+        renderSettings();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        save.disabled = false;
+        save.textContent = "保存";
+      }
+    });
+
+    form.replaceChildren(
+      element("div", { className: "field" }, [
+        element("label", { htmlFor: `${label}-provider`, text: "服务类型" }), providerSelect
+      ]),
+      element("div", { className: "field" }, [
+        element("label", { htmlFor: `${label}-base-url`, text: "API 地址" }), baseUrl
+      ]),
+      element("div", { className: "field" }, [
+        element("label", { htmlFor: `${label}-api-key`, text: "API Key" }), apiKey,
+        config.apiKeySet ? element("small", { className: "form-hint", text: `当前: ${config.apiKeyMasked}，留空则不修改` }) : null
+      ]),
+      element("div", { className: "field" }, [
+        element("label", { htmlFor: `${label}-model`, text: "模型名称" }), model
+      ]),
+      element("div", { className: "field" }, [
+        element("label", { htmlFor: `${label}-hosts`, text: "允许的域名" }), allowedHosts,
+        element("small", { className: "form-hint", text: "多个用逗号分隔，必须与 API 地址域名一致" })
+      ]),
+      err,
+      save
+    );
+    return form;
+  }
+
+  function genProviderForm(label, config, endpoint) {
+    const form = providerForm(label, config, endpoint);
+    // Add generation-specific fields before the error/save buttons
+    const timeout = element("input", { type: "number", id: `${label}-timeout`, value: config.timeoutMs ?? 60000, min: 1000, max: 600000, step: 1000 });
+    const maxTokens = element("input", { type: "number", id: `${label}-tokens`, value: config.maxOutputTokens ?? 8000, min: 100, max: 8000, step: 100 });
+    const reasoning = element("select", { id: `${label}-reasoning` }, [
+      element("option", { value: "", text: "默认", selected: !config.reasoningEffort }),
+      element("option", { value: "none", text: "关闭推理", selected: config.reasoningEffort === "none" }),
+      element("option", { value: "minimal", text: "最小", selected: config.reasoningEffort === "minimal" }),
+      element("option", { value: "low", text: "低", selected: config.reasoningEffort === "low" }),
+      element("option", { value: "medium", text: "中", selected: config.reasoningEffort === "medium" }),
+      element("option", { value: "high", text: "高", selected: config.reasoningEffort === "high" })
+    ]);
+
+    // Patch the submit handler to include gen-specific fields
+    const extraFields = [
+      element("div", { className: "field" }, [element("label", { htmlFor: `${label}-timeout`, text: "超时（毫秒）" }), timeout]),
+      element("div", { className: "field" }, [element("label", { htmlFor: `${label}-tokens`, text: "最大输出 Token" }), maxTokens]),
+      element("div", { className: "field" }, [element("label", { htmlFor: `${label}-reasoning`, text: "推理强度" }), reasoning])
+    ];
+    // Insert extra fields before the last two children (error + save)
+    const kids = [...form.children];
+    form.replaceChildren(...kids.slice(0, -2), ...extraFields, ...kids.slice(-2));
+
+    // Override submit
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      const save = form.querySelector("button[type=submit]");
+      const err = form.querySelector(".form-error");
+      err.textContent = "";
+      save.disabled = true;
+      save.textContent = "保存中…";
+      try {
+        await api(endpoint, {
+          method: "PUT",
+          mutation: true,
+          body: {
+            provider: form.querySelector(`#${label}-provider`).value,
+            baseUrl: form.querySelector(`#${label}-base-url`).value.trim(),
+            apiKey: form.querySelector(`#${label}-api-key`).value.trim(),
+            model: form.querySelector(`#${label}-model`).value.trim(),
+            allowedHosts: form.querySelector(`#${label}-hosts`).value.trim(),
+            timeoutMs: Number(form.querySelector(`#${label}-timeout`).value),
+            maxOutputTokens: Number(form.querySelector(`#${label}-tokens`).value),
+            reasoningEffort: form.querySelector(`#${label}-reasoning`).value
+          }
+        });
+        showToast("设置已保存，重启后生效");
+        renderSettings();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        save.disabled = false;
+        save.textContent = "保存";
+      }
+    };
+    return form;
+  }
+
+  function visionProviderForm(label, config, endpoint) {
+    const providerSelect = element("select", { id: `${label}-provider` }, [
+      element("option", { value: "disabled", text: "未启用", selected: config.provider === "disabled" }),
+      element("option", { value: "openai-compatible", text: "OpenAI 兼容", selected: config.provider === "openai-compatible" })
+    ]);
+    const baseUrl = element("input", { type: "text", id: `${label}-base-url`, value: config.baseUrl ?? "", placeholder: "https://open.bigmodel.cn/api/paas/v4" });
+    const apiKey = element("input", { type: "password", id: `${label}-api-key`, value: "", placeholder: config.apiKeySet ? `已配置（${config.apiKeyMasked}）` : "输入 API Key（留空则复用上方项目更新 AI 的 Key）" });
+
+    // 模型下拉菜单：Coding Plan 内置的视觉模型优先，需要单独充值的标注在后
+    const VISION_MODELS = [
+      { value: "glm-4.6v", text: "GLM-4.6V（Coding Plan 内置·128K 视觉 SOTA·推荐）" },
+      { value: "glm-4v-flash", text: "GLM-4V-Flash（免费版·能力有限）" },
+      { value: "glm-5v-turbo", text: "GLM-5V-Turbo（需标准端点单独充值）" },
+      { value: "glm-4.5v", text: "GLM-4.5V（需标准端点单独充值）" },
+      { value: "glm-4v-plus", text: "GLM-4V-Plus（需标准端点单独充值）" },
+      { value: "glm-ocr", text: "GLM-OCR（文档专用 OCR·需标准端点）" }
+    ];
+    const currentModel = config.model ?? "";
+    const modelMatched = VISION_MODELS.some(m => m.value === currentModel);
+    const model = element("select", { id: `${label}-model` }, [
+      ...VISION_MODELS.map(m => element("option", { value: m.value, text: m.text, selected: currentModel === m.value })),
+      // 如果当前模型不在列表中（自定义/其他），追加一项
+      ...(modelMatched ? [] : [element("option", { value: currentModel, text: currentModel ? `自定义: ${currentModel}` : "（请选择）", selected: true })])
+    ]);
+    // 默认选中 Coding Plan 内置的最佳视觉模型
+    if (!currentModel) model.value = "glm-4.6v";
+
+    const allowedHosts = element("input", { type: "text", id: `${label}-hosts`, value: config.allowedHosts ?? "", placeholder: "open.bigmodel.cn" });
+    const timeout = element("input", { type: "number", id: `${label}-timeout`, value: config.timeoutMs ?? 120000, min: 1000, max: 600000, step: 1000 });
+    const maxTokens = element("input", { type: "number", id: `${label}-tokens`, value: config.maxOutputTokens ?? 4000, min: 100, max: 16000, step: 100 });
+    const err = element("p", { className: "form-error", role: "alert" });
+    const save = element("button", { type: "submit", className: "primary-button", text: "保存" });
+
+    const form = element("form", { className: "settings-form" });
+    form.addEventListener("submit", async event => {
+      event.preventDefault();
+      err.textContent = "";
+      save.disabled = true;
+      save.textContent = "保存中…";
+      try {
+        await api(endpoint, {
+          method: "PUT",
+          mutation: true,
+          body: {
+            provider: providerSelect.value,
+            baseUrl: baseUrl.value.trim(),
+            apiKey: apiKey.value.trim(),
+            model: model.value,
+            allowedHosts: allowedHosts.value.trim(),
+            timeoutMs: Number(timeout.value),
+            maxOutputTokens: Number(maxTokens.value)
+          }
+        });
+        showToast("设置已保存，重启后生效");
+        renderSettings();
+      } catch (e) {
+        err.textContent = e.message;
+      } finally {
+        save.disabled = false;
+        save.textContent = "保存";
+      }
+    });
+
+    form.replaceChildren(
+      element("div", { className: "field" }, [
+        element("label", { htmlFor: `${label}-provider`, text: "服务类型" }), providerSelect
+      ]),
+      element("div", { className: "field" }, [
+        element("label", { htmlFor: `${label}-model`, text: "视觉模型" }), model,
+        element("small", { className: "form-hint", text: "Coding Plan 内置 GLM-4.6V（推荐）；其他视觉模型需在标准端点 /paas/v4 单独充值" })
+      ]),
+      element("div", { className: "field" }, [
+        element("label", { htmlFor: `${label}-base-url`, text: "API 地址" }), baseUrl,
+        element("small", { className: "form-hint", text: "智谱标准端点（非 coding 端点）" })
+      ]),
+      element("div", { className: "field" }, [
+        element("label", { htmlFor: `${label}-api-key`, text: "API Key" }), apiKey,
+        config.apiKeySet ? element("small", { className: "form-hint", text: `当前: ${config.apiKeyMasked}，留空则不修改` }) : element("small", { className: "form-hint", text: "留空则复用项目更新 AI 的 Key" })
+      ]),
+      element("div", { className: "field" }, [
+        element("label", { htmlFor: `${label}-hosts`, text: "允许的域名" }), allowedHosts,
+        element("small", { className: "form-hint", text: "多个用逗号分隔" })
+      ]),
+      element("div", { className: "field" }, [element("label", { htmlFor: `${label}-timeout`, text: "超时（毫秒）" }), timeout]),
+      element("div", { className: "field" }, [element("label", { htmlFor: `${label}-tokens`, text: "最大输出 Token" }), maxTokens]),
+      err,
+      save
+    );
+    return form;
+  }
+
+  const changePassForm = element("form", { className: "settings-form" });
+  const cpCurrent = element("input", { type: "password", autoComplete: "current-password", required: true });
+  const cpNew = element("input", { type: "password", autoComplete: "new-password", required: true, minLength: 12 });
+  const cpConfirm = element("input", { type: "password", autoComplete: "new-password", required: true, minLength: 12 });
+  const cpErr = element("p", { className: "form-error", role: "alert" });
+  const cpSubmit = element("button", { type: "submit", className: "primary-button", text: "修改密码" });
+  changePassForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    cpErr.textContent = "";
+    if (cpNew.value.length < 12) { cpErr.textContent = "新密码至少 12 个字符"; return; }
+    if (cpNew.value !== cpConfirm.value) { cpErr.textContent = "两次输入不一致"; return; }
+    cpSubmit.disabled = true; cpSubmit.textContent = "修改中…";
+    try {
+      await api("/api/account/password", { method: "POST", mutation: true, body: { currentPassword: cpCurrent.value, newPassword: cpNew.value } });
+      showToast("密码已修改");
+      cpCurrent.value = ""; cpNew.value = ""; cpConfirm.value = "";
+    } catch (e) {
+      cpErr.textContent = e.message;
+    } finally {
+      cpSubmit.disabled = false; cpSubmit.textContent = "修改密码";
+    }
+  });
+  changePassForm.replaceChildren(
+    element("div", { className: "field" }, [element("label", { text: "当前密码" }), cpCurrent]),
+    element("div", { className: "field" }, [element("label", { text: "新密码（至少 12 位）" }), cpNew]),
+    element("div", { className: "field" }, [element("label", { text: "确认新密码" }), cpConfirm]),
+    cpErr, cpSubmit
+  );
+
+  appContent.replaceChildren(
+    element("div", { className: "settings-page" }, [
+      element("header", { className: "settings-header" }, [
+        element("h1", { text: "平台设置" }),
+        element("p", { text: "配置 AI 服务、账号安全与平台信息。" })
+      ]),
+      element("section", { className: "settings-section" }, [
+        element("h2", { text: "项目问答 AI" }),
+        element("p", { className: "settings-desc", text: "用于项目材料问答检索。配置后可在项目资料中使用问答功能。" }),
+        providerForm("chat", settings.aiChat, "/api/settings/ai-chat")
+      ]),
+      element("section", { className: "settings-section" }, [
+        element("h2", { text: "项目更新 AI" }),
+        element("p", { className: "settings-desc", text: "用于从材料自动生成任务、路线等项目更新建议。配置后可在项目资料中生成更新。" }),
+        genProviderForm("gen", settings.aiGeneration, "/api/settings/ai-generation")
+      ]),
+      element("section", { className: "settings-section" }, [
+        element("h2", { text: "材料视觉 AI" }),
+        element("p", { className: "settings-desc", text: "用于提取 PDF、图片等非文本材料的内容（多模态识别）。配置后上传 PDF/图片不再依赖系统工具。" }),
+        visionProviderForm("vision", settings.aiVision ?? {}, "/api/settings/ai-vision")
+      ]),
+      element("section", { className: "settings-section" }, [
+        element("h2", { text: "账号安全" }),
+        element("p", { className: "settings-desc", text: "修改当前账号密码。" }),
+        changePassForm
+      ]),
+      element("section", { className: "settings-section" }, [
+        element("h2", { text: "平台信息" }),
+        element("dl", { className: "settings-info" }, [
+          element("div", {}, [element("dt", { text: "当前账号" }), element("dd", { text: state.session.user.loginName })]),
+          element("div", {}, [element("dt", { text: "角色" }), element("dd", { text: roleLabels[state.session.user.isPlatformAdmin ? "platform_admin" : ""] ?? "—" })])
+        ])
+      ])
+    ])
+  );
+}
+
+function renderPasswordReset() {
+  const form = element("form", { className: "login-form", novalidate: true });
+  const currentPassword = element("input", { type: "password", autoComplete: "current-password", required: true });
+  const newPassword = element("input", { type: "password", autoComplete: "new-password", required: true, minLength: 12 });
+  const confirmPassword = element("input", { type: "password", autoComplete: "new-password", required: true, minLength: 12 });
+  const error = element("p", { className: "form-error", role: "alert" });
+  const submit = element("button", { type: "submit", className: "primary-button", text: "修改密码" });
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    error.textContent = "";
+    if (newPassword.value.length < 12) {
+      error.textContent = "新密码至少 12 个字符";
+      newPassword.focus();
+      return;
+    }
+    if (newPassword.value !== confirmPassword.value) {
+      error.textContent = "两次输入的新密码不一致";
+      confirmPassword.focus();
+      return;
+    }
+    submit.disabled = true;
+    submit.textContent = "正在修改…";
+    try {
+      await api("/api/account/password", {
+        method: "POST",
+        mutation: true,
+        body: { currentPassword: currentPassword.value, newPassword: newPassword.value }
+      });
+      state.session = { ...state.session, mustResetPassword: false };
+      showToast("密码已修改");
+      navigate("/projects", { replace: true });
+    } catch (requestError) {
+      error.textContent = requestError.message;
+      currentPassword.focus();
+    } finally {
+      submit.disabled = false;
+      submit.textContent = "修改密码";
+    }
+  });
+
+  form.append(
+    element("div", { className: "field" }, [element("label", { htmlFor: "current-password", text: "当前密码" }), currentPassword]),
+    element("div", { className: "field" }, [element("label", { htmlFor: "new-password", text: "新密码（至少 12 位）" }), newPassword]),
+    element("div", { className: "field" }, [element("label", { htmlFor: "confirm-password", text: "确认新密码" }), confirmPassword]),
+    error,
+    submit
+  );
+
+  app.replaceChildren(element("main", { className: "login-screen" }, [
+    element("section", { className: "login-form-panel" }, [
+      element("div", { className: "login-form-wrap" }, [
+        element("span", { className: "eyebrow", text: "安全设置" }),
+        element("h1", { text: "修改初始密码" }),
+        element("p", { text: "首次登录需要设置新密码后才能使用平台。" }),
+        form
+      ])
+    ])
+  ]));
+  currentPassword.focus();
+}
+
 async function renderRoute() {
   state.routeRequest += 1;
   if (!state.session) {
@@ -892,8 +1633,21 @@ async function renderRoute() {
     renderLogin();
     return;
   }
+  if (state.session.mustResetPassword && location.pathname !== "/account/password") {
+    history.replaceState({}, "", "/account/password");
+    renderPasswordReset();
+    return;
+  }
+  if (location.pathname === "/account/password") {
+    renderPasswordReset();
+    return;
+  }
   if (location.pathname === "/login" || location.pathname === "/") {
     navigate("/projects", { replace: true });
+    return;
+  }
+  if (location.pathname === "/settings") {
+    renderSettings();
     return;
   }
   if (location.pathname === "/projects") {

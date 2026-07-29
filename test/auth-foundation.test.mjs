@@ -22,7 +22,7 @@ test("migrations apply after unchanged migration 001 and repeat safely", () => {
   const original001 = readFileSync(join(defaultMigrationsDir, "001_initial.sql"));
   const { database, applied } = setup();
   try {
-    assert.deepEqual(applied, ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql", "004_materials_evidence.sql", "005_structured_change_proposals.sql", "006_review_publish_operations.sql", "007_release_hardening_readiness_observability.sql"]);
+    assert.deepEqual(applied, ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql", "004_materials_evidence.sql", "005_structured_change_proposals.sql", "006_review_publish_operations.sql", "007_release_hardening_readiness_observability.sql", "008_password_reset.sql", "009_platform_settings.sql", "010_unified_cards.sql"]);
     assert.deepEqual(applyMigrations(database), []);
     assert.deepEqual(readFileSync(join(defaultMigrationsDir, "001_initial.sql")), original001);
     const tables = database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().map(row => row.name);
@@ -118,5 +118,50 @@ test("login success, failure, bootstrap, and logout are audited append-only", ()
       "auth.bootstrap", "auth.login_failed", "auth.login_succeeded", "auth.logout"
     ]);
     assert.throws(() => database.prepare("DELETE FROM audit_events").run(), /append-only/);
+  } finally { database.close(); }
+});
+
+test("bootstrap defaults to admin/admin123 and flags must_reset_password", () => {
+  const { database, service } = setup();
+  try {
+    const result = service.ensureBootstrapAdmin({ loginName: "admin" });
+    assert.equal(result.created, true);
+    assert.equal(result.usedDefaultPassword, true);
+    const user = database.prepare("SELECT must_reset_password AS r FROM users WHERE login_name='admin'").get();
+    assert.equal(user.r, 1);
+    const login = service.authenticate({ loginName: "admin", password: "admin123" });
+    assert.equal(login.ok, true);
+    assert.equal(login.principal.mustResetPassword, true);
+  } finally { database.close(); }
+});
+
+test("bootstrap with explicit password does not require reset", () => {
+  const { database, service } = setup();
+  try {
+    const result = service.ensureBootstrapAdmin({ loginName: "admin", password: "custom-secure-password" });
+    assert.equal(result.created, true);
+    assert.equal(result.usedDefaultPassword, false);
+    const user = database.prepare("SELECT must_reset_password AS r FROM users WHERE login_name='admin'").get();
+    assert.equal(user.r, 0);
+    const login = service.authenticate({ loginName: "admin", password: "custom-secure-password" });
+    assert.equal(login.ok, true);
+    assert.equal(login.principal.mustResetPassword, false);
+  } finally { database.close(); }
+});
+
+test("changePassword clears must_reset_password and rejects wrong current password", () => {
+  const { database, service } = setup();
+  try {
+    service.ensureBootstrapAdmin({ loginName: "admin" });
+    const login = service.authenticate({ loginName: "admin", password: "admin123" });
+    const wrong = service.changePassword(login.principal, { currentPassword: "wrong-password-val", newPassword: "new-secure-password-1" });
+    assert.equal(wrong.ok, false);
+    const ok = service.changePassword(login.principal, { currentPassword: "admin123", newPassword: "new-secure-password-1" });
+    assert.equal(ok.ok, true);
+    const user = database.prepare("SELECT must_reset_password AS r FROM users WHERE login_name='admin'").get();
+    assert.equal(user.r, 0);
+    const relogin = service.authenticate({ loginName: "admin", password: "new-secure-password-1" });
+    assert.equal(relogin.ok, true);
+    assert.equal(relogin.principal.mustResetPassword, false);
   } finally { database.close(); }
 });

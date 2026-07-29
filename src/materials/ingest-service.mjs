@@ -14,10 +14,10 @@ export function createMaterialIngestService(database, options = {}) {
     const displayName = sanitizeDisplayName(input.filename);
     const declared = declaredMaterialType(displayName, input.mime);
     if (!input.source || typeof input.source[Symbol.asyncIterator] !== "function") {
-      throw new MaterialGateError("invalid_stream", "Material source must be an async byte stream");
+      throw new MaterialGateError("invalid_stream", "材料来源必须是异步字节流");
     }
     if (Number.isFinite(input.contentLength) && input.contentLength > limits.maxFileBytes) {
-      throw new MaterialGateError("file_too_large", "File exceeds the configured byte limit");
+      throw new MaterialGateError("file_too_large", "文件超过大小限制");
     }
     const reservation = repository.reserveUpload({ projectId: input.projectId, userId: input.userId });
     let stagePath;
@@ -30,19 +30,19 @@ export function createMaterialIngestService(database, options = {}) {
         probeBytes: limits.magicProbeBytes,
         signal: input.signal
       });
-      if (input.truncated) throw new MaterialGateError("upload_truncated", "Upload ended before the declared file was complete");
-      if (staged.byteSize === 0) throw new MaterialGateError("empty_file", "Empty materials are not accepted");
+      if (input.truncated) throw new MaterialGateError("upload_truncated", "上传未完成");
+      if (staged.byteSize === 0) throw new MaterialGateError("empty_file", "空文件不被接受");
       if (Number.isFinite(input.contentLength) && input.contentLength !== staged.byteSize) {
-        throw new MaterialGateError("upload_truncated", "Received byte count differs from Content-Length");
+        throw new MaterialGateError("upload_truncated", "接收到的数据大小与声明不符");
       }
       await validateMagic(staged.probe, declared);
       if ([".docx", ".pptx", ".xlsx"].includes(declared.extension)) {
         await validateOfficeContainer(stagePath, declared, limits);
       }
-      if (requireScan && typeof scan !== "function") throw new MaterialGateError("scanner_unavailable", "Required malware scanning is unavailable");
+      if (requireScan && typeof scan !== "function") throw new MaterialGateError("scanner_unavailable", "安全扫描服务不可用");
       if (typeof scan === "function") {
         const result = await scan({ path: stagePath, projectId: input.projectId, sha256: staged.sha256, byteSize: staged.byteSize });
-        if (!result || result.clean !== true) throw new MaterialGateError("scan_rejected", "Material did not pass malware scanning");
+        if (!result || result.clean !== true) throw new MaterialGateError("scan_rejected", "材料未通过安全扫描");
       }
       const ids = { materialId: randomUUID(), artifactId: randomUUID(), jobId: randomUUID() };
       return repository.createReceipt({

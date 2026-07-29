@@ -71,7 +71,7 @@ npm ci
 cp .env.example .env.local
 ```
 
-在 `.env.local` 设置至少 12 位的首次管理员密码：
+首次启动时，如果未设置 `PLATFORM_BOOTSTRAP_PASSWORD`，平台会自动创建默认管理员 **admin / admin123**，首次登录后需立即修改密码。也可以手动设置：
 
 ```dotenv
 PLATFORM_BOOTSTRAP_PASSWORD=请替换为强密码

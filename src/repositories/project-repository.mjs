@@ -1,4 +1,5 @@
 import { withTransaction } from "../db/database.mjs";
+import { upsert } from "../db/sql-dialect.mjs";
 
 const layers = new Set(["published", "draft"]);
 
@@ -116,6 +117,93 @@ export function createProjectRepository(database) {
     };
   }
 
+  function tableExists(name) {
+    try {
+      database.prepare(`SELECT 1 FROM ${name} LIMIT 1`).get();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function loadCardsFromUnifiedTable(versionId) {
+    const cardRows = database.prepare(`
+      SELECT external_id AS id, element_type AS elementType, position,
+             title, owner, state, objective, start_date AS startDate, end_date AS endDate,
+             progress, health, unit_id AS unitId, parent_id AS parentId,
+             depends_on AS dependsOnJson, card_attrs AS cardAttrs
+      FROM project_cards WHERE version_id = ? ORDER BY position
+    `).all(versionId);
+
+    const linkRows = database.prepare(`
+      SELECT card_external_id AS cardId, depends_on_external_id AS dependencyId
+      FROM project_card_links WHERE version_id = ? ORDER BY card_external_id, position
+    `).all(versionId);
+    const links = new Map();
+    for (const row of linkRows) {
+      const values = links.get(row.cardId) ?? [];
+      values.push(row.dependencyId);
+      links.set(row.cardId, values);
+    }
+
+    const units = [];
+    const stages = [];
+    const closures = [];
+    const tasks = [];
+    const workstreams = [];
+    const risks = [];
+    const metrics = [];
+
+    for (const row of cardRows) {
+      const attrs = parseJson(row.cardAttrs);
+      const dependsOn = row.dependsOnJson ? parseJson(row.dependsOnJson) : (links.get(row.id) ?? []);
+      const owner = row.owner || attrs.owner || "";
+      const stateVal = row.state || attrs.state || "";
+      const healthVal = row.health || attrs.health || "";
+      switch (row.elementType) {
+        case "unit":
+          units.push({ ...attrs, id: row.id, name: row.title, owner,
+                       status: attrs.status ?? "active", objective: row.objective || attrs.objective || "" });
+          break;
+        case "stage":
+          stages.push({ ...attrs, id: row.id, title: row.title, state: stateVal,
+                        dateLabel: attrs.dateLabel ?? "", startDate: row.startDate, endDate: row.endDate });
+          break;
+        case "outcome":
+          closures.push({ ...attrs, id: row.id, title: row.title, state: stateVal,
+                          dateLabel: attrs.dateLabel ?? "", description: attrs.description ?? "",
+                          result: attrs.result ?? "", source: attrs.source ?? "",
+                          between: attrs.between ?? [], previewAssets: attrs.previewImages ?? [] });
+          break;
+        case "task":
+          tasks.push({ ...attrs, id: row.id, title: row.title, owner, state: stateVal,
+                       objective: row.objective, unitId: row.unitId || attrs.unitId || "default-unit",
+                       parentId: row.parentId ?? "", startDate: row.startDate, endDate: row.endDate,
+                       progress: row.progress, health: healthVal,
+                       dependsOn: Array.isArray(dependsOn) ? dependsOn : [],
+                       expectedOutput: attrs.expectedOutput ?? "" });
+          break;
+        case "workstream":
+          workstreams.push({ ...attrs, id: row.id, title: row.title,
+                             description: attrs.description ?? "", taskIds: attrs.members ?? [] });
+          break;
+        case "risk":
+          risks.push({ ...attrs, id: row.id, title: row.title, owner,
+                       status: stateVal || attrs.status || "open", severity: attrs.severity ?? "medium",
+                       mitigation: attrs.mitigation ?? "", dueDate: row.endDate || attrs.dueDate || "",
+                       source: attrs.source ?? "" });
+          break;
+        case "metric":
+          metrics.push({ ...attrs, id: row.id, name: row.title, status: stateVal || attrs.status || "pending",
+                         value: attrs.value ?? null, unit: attrs.unit ?? "",
+                         asOf: row.startDate || attrs.asOf || "", target: attrs.target ?? null,
+                         source: attrs.source ?? "" });
+          break;
+      }
+    }
+    return { units, stages, closures, tasks, workstreams, risks, metrics };
+  }
+
   function getModuleVersionGraph(projectId, layer) {
     if (!layers.has(layer)) throw new Error(`Unsupported project layer: ${layer}`);
     const pointer = layer === "published" ? "published_version_id" : "draft_version_id";
@@ -140,99 +228,95 @@ export function createProjectRepository(database) {
       enabled: Boolean(row.enabled),
       configuration: parseJson(row.dataJson)
     }));
-    const units = database.prepare(`
-      SELECT external_id AS id, name, data_json AS dataJson
-      FROM project_units WHERE version_id = ? ORDER BY position
-    `).all(versionId).map(row => ({ ...parseJson(row.dataJson), id: row.id, name: row.name }));
-    const stages = database.prepare(`
-      SELECT external_id AS id, title, date_label AS dateLabel, data_json AS dataJson
-      FROM project_stages WHERE version_id = ? ORDER BY position
-    `).all(versionId).map(row => ({ ...parseJson(row.dataJson), id: row.id, title: row.title, dateLabel: row.dateLabel }));
-    const closures = database.prepare(`
-      SELECT external_id AS id, title, date_label AS dateLabel, data_json AS dataJson
-      FROM project_closures WHERE version_id = ? ORDER BY position
-    `).all(versionId).map(row => {
-      const data = parseJson(row.dataJson);
-      return {
-        id: row.id,
-        title: row.title,
-        dateLabel: row.dateLabel,
-        state: data.state ?? "",
-        between: data.between ?? [],
-        description: data.description ?? "",
-        result: data.result ?? "",
-        source: data.source ?? "",
-        previewAssets: data.previewImages ?? []
-      };
-    });
-    const dependencyRows = database.prepare(`
-      SELECT task_external_id AS taskId, depends_on_external_id AS dependencyId
-      FROM task_links WHERE version_id = ? ORDER BY task_external_id, position
-    `).all(versionId);
-    const dependencies = new Map();
-    for (const row of dependencyRows) {
-      const values = dependencies.get(row.taskId) ?? [];
-      values.push(row.dependencyId);
-      dependencies.set(row.taskId, values);
+
+    let units, stages, closures, tasks, workstreams, risks, metrics;
+
+    const useUnified = tableExists("project_cards") &&
+      database.prepare("SELECT 1 FROM project_cards WHERE version_id = ? LIMIT 1").get(versionId);
+
+    if (useUnified) {
+      const unified = loadCardsFromUnifiedTable(versionId);
+      units = unified.units; stages = unified.stages; closures = unified.closures;
+      tasks = unified.tasks; workstreams = unified.workstreams;
+      risks = unified.risks; metrics = unified.metrics;
+    } else {
+      units = database.prepare(`
+        SELECT external_id AS id, name, data_json AS dataJson
+        FROM project_units WHERE version_id = ? ORDER BY position
+      `).all(versionId).map(row => ({ ...parseJson(row.dataJson), id: row.id, name: row.name }));
+      stages = database.prepare(`
+        SELECT external_id AS id, title, date_label AS dateLabel, data_json AS dataJson
+        FROM project_stages WHERE version_id = ? ORDER BY position
+      `).all(versionId).map(row => ({ ...parseJson(row.dataJson), id: row.id, title: row.title, dateLabel: row.dateLabel }));
+      closures = database.prepare(`
+        SELECT external_id AS id, title, date_label AS dateLabel, data_json AS dataJson
+        FROM project_closures WHERE version_id = ? ORDER BY position
+      `).all(versionId).map(row => {
+        const data = parseJson(row.dataJson);
+        return {
+          id: row.id, title: row.title, dateLabel: row.dateLabel,
+          state: data.state ?? "", between: data.between ?? [],
+          description: data.description ?? "", result: data.result ?? "",
+          source: data.source ?? "", previewAssets: data.previewImages ?? []
+        };
+      });
+      const dependencyRows = database.prepare(`
+        SELECT task_external_id AS taskId, depends_on_external_id AS dependencyId
+        FROM task_links WHERE version_id = ? ORDER BY task_external_id, position
+      `).all(versionId);
+      const dependencies = new Map();
+      for (const row of dependencyRows) {
+        const values = dependencies.get(row.taskId) ?? [];
+        values.push(row.dependencyId);
+        dependencies.set(row.taskId, values);
+      }
+      tasks = database.prepare(`
+        SELECT external_id AS id, unit_external_id AS unitId, parent_external_id AS parentId,
+               title, start_date AS startDate, end_date AS endDate, progress, data_json AS dataJson
+        FROM project_tasks WHERE version_id = ? ORDER BY position
+      `).all(versionId).map(row => {
+        const data = parseJson(row.dataJson);
+        return {
+          ...data, id: row.id, unitId: row.unitId, parentId: row.parentId ?? "",
+          title: row.title, startDate: row.startDate, endDate: row.endDate,
+          progress: row.progress, dependsOn: dependencies.get(row.id) ?? [],
+          owner: data.owner ?? "", state: data.state ?? "", expectedOutput: data.expectedOutput ?? ""
+        };
+      });
+      const workstreamTaskRows = database.prepare(`
+        SELECT workstream_external_id AS workstreamId, task_external_id AS taskId
+        FROM workstream_tasks WHERE version_id = ? ORDER BY workstream_external_id, position
+      `).all(versionId);
+      const workstreamTasks = new Map();
+      for (const row of workstreamTaskRows) {
+        const values = workstreamTasks.get(row.workstreamId) ?? [];
+        values.push(row.taskId);
+        workstreamTasks.set(row.workstreamId, values);
+      }
+      workstreams = database.prepare(`
+        SELECT external_id AS id, title, data_json AS dataJson
+        FROM project_workstreams WHERE version_id = ? ORDER BY position
+      `).all(versionId).map(row => ({
+        id: row.id, title: row.title,
+        description: parseJson(row.dataJson).description ?? "",
+        taskIds: workstreamTasks.get(row.id) ?? []
+      }));
+      risks = database.prepare(`
+        SELECT external_id AS id, title, severity, status, owner, mitigation,
+               due_date AS dueDate, source
+        FROM project_risks WHERE version_id = ? ORDER BY position
+      `).all(versionId);
+      metrics = database.prepare(`
+        SELECT external_id AS id, name, value_json AS valueJson, unit, status,
+               as_of AS asOf, target_json AS targetJson, source
+        FROM project_metrics WHERE version_id = ? ORDER BY position
+      `).all(versionId).map(row => ({
+        id: row.id, name: row.name, value: parseNullableJson(row.valueJson),
+        unit: row.unit, status: row.status, asOf: row.asOf,
+        target: parseNullableJson(row.targetJson), source: row.source
+      }));
     }
-    const tasks = database.prepare(`
-      SELECT external_id AS id, unit_external_id AS unitId, parent_external_id AS parentId,
-             title, start_date AS startDate, end_date AS endDate, progress, data_json AS dataJson
-      FROM project_tasks WHERE version_id = ? ORDER BY position
-    `).all(versionId).map(row => {
-      const data = parseJson(row.dataJson);
-      return {
-        id: row.id,
-        unitId: row.unitId,
-        parentId: row.parentId ?? "",
-        title: row.title,
-        startDate: row.startDate,
-        endDate: row.endDate,
-        progress: row.progress,
-        dependsOn: dependencies.get(row.id) ?? [],
-        owner: data.owner ?? "",
-        state: data.state ?? "",
-        expectedOutput: data.expectedOutput ?? ""
-      };
-    });
-    const workstreamTaskRows = database.prepare(`
-      SELECT workstream_external_id AS workstreamId, task_external_id AS taskId
-      FROM workstream_tasks WHERE version_id = ? ORDER BY workstream_external_id, position
-    `).all(versionId);
-    const workstreamTasks = new Map();
-    for (const row of workstreamTaskRows) {
-      const values = workstreamTasks.get(row.workstreamId) ?? [];
-      values.push(row.taskId);
-      workstreamTasks.set(row.workstreamId, values);
-    }
-    const workstreams = database.prepare(`
-      SELECT external_id AS id, title, data_json AS dataJson
-      FROM project_workstreams WHERE version_id = ? ORDER BY position
-    `).all(versionId).map(row => ({
-      id: row.id,
-      title: row.title,
-      description: parseJson(row.dataJson).description ?? "",
-      taskIds: workstreamTasks.get(row.id) ?? []
-    }));
-    const risks = database.prepare(`
-      SELECT external_id AS id, title, severity, status, owner, mitigation,
-             due_date AS dueDate, source
-      FROM project_risks WHERE version_id = ? ORDER BY position
-    `).all(versionId);
-    const metrics = database.prepare(`
-      SELECT external_id AS id, name, value_json AS valueJson, unit, status,
-             as_of AS asOf, target_json AS targetJson, source
-      FROM project_metrics WHERE version_id = ? ORDER BY position
-    `).all(versionId).map(row => ({
-      id: row.id,
-      name: row.name,
-      value: parseNullableJson(row.valueJson),
-      unit: row.unit,
-      status: row.status,
-      asOf: row.asOf,
-      target: parseNullableJson(row.targetJson),
-      source: row.source
-    }));
+
     return {
       projectId: context.projectId,
       layer,
@@ -292,6 +376,20 @@ export function createProjectRepository(database) {
   }
 
   function countVersion(versionId) {
+    const useUnified = tableExists("project_cards") &&
+      database.prepare("SELECT 1 FROM project_cards WHERE version_id = ? LIMIT 1").get(versionId);
+    if (useUnified) {
+      const countType = type => database.prepare(
+        `SELECT count(*) AS count FROM project_cards WHERE version_id = ? AND element_type = ?`
+      ).get(versionId, type).count;
+      return {
+        units: countType("unit"),
+        tasks: countType("task"),
+        stages: countType("stage"),
+        closures: countType("outcome"),
+        workstreams: countType("workstream")
+      };
+    }
     const count = table => database.prepare(`SELECT count(*) AS count FROM ${table} WHERE version_id = ?`).get(versionId).count;
     return {
       units: count("project_units"),
@@ -316,15 +414,25 @@ export function createProjectRepository(database) {
       : filters.sort === "updated"
         ? "p.updated_at DESC, p.name COLLATE NOCASE ASC"
         : "CASE WHEN recent.last_accessed_at IS NULL THEN 1 ELSE 0 END, recent.last_accessed_at DESC, p.updated_at DESC";
+    const useUnified = tableExists("project_cards");
+    const unitCountExpr = useUnified
+      ? "(SELECT count(*) FROM project_cards c WHERE c.version_id = p.published_version_id AND c.element_type = 'unit')"
+      : "(SELECT count(*) FROM project_units u WHERE u.version_id = p.published_version_id)";
+    const taskCountExpr = useUnified
+      ? "(SELECT count(*) FROM project_cards c WHERE c.version_id = p.published_version_id AND c.element_type = 'task')"
+      : "(SELECT count(*) FROM project_tasks t WHERE t.version_id = p.published_version_id)";
+    const stageCountExpr = useUnified
+      ? "(SELECT count(*) FROM project_cards c WHERE c.version_id = p.published_version_id AND c.element_type = 'stage')"
+      : "(SELECT count(*) FROM project_stages s WHERE s.version_id = p.published_version_id)";
     const rows = database.prepare(`
       SELECT p.id, p.name, p.template_id AS templateId, p.template_version AS templateVersion,
              p.status, p.updated_at AS updatedAt, p.terminology_json AS terminologyJson,
              published.version_label AS publishedVersion,
              CASE WHEN ? = 1 THEN 'platform_admin' ELSE membership.role END AS role,
              json_extract(published.metadata_json, '$.summary') AS summary,
-             (SELECT count(*) FROM project_units u WHERE u.version_id = p.published_version_id) AS unitCount,
-             (SELECT count(*) FROM project_tasks t WHERE t.version_id = p.published_version_id) AS taskCount,
-             (SELECT count(*) FROM project_stages s WHERE s.version_id = p.published_version_id) AS stageCount,
+             ${unitCountExpr} AS unitCount,
+             ${taskCountExpr} AS taskCount,
+             ${stageCountExpr} AS stageCount,
              recent.last_accessed_at AS lastAccessedAt
       FROM projects p
       JOIN project_versions published ON published.id = p.published_version_id AND published.project_id = p.id AND published.layer = 'published'
@@ -387,19 +495,21 @@ export function createProjectRepository(database) {
   }
 
   function recordRecentAccess(userId, projectId, accessedAt) {
-    database.prepare(`
-      INSERT INTO recent_project_access (user_id, project_id, last_accessed_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(user_id, project_id) DO UPDATE SET last_accessed_at = excluded.last_accessed_at
-    `).run(userId, projectId, accessedAt);
+    upsert(database, "recent_project_access",
+      ["user_id", "project_id", "last_accessed_at"],
+      [userId, projectId, accessedAt],
+      ["user_id", "project_id"],
+      ["last_accessed_at"]
+    );
   }
 
   function addProjectMember(projectId, userId, role, createdAt) {
-    database.prepare(`
-      INSERT INTO project_members (project_id, user_id, role, created_at)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(project_id, user_id) DO UPDATE SET role = excluded.role
-    `).run(projectId, userId, role, createdAt);
+    upsert(database, "project_members",
+      ["project_id", "user_id", "role", "created_at"],
+      [projectId, userId, role, createdAt],
+      ["project_id", "user_id"],
+      ["role"]
+    );
   }
 
   function updateProjectMetadata(projectId, values) {

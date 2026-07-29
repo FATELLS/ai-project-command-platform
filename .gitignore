@@ -44,3 +44,14 @@ _capture_*.mjs
 .e2e-auth/
 test-results/
 playwright-report/
+
+# 测试报告和截图（体积大，不提交）
+outputs/
+e2e-report/
+
+# WorkBuddy 工作目录
+.workbuddy/
+
+# 临时凭据
+session-cookie.txt
+

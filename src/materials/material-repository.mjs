@@ -12,8 +12,8 @@ export function createMaterialRepository(database, options = {}) {
     const timestamp = now();
     let rejection;
     withTransaction(database, () => {
-      if (!database.prepare("SELECT 1 FROM projects WHERE id = ?").get(projectId)) throw new MaterialGateError("project_not_found", "Project was not found");
-      if (!database.prepare("SELECT 1 FROM users WHERE id = ? AND status = 'active'").get(userId)) throw new MaterialGateError("user_not_found", "User was not found");
+      if (!database.prepare("SELECT 1 FROM projects WHERE id = ?").get(projectId)) throw new MaterialGateError("project_not_found", "项目不存在");
+      if (!database.prepare("SELECT 1 FROM users WHERE id = ? AND status = 'active'").get(userId)) throw new MaterialGateError("user_not_found", "用户不存在");
       database.prepare("DELETE FROM material_upload_locks WHERE expires_at <= ?").run(iso(timestamp));
       const recent = database.prepare(`
         SELECT count(*) AS count FROM material_upload_attempts
@@ -49,13 +49,13 @@ export function createMaterialRepository(database, options = {}) {
       const reservation = database.prepare(`
         SELECT 1 FROM material_upload_locks WHERE project_id = ? AND user_id = ? AND attempt_id = ? AND expires_at > ?
       `).get(input.projectId, input.userId, input.attemptId, timestamp);
-      if (!reservation) throw new MaterialGateError("upload_reservation_expired", "Upload reservation is missing or expired");
+      if (!reservation) throw new MaterialGateError("upload_reservation_expired", "上传预留已过期");
       const count = database.prepare(`SELECT count(*) AS count FROM project_materials WHERE project_id = ? AND status <> 'deleting'`).get(input.projectId).count;
-      if (count >= limits.maxMaterialsPerProject) throw new MaterialGateError("project_material_limit", "Project material count limit exceeded");
+      if (count >= limits.maxMaterialsPerProject) throw new MaterialGateError("project_material_limit", "项目材料数量已达上限");
       const usage = database.prepare(`SELECT coalesce(sum(byte_size), 0) AS bytes FROM material_artifacts WHERE project_id = ? AND status = 'available'`).get(input.projectId).bytes;
-      if (usage + input.byteSize > limits.maxProjectArtifactBytes) throw new MaterialGateError("project_capacity_limit", "Project material storage limit exceeded");
+      if (usage + input.byteSize > limits.maxProjectArtifactBytes) throw new MaterialGateError("project_capacity_limit", "项目存储空间已满");
       if (database.prepare("SELECT 1 FROM project_materials WHERE project_id = ? AND sha256 = ?").get(input.projectId, input.sha256)) {
-        throw new MaterialGateError("duplicate_material", "This project already contains the same material");
+        throw new MaterialGateError("duplicate_material", "该项目已存在相同的材料");
       }
       database.prepare(`
         INSERT INTO project_materials (

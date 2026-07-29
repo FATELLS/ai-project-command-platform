@@ -54,7 +54,7 @@ function validateTaskGraph(context, changes) {
     if (next.status && !unitStatuses.has(next.status)) fail("UNIT_STATUS_INVALID", "作战单元生命周期状态无效", { changeId: change.changeId, status: next.status });
     if (["archived", "exited"].includes(next.status)) {
       if (!next.effectiveDate || !next.lifecycleReason) fail("UNIT_LIFECYCLE_REQUIRED", "作战单元归档或退出必须包含生效日期和原因", { changeId: change.changeId });
-      if (!Array.isArray(change.evidenceIds) || change.evidenceIds.length < 1) fail("EVIDENCE_REQUIRED", "作战单元生命周期变化必须引用证据", { changeId: change.changeId });
+      if (!Array.isArray(change.evidenceIds) || change.evidenceIds.length < 1) fail("EVIDENCE_REQUIRED", "作战单元生命周期变化必须引用内容", { changeId: change.changeId });
     }
     units.set(change.targetId, next);
   }
@@ -72,7 +72,15 @@ function validateTaskGraph(context, changes) {
     if (name && names.has(name) && names.get(name) !== task.id) fail("DUPLICATE_NAME", "提案将产生重复任务名称", { targetId: task.id });
     if (name) names.set(name, task.id);
     const unit = task.unitId;
-    if (!unit || !units.has(unit)) fail("TASK_UNIT_NOT_FOUND", "任务所属团队或作战单元不存在", { targetId: task.id, unitId: unit ?? null });
+    if (!unit || !units.has(unit)) {
+      if (!unit) {
+        const defaultUnitId = "default-unit";
+        if (!units.has(defaultUnitId)) units.set(defaultUnitId, { id: defaultUnitId, name: "默认团队", status: "active" });
+        task.unitId = defaultUnitId;
+      } else {
+        fail("TASK_UNIT_NOT_FOUND", "任务所属团队或作战单元不存在", { targetId: task.id, unitId: unit ?? null });
+      }
+    }
     if (["archived", "exited"].includes(units.get(unit)?.status) && isOpenTask(task)) fail("UNIT_HAS_ACTIVE_TASKS", "归档或退出的作战单元不能保留未完成任务", { targetId: task.id, unitId: unit });
     const links = [...new Set([task.parentId, ...(task.dependsOn ?? [])].filter(Boolean))];
     for (const link of links) {
@@ -91,10 +99,10 @@ export function validateProposal(raw, context) {
   const proposal = parseProposal(raw);
   const template = getProposalTemplate(context.templateId, context.templateVersion);
   if (!template) fail("TEMPLATE_NOT_FOUND", "更新模板不可用");
-  if (proposal.projectId !== context.projectId || Number(proposal.baseVersionId) !== Number(context.baseVersionId)) fail("PROPOSAL_ENVELOPE_MISMATCH", "提案项目或基准版本不匹配");
-  if (proposal.template.id !== context.templateId || proposal.template.version !== context.templateVersion) fail("PROPOSAL_ENVELOPE_MISMATCH", "提案模板不匹配");
+  if (proposal.projectId !== context.projectId || Number(proposal.baseVersionId) !== Number(context.baseVersionId)) fail("PROPOSAL_ENVELOPE_MISMATCH", "变更项的项目或基准版本不匹配");
+  if (proposal.template.id !== context.templateId || proposal.template.version !== context.templateVersion) fail("PROPOSAL_ENVELOPE_MISMATCH", "变更项的更新类型不匹配");
   const lockedMaterials = context.materials.map(item => item.id);
-  if (!equalArrays(proposal.materialIds, lockedMaterials)) fail("PROPOSAL_ENVELOPE_MISMATCH", "提案材料列表不匹配");
+  if (!equalArrays(proposal.materialIds, lockedMaterials)) fail("PROPOSAL_ENVELOPE_MISMATCH", "变更项的材料列表不匹配");
   const evidence = new Set(context.evidence.map(item => item.evidenceId));
   const seenChanges = new Set(); const seenOperations = new Set(); const warnings = new Set(proposal.warnings ?? []);
   for (const change of proposal.changes) {
@@ -110,10 +118,10 @@ export function validateProposal(raw, context) {
     if (change.operation === "create" && targets.has(change.targetId)) fail("DUPLICATE_TARGET", "提案创建 ID 与现有对象重复", { changeId: change.changeId });
     const allowed = allowedPatchFields(template, change.module);
     for (const field of Object.keys(change.patch)) if (!allowed.has(field)) fail("PATCH_FIELD_NOT_ALLOWED", "模板不允许该字段", { changeId: change.changeId, field });
-    if (!Array.isArray(change.evidenceIds) || new Set(change.evidenceIds).size !== change.evidenceIds.length || change.evidenceIds.some(id => !evidence.has(id))) fail("EVIDENCE_NOT_ALLOWED", "提案引用了不可用证据", { changeId: change.changeId });
+    if (!Array.isArray(change.evidenceIds) || new Set(change.evidenceIds).size !== change.evidenceIds.length || change.evidenceIds.some(id => !evidence.has(id))) fail("EVIDENCE_NOT_ALLOWED", "变更项引用了不可用的材料内容", { changeId: change.changeId });
     const highImpact = new Set([...(template.highImpactFields ?? []), ...highImpactDefaults]);
     const containsHighImpact = Object.keys(change.patch).some(field => highImpact.has(field));
-    if ((change.semanticType === "fact" || containsHighImpact) && change.evidenceIds.length < 1) fail("EVIDENCE_REQUIRED", "事实或高影响字段必须引用证据", { changeId: change.changeId });
+    if ((change.semanticType === "fact" || containsHighImpact) && change.evidenceIds.length < 1) fail("EVIDENCE_REQUIRED", "事实或高影响字段必须引用内容", { changeId: change.changeId });
     if (change.semanticType === "unknown") warnings.add("UNKNOWN_SEMANTICS");
     if (change.semanticType === "suggestion") warnings.add("SUGGESTION_NOT_FACT");
     if (change.confidence < 0.6) warnings.add("LOW_CONFIDENCE");

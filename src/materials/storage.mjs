@@ -26,7 +26,7 @@ export function createMaterialStorage(options = {}) {
 
   function resolveKey(key) {
     const path = resolve(root, key);
-    if (!inside(root, path)) throw new MaterialGateError("invalid_storage_key", "Storage key escaped its root");
+    if (!inside(root, path)) throw new MaterialGateError("invalid_storage_key", "存储路径越界");
     return path;
   }
 
@@ -49,7 +49,7 @@ export function createMaterialStorage(options = {}) {
       const counter = new Transform({
         transform(chunk, _encoding, callback) {
           byteSize += chunk.length;
-          if (byteSize > maxBytes) return callback(new MaterialGateError("file_too_large", "File exceeds the configured byte limit"));
+          if (byteSize > maxBytes) return callback(new MaterialGateError("file_too_large", "文件超过大小限制"));
           hash.update(chunk);
           if (probeLength < probeBytes) {
             const part = chunk.subarray(0, probeBytes - probeLength);
@@ -63,13 +63,13 @@ export function createMaterialStorage(options = {}) {
         await pipeline(source, counter, createWriteStream(path, { flags: "w", mode: 0o600 }), { signal });
       } catch (error) {
         await rm(path, { force: true });
-        if (error?.name === "AbortError") throw new MaterialGateError("upload_aborted", "Upload was aborted");
+        if (error?.name === "AbortError") throw new MaterialGateError("upload_aborted", "上传已取消");
         throw error;
       }
       return { byteSize, sha256: hash.digest("hex"), probe: Buffer.concat(chunks, probeLength) };
     },
     commitStage(stagePath, { projectId, materialId }) {
-      if (!inside(stagingRoot, resolve(stagePath))) throw new MaterialGateError("invalid_stage", "Invalid staging path");
+      if (!inside(stagingRoot, resolve(stagePath))) throw new MaterialGateError("invalid_stage", "无效的暂存路径");
       const key = `objects/${encodeURIComponent(projectId)}/${materialId}/original`;
       const target = resolveKey(key);
       mkdirSync(dirname(target), { recursive: true, mode: 0o700 });
@@ -85,7 +85,7 @@ export function createMaterialStorage(options = {}) {
 function openZip(path) {
   return new Promise((resolveZip, reject) => {
     yauzl.open(path, { lazyEntries: true, validateEntrySizes: true, strictFileNames: true }, (error, zip) => {
-      if (error) reject(new MaterialGateError("invalid_container", "Office container is invalid or truncated"));
+      if (error) reject(new MaterialGateError("invalid_container", "Office 文件已损坏或截断"));
       else resolveZip(zip);
     });
   });
@@ -109,7 +109,7 @@ export async function validateOfficeContainer(path, declared, limits) {
       zip.close();
       rejectValidation(new MaterialGateError(code, message));
     };
-    zip.on("error", () => fail("invalid_container", "Office container is invalid or truncated"));
+    zip.on("error", () => fail("invalid_container", "Office 文件已损坏或截断"));
     zip.on("entry", entry => {
       entries += 1;
       const name = entry.fileName.replaceAll("\\", "/");
@@ -132,7 +132,7 @@ export async function validateOfficeContainer(path, declared, limits) {
       if (settled) return;
       settled = true;
       if (!seen.has("[Content_Types].xml") || !seen.has(required)) {
-        rejectValidation(new MaterialGateError("container_type_mismatch", "Office container does not match its extension"));
+        rejectValidation(new MaterialGateError("container_type_mismatch", "Office 文件类型与扩展名不匹配"));
       } else resolveValidation({ entries, expandedBytes: expanded });
     });
     zip.readEntry();

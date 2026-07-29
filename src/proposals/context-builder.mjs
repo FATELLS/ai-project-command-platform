@@ -54,7 +54,7 @@ export function buildGenerationContext(database, input) {
   if (rows.length !== materialIds.length) throw proposalError("MATERIAL_NOT_FOUND", "材料不存在或你无权访问", 404);
   const byId = new Map(rows.map(row => [row.id, row]));
   const materials = materialIds.map(id => byId.get(id));
-  if (materials.some(row => row.status !== "ready" || !row.extractionVersion)) throw proposalError("MATERIAL_NOT_READY", "所选材料证据尚未就绪", 409);
+  if (materials.some(row => row.status !== "ready" || !row.extractionVersion)) throw proposalError("MATERIAL_NOT_READY", "所选材料尚未处理完成", 409);
   if (materials.some(row => !row.generationEnabled)) throw proposalError("GENERATION_NOT_GRANTED", "所选材料尚未授权用于更新生成", 409);
   if (materials.some(row => !row.templateId || !row.templateVersion)) throw proposalError("UPDATE_TEMPLATE_REQUIRED", "所选材料尚未选择更新模板", 409);
   const templateKey = `${materials[0].templateId}@${materials[0].templateVersion}`;
@@ -82,7 +82,7 @@ export function buildGenerationContext(database, input) {
       evidence.push({ ...row, location: JSON.parse(row.locationJson), materialName: material.name });
     }
   }
-  if (!evidence.length) throw proposalError("EVIDENCE_REQUIRED", "所选材料没有可用于生成的证据", 409);
+  if (!evidence.length) throw proposalError("EVIDENCE_REQUIRED", "所选材料没有可用于生成的内容", 409);
   const [templateId, templateVersion] = templateKey.split("@");
   const published = boundedPublished(graph);
   const digest = createHash("sha256").update(JSON.stringify({ projectId, baseVersionId: graph.versionId, templateKey, materials: materials.map(item => [item.id, item.extractionVersion]), evidence: evidence.map(item => [item.evidenceId, item.contentHash]) })).digest("hex");

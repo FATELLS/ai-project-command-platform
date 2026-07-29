@@ -1,6 +1,6 @@
 import { deepFreeze, validateTemplateManifest } from "./template-validator.mjs";
 
-const moduleOrder = ["overview", "roadmap", "units", "task-network", "gantt", "outcomes", "risks", "metrics", "materials"];
+const moduleOrder = ["overview", "roadmap", "units", "task-network", "gantt", "risks", "metrics", "materials"];
 
 function modules(config) {
   return moduleOrder.map((type, position) => ({
@@ -67,7 +67,6 @@ export const campaignMapTemplate = manifest({
     units: { title: "作战单元", viewVariant: "campaign-cards", emptyState: "尚未建立作战单元" },
     "task-network": { title: "任务网络", viewVariant: "branching-network", emptyState: "暂无行动任务" },
     gantt: { title: "甘特协同", viewVariant: "branching", emptyState: "暂无可展示的甘特任务" },
-    outcomes: { title: "战果档案", viewVariant: "closure-detail", emptyState: "暂无已归档战果" },
     risks: { title: "风险台账", viewVariant: "risk-register", emptyState: "暂无已登记风险" },
     metrics: { title: "效果指标", viewVariant: "metric-cards", emptyState: "暂无已登记指标" },
     materials: { title: "项目材料", viewVariant: "materials-empty", emptyState: "项目材料功能将在下一阶段开放" }
@@ -121,7 +120,6 @@ export const standardProjectTemplate = manifest({
     units: { title: "团队", viewVariant: "team-cards", emptyState: "尚未建立团队" },
     "task-network": { title: "任务依赖", viewVariant: "dependency-list", emptyState: "暂无任务" },
     gantt: { title: "项目甘特", viewVariant: "lanes", emptyState: "暂无可展示的甘特任务" },
-    outcomes: { title: "交付物", viewVariant: "archive-grid", emptyState: "暂无已登记交付物" },
     risks: { title: "风险台账", viewVariant: "risk-register", emptyState: "暂无已登记风险" },
     metrics: { title: "项目指标", viewVariant: "metric-cards", emptyState: "暂无已登记指标" },
     materials: { title: "项目材料", viewVariant: "materials-empty", emptyState: "项目材料功能将在下一阶段开放" }

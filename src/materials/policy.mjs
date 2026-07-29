@@ -42,31 +42,31 @@ export class MaterialGateError extends Error {
 export function sanitizeDisplayName(value) {
   const leaf = String(value ?? "").replaceAll("\\", "/").split("/").pop();
   const clean = leaf.normalize("NFKC").replace(/[\u0000-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim();
-  if (!clean) throw new MaterialGateError("invalid_name", "A display filename is required");
+  if (!clean) throw new MaterialGateError("invalid_name", "请输入有效的文件名");
   return clean.slice(0, 240);
 }
 
 export function declaredMaterialType(filename, mime) {
   const extension = extname(filename).toLowerCase();
   const expected = types[extension];
-  if (!expected) throw new MaterialGateError("unsupported_type", "File extension is not allowed");
+  if (!expected) throw new MaterialGateError("unsupported_type", "不支持此文件类型");
   const normalizedMime = String(mime ?? "").split(";", 1)[0].trim().toLowerCase();
   if (!(expected.acceptedMimes ?? [expected.mime]).includes(normalizedMime)) {
-    throw new MaterialGateError("mime_mismatch", "Declared content type does not match the extension");
+    throw new MaterialGateError("mime_mismatch", "文件类型与扩展名不匹配");
   }
   return { extension, mime: expected.mime, detected: expected.detected };
 }
 
 export async function validateMagic(probe, declared) {
   if (declared.detected === null) {
-    if (probe.includes(0)) throw new MaterialGateError("magic_mismatch", "Text material contains binary bytes");
+    if (probe.includes(0)) throw new MaterialGateError("magic_mismatch", "文本材料包含二进制内容");
     try { new TextDecoder("utf-8", { fatal: true }).decode(probe); }
-    catch { throw new MaterialGateError("invalid_encoding", "Text material must be UTF-8"); }
+    catch { throw new MaterialGateError("invalid_encoding", "文本材料必须是 UTF-8 编码"); }
     return;
   }
   const detected = await fileTypeFromBuffer(probe);
   if (!detected || detected.ext !== declared.detected) {
-    throw new MaterialGateError("magic_mismatch", "File signature does not match the declared type");
+    throw new MaterialGateError("magic_mismatch", "文件内容与声明的类型不匹配");
   }
 }
 

@@ -34,7 +34,7 @@ test("route and envelope state contract fails closed without mixing stale module
 });
 
 test("project navigation groups nine safe modules into six user-facing work areas", () => {
-  for (const copy of ["项目路线图", "排期甘特", "项目健康", "项目资料", "材料台账", "更新提案"]) {
+  for (const copy of ["项目路线图", "排期甘特", "项目健康", "项目资料", "项目材料", "更新建议"]) {
     assert.match(app, new RegExp(copy));
   }
   assert.match(app, /types: \["roadmap", "task-network"\]/);

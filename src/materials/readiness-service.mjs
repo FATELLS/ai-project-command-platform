@@ -63,7 +63,7 @@ function evaluate(templateId, rows) {
     ? `请补充${missing.map(item => item.label).join("、")}后再生成项目更新。`
     : warnings.length
       ? `可继续生成，但建议补充${warnings.map(item => item.label).join("、")}以降低人工审核成本。`
-      : "材料关键内容覆盖充分，可以生成结构化更新提案。";
+      : "材料内容完整，可以生成更新建议。";
   return { status, missing, warnings, evidence, suggestion };
 }
 

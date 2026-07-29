@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { withTransaction } from "../db/database.mjs";
+import { insertOrIgnore } from "../db/sql-dialect.mjs";
 import { createEvidenceService } from "../materials/evidence-service.mjs";
 import { createMaterialIngestService } from "../materials/ingest-service.mjs";
 import { materialLimits } from "../materials/policy.mjs";
@@ -30,8 +31,13 @@ export function createMaterialService(database, options = {}) {
   }
 
   withTransaction(database, () => {
-    const insert = database.prepare("INSERT OR IGNORE INTO templates (id, version, name, config_json, created_at) VALUES (?, ?, ?, ?, ?)");
-    for (const template of updateTemplates) insert.run(template.id, template.version, template.label, JSON.stringify({ kind: "material-update-template", label: template.label }), "2026-07-18T00:00:00.000Z");
+    for (const template of updateTemplates) {
+      insertOrIgnore(database, "templates",
+        ["id", "version", "name", "config_json", "created_at"],
+        [template.id, template.version, template.label, JSON.stringify({ kind: "material-update-template", label: template.label }), "2026-07-18T00:00:00.000Z"],
+        ["id", "version"]
+      );
+    }
   });
 
   function access(principal, projectId) {

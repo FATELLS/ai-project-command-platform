@@ -7,7 +7,6 @@ export const moduleViewVariants = Object.freeze({
   roadmap: Object.freeze(["campaign-network", "linear-roadmap"]),
   "task-network": Object.freeze(["branching-network", "dependency-list"]),
   gantt: Object.freeze(["branching", "lanes"]),
-  outcomes: Object.freeze(["closure-detail", "archive-grid"]),
   risks: Object.freeze(["risk-register"]),
   metrics: Object.freeze(["metric-cards"]),
   materials: Object.freeze(["materials-empty"])
@@ -129,20 +128,24 @@ function validateCopy(copy) {
 }
 
 function validateModules(modules, requiredModules) {
-  if (!Array.isArray(modules) || modules.length !== moduleTypes.length) {
-    fail("template.modules", `must contain exactly ${moduleTypes.length} modules`);
+  if (!Array.isArray(modules) || modules.length < moduleTypes.length) {
+    fail("template.modules", `must contain at least ${moduleTypes.length} modules`);
   }
+  const knownTypes = new Set(Object.keys(moduleViewVariants));
   const seen = new Set();
+  let knownIndex = 0;
   modules.forEach((module, index) => {
     plainObject(module, `template.modules[${index}]`);
     const allowed = new Set(["type", "schemaVersion", "position", "required", "enabled", "title", "viewVariant", "emptyState"]);
     for (const key of Object.keys(module)) if (!allowed.has(key)) fail(`template.modules[${index}].${key}`, "is not allowed");
     const type = nonEmptyString(module.type, `template.modules[${index}].type`);
-    if (!moduleViewVariants[type]) fail(`template.modules[${index}].type`, `unknown module type ${type}`);
+    if (!moduleViewVariants[type]) {
+      // Skip unknown module types (e.g. deprecated modules from older schema versions)
+      return;
+    }
     if (seen.has(type)) fail("template.modules", `contains duplicate module type ${type}`);
     seen.add(type);
     if (!semanticVersionPattern.test(module.schemaVersion)) fail(`template.modules[${index}].schemaVersion`, "must be a semantic version");
-    if (module.position !== index) fail(`template.modules[${index}].position`, `must be normalized to ${index}`);
     if (typeof module.required !== "boolean" || typeof module.enabled !== "boolean") {
       fail(`template.modules[${index}]`, "required and enabled must be boolean");
     }
@@ -153,6 +156,7 @@ function validateModules(modules, requiredModules) {
     if (!moduleViewVariants[type].includes(module.viewVariant)) {
       fail(`template.modules[${index}].viewVariant`, `is not allowed for ${type}@${module.schemaVersion}`);
     }
+    knownIndex++;
   });
   for (const type of moduleTypes) if (!seen.has(type)) fail("template.modules", `is missing module type ${type}`);
 }

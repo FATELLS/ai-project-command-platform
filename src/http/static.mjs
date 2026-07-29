@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 const contentTypes = Object.freeze({
   "/app.js": "text/javascript; charset=utf-8",
+  "/material-template-downloads.js": "text/javascript; charset=utf-8",
   "/modules/registry.js": "text/javascript; charset=utf-8",
   "/modules/shared.js": "text/javascript; charset=utf-8",
   "/modules/renderers.js": "text/javascript; charset=utf-8",
@@ -13,6 +14,7 @@ const contentTypes = Object.freeze({
 });
 
 const assetFiles = Object.freeze({
+  "/material-template-downloads.js": ["material-template-downloads.js"],
   "/modules/registry.js": ["modules", "registry.js"],
   "/modules/shared.js": ["modules", "shared.js"],
   "/modules/renderers.js": ["modules", "renderers.js"],

@@ -73,22 +73,45 @@ test("interaction proposal rejects high-impact change without evidence", () => {
   } finally { db.close(); }
 });
 
-test("interaction proposal requires at least one project material and rejects foreign evidence", () => {
+test("interaction proposal allows source-free low-impact edits and rejects foreign evidence", () => {
   const db = setup();
   try {
     const service = createProposalService(db);
-    throwsCode(() => service.createInteractionProposal({ id: "editor" }, "project-a", {
-      summary: "无材料",
+    const lowImpact = service.createInteractionProposal({ id: "editor" }, "project-a", {
+      summary: "标题修正",
       materialIds: [],
       evidenceIds: [],
-      changes: [{ changeId: "change-003", module: "task-network", operation: "update", targetId: "task-001", semanticType: "plan", patch: { owner: "负责人" }, confidence: 0.6, warnings: [], evidenceIds: [] }]
-    }), "INVALID_MATERIAL_SELECTION");
+      changes: [{ changeId: "change-003", module: "task-network", operation: "update", targetId: "task-001", semanticType: "plan", patch: { title: "开放任务（修正）" }, confidence: 1, warnings: [], evidenceIds: [] }]
+    });
+    assert.equal(lowImpact.proposal.status, "pending");
+    assert.deepEqual(lowImpact.proposal.materialIds, []);
     throwsCode(() => service.createInteractionProposal({ id: "editor" }, "project-a", {
       summary: "伪造证据",
       materialIds: ["material-00000001"],
       evidenceIds: ["evidence-does-not-exist-1234567890"],
       changes: [{ changeId: "change-004", module: "task-network", operation: "update", targetId: "task-001", semanticType: "plan", patch: { owner: "负责人" }, confidence: 0.6, warnings: [], evidenceIds: ["evidence-does-not-exist-1234567890"] }]
     }), "EVIDENCE_NOT_ALLOWED");
+  } finally { db.close(); }
+});
+
+test("interaction proposal delete requires evidence", () => {
+  const db = setup();
+  try {
+    const service = createProposalService(db);
+    const change = { changeId: "delete-001", module: "task-network", operation: "delete", targetId: "task-001", semanticType: "plan", patch: {}, confidence: 1, warnings: ["DELETE_OPERATION"], evidenceIds: [] };
+    throwsCode(() => service.createInteractionProposal({ id: "editor" }, "project-a", {
+      summary: "删除任务",
+      materialIds: [],
+      evidenceIds: [],
+      changes: [change]
+    }), "EVIDENCE_REQUIRED");
+    const result = service.createInteractionProposal({ id: "editor" }, "project-a", {
+      summary: "删除任务",
+      materialIds: ["material-00000001"],
+      evidenceIds: ["evidence-00000001"],
+      changes: [{ ...change, changeId: "delete-002", evidenceIds: ["evidence-00000001"] }]
+    });
+    assert.equal(result.proposal.changes[0].operation, "delete");
   } finally { db.close(); }
 });
 

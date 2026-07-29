@@ -26,6 +26,10 @@
   },
   "scripts": {
     "start": "node --env-file-if-exists=.env --env-file-if-exists=.env.local server.mjs",
+    "start:background": "node scripts/manage-server.mjs start",
+    "stop": "node scripts/manage-server.mjs stop",
+    "status": "node scripts/manage-server.mjs status",
+    "restart": "node scripts/manage-server.mjs restart",
     "migrate": "node scripts/migrate-db.mjs",
     "import:xugu": "node scripts/import-project.mjs --fixture fixtures/projects/xugu-agentic-group.json --project xugu-agentic-group",
     "export:xugu": "node scripts/export-project.mjs --project xugu-agentic-group --stdout",
@@ -34,6 +38,7 @@
     "verify": "node scripts/verify.mjs",
     "test": "node --test \"test/*.test.mjs\"",
     "test:e2e": "npx playwright test --reporter=list",
+    "test:e2e:abnormal": "npx playwright test --config=playwright.abnormal.config.mjs",
     "e2e:install": "npx playwright install chromium",
     "build:pkg": "node scripts/build-native.mjs",
     "build:deb": "node scripts/build-packages.mjs deb",

@@ -34,13 +34,16 @@ test("route and envelope state contract fails closed without mixing stale module
 });
 
 test("project navigation groups nine safe modules into six user-facing work areas", () => {
-  for (const copy of ["项目路线图", "排期甘特", "项目健康", "项目资料", "项目材料", "更新建议"]) {
+  for (const copy of ["项目路线图", "排期甘特", "项目健康", "项目资料", "项目材料", "项目更新"]) {
     assert.match(app, new RegExp(copy));
   }
   assert.match(app, /types: \["roadmap", "task-network"\]/);
   assert.match(app, /types: \["risks", "metrics"\]/);
   assert.match(app, /types: \["outcomes", "materials"\]/);
   assert.match(app, /moduleSectionNavigation/);
+  assert.match(app, /activeWorkspace === "update"/);
+  assert.match(app, /\/updates/);
+  assert.doesNotMatch(app.slice(app.indexOf("function moduleSectionNavigation"), app.indexOf("function canConfigureModules")), /AI 生成项目节点预览/);
   assert.match(css, /\.module-section-nav/);
   assert.doesNotMatch(app, /manifest\.modules\.map\(module => \{\s*const path = canonicalModulePath/);
 });
@@ -79,13 +82,15 @@ test("overview, units, roadmap, network, gantt and outcomes are DTO-driven with 
   assert.doesNotMatch(renderers, /data-closure-id/);
 });
 
-test("risks, metrics and materials preserve exact empty and Phase 4 boundary copy", () => {
+test("risks, metrics and materials preserve honest empty states and the controlled AI boundary", () => {
   for (const name of ["renderRisks", "renderMetrics", "renderMaterials"]) assert.match(renderers, new RegExp(`export function ${name}`));
   for (const copy of [
     "暂无已登记风险", "这表示尚未录入风险，不代表项目已确认无风险。", "暂无已登记指标",
-    "项目材料功能将在下一阶段开放", "当前页面不会读取或上传材料。", "待补充", "目标"
+    "上传与管理材料", "AI 只生成带来源的节点预览；不会修改项目草稿或发布版本。", "待补充", "目标"
   ]) assert.match(renderers, new RegExp(copy.replace(/[。]/g, "。")));
-  assert.doesNotMatch(renderers, /拖拽上传|创建问答|AI 生成|type: "file"/);
+  assert.match(renderers, /input\.type = "file"/);
+  assert.match(renderers, /renderNodePreviewRoadmap/);
+  assert.match(renderers, /不会修改项目草稿或发布版本/);
 });
 
 test("draft-only module configuration sheet is role-gated, ordered and transactional", () => {
@@ -121,6 +126,10 @@ test("responsive and accessibility CSS keeps local scrolling and Xugu frame", ()
 test("roadmap card swimlane keeps the main route and two-level task projection fixed", () => {
   for (const contract of [
     /function renderRoadmapSwimlane\(context\)/,
+    /function openRoadmapCardEditor\(context, options\)/,
+    /className: `roadmap-card-edit-button/,
+    /提交编辑审核/,
+    /placeholder: "输入：确认删除"/,
     /className: "swimlane-main-cards"/,
     /className: "swimlane-card-expansion"/,
     /className: "swimlane-child-focus"/,
@@ -138,6 +147,8 @@ test("roadmap card swimlane keeps the main route and two-level task projection f
   for (const contract of [
     /\.swimlane-main-cards\s*\{[^}]*grid-template-columns:\s*repeat\(var\(--stage-count\)/,
     /\.swimlane-task-card-shell\s*\{[^}]*border-left:\s*4px solid var\(--unit-accent\)/,
+    /\.roadmap-card-edit-button\s*\{/,
+    /\.card-editor-danger\s*\{/,
     /\.swimlane-task-card\s*\{[^}]*width:\s*100%/,
     /\.swimlane-card-board\s*\{[^}]*min-width:\s*var\(--swimlane-board-min-width/,
     /\.swimlane-card-board\[data-open-stage\][^}]*background:\s*rgba\(15,\s*43,\s*76,\s*\.18\)/,

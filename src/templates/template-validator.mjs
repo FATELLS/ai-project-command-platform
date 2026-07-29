@@ -7,6 +7,7 @@ export const moduleViewVariants = Object.freeze({
   roadmap: Object.freeze(["campaign-network", "linear-roadmap"]),
   "task-network": Object.freeze(["branching-network", "dependency-list"]),
   gantt: Object.freeze(["branching", "lanes"]),
+  outcomes: Object.freeze(["closure-detail", "archive-grid"]),
   risks: Object.freeze(["risk-register"]),
   metrics: Object.freeze(["metric-cards"]),
   materials: Object.freeze(["materials-empty"])
@@ -146,6 +147,9 @@ function validateModules(modules, requiredModules) {
     if (seen.has(type)) fail("template.modules", `contains duplicate module type ${type}`);
     seen.add(type);
     if (!semanticVersionPattern.test(module.schemaVersion)) fail(`template.modules[${index}].schemaVersion`, "must be a semantic version");
+    if (!Number.isInteger(module.position) || module.position !== knownIndex) {
+      fail(`template.modules[${index}].position`, "must be normalized");
+    }
     if (typeof module.required !== "boolean" || typeof module.enabled !== "boolean") {
       fail(`template.modules[${index}]`, "required and enabled must be boolean");
     }

@@ -32,9 +32,10 @@ test.describe("材料→生成→审核→发布闭环", () => {
     expect(gen.payload.task.state).toBe("succeeded");
     const proposalId = gen.payload.task.proposalId;
 
-    // 5) UI 验证提案工作区出现该提案
-    await page.goto(`/projects/${P}/modules/materials?view=proposals`);
-    await expect(page.locator(".proposal-workspace-header")).toBeVisible();
+    // 5) UI 验证独立项目更新流程只显示一张统一路线图
+    await page.goto(`/projects/${P}/updates/preview/${proposalId}`);
+    await expect(page.locator(".project-update-roadmap")).toBeVisible();
+    await expect(page.locator(".proposal-list, .generation-task-list")).toHaveCount(0);
 
     // 6) 审核单项接受（管理员 + CSRF）
     const reviewDetail = await api(BASE, `/api/projects/${P}/change-proposals/${proposalId}/review`, h);
@@ -56,7 +57,7 @@ test.describe("材料→生成→审核→发布闭环", () => {
     expect(published.status).toBe(200);
 
     // 9) UI 验证发布中心显示新发布版本标签
-    await page.goto(`/projects/${P}/modules/materials?view=release`);
+    await page.goto(`/projects/${P}/updates/release`);
     await expect(page.getByText(versionLabel).first()).toBeVisible({ timeout: 15000 });
 
     // 10) 回滚到直接前驱

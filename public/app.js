@@ -1,5 +1,6 @@
 import { canonicalModulePath, getClientModule, moduleTypes } from "/modules/registry.js";
-import { moduleError, moduleSkeleton, unsupportedState, validateEnvelope, validateManifest } from "/modules/shared.js";
+import { icon, moduleError, moduleSkeleton, unsupportedState, validateEnvelope, validateManifest } from "/modules/shared.js";
+import { downloadMaterialTemplate } from "/material-template-downloads.js";
 
 const app = document.querySelector("#app");
 const toast = document.querySelector("#toast");
@@ -87,12 +88,17 @@ function element(tag, options = {}, children = []) {
   return node;
 }
 
-function iconButton(label, text, onClick, className = "ghost-button") {
-  return element("button", { type: "button", className, ariaLabel: label, text, onClick });
+function iconButton(label, iconName, onClick, className = "icon-button") {
+  return element("button", { type: "button", className, ariaLabel: label, title: label, onClick }, [icon(iconName)]);
 }
 
 function safeIntendedPath(pathname = location.pathname) {
-  return /^\/projects(?:\/[a-z0-9][a-z0-9._-]{2,63}(?:\/modules\/(?:overview|roadmap|units|task-network|gantt|risks|metrics|materials)(?:\/(?:[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}|(?:generation-tasks|proposals)\/[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}))?)?)?$/.test(pathname) ? `${pathname}${location.search}` : "/projects";
+  const project = "[a-z0-9][a-z0-9._-]{2,63}";
+  const object = "[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}";
+  const projectRoute = new RegExp(`^/projects(?:/${project})?$`);
+  const moduleRoute = new RegExp(`^/projects/${project}/modules/(?:overview|roadmap|units|task-network|gantt|outcomes|risks|metrics|materials)(?:/(?:${object}|(?:generation-tasks|proposals)/${object}))?$`);
+  const updateRoute = new RegExp(`^/projects/${project}/updates(?:/release|/(?:preview|proposals|generation-tasks)/${object})?$`);
+  return [projectRoute, moduleRoute, updateRoute].some(pattern => pattern.test(pathname)) ? `${pathname}${location.search}` : "/projects";
 }
 
 function formatDate(value) {
@@ -260,9 +266,9 @@ function appFrame(mainContent, options = {}) {
     ...(options.switcher ? [element("div", { className: "header-switcher" }, [element("span", { text: "当前项目" }), options.switcher])] : []),
     ...(options.projectActions ?? []),
     ...(chatWidget ? [chatWidget.toggleButton] : []),
-    ...(user.isPlatformAdmin ? [iconButton("平台设置", "设置", () => navigate("/settings"), "admin-entry")] : []),
+    ...(user.isPlatformAdmin ? [iconButton("平台设置", "sliders-horizontal", () => navigate("/settings"), "admin-entry header-icon-button")] : []),
     element("span", { className: "update-time" }, [element("i", { ariaHidden: "true" }), element("span", { text: user.displayName })]),
-    iconButton("退出登录", "退出", logout, "admin-entry")
+    iconButton("退出登录", "log-out", logout, "admin-entry header-icon-button")
   ]);
   return element("div", { className: "public-app app-shell" }, [
     element("header", { className: "public-header" }, [brandLink, navigation, actions]),
@@ -278,7 +284,10 @@ function createHeaderChat(project, presentation) {
     ? ["当前战役路线进行到哪里？", "哪些行动任务存在风险？", "最近归档了哪些战果依据？"]
     : ["当前项目里程碑进展如何？", "哪些任务存在风险？", "最近有哪些交付物依据？"];
 
-  const toggleButton = element("button", { type: "button", className: "chat-header-btn", ariaLabel: qaLabel, ariaExpanded: "false", text: qaLabel });
+  const toggleButton = element("button", { type: "button", className: "chat-header-btn", ariaLabel: qaLabel, ariaExpanded: "false" }, [
+    icon("message-circle", { size: 16 }),
+    element("span", { text: qaLabel })
+  ]);
 
   const overlay = element("div", { className: "chat-dropdown-overlay", hidden: true });
   const panel = element("section", { className: "chat-dropdown-panel", role: "dialog", ariaModal: "false", ariaLabel: qaLabel });
@@ -291,7 +300,7 @@ function createHeaderChat(project, presentation) {
   const questionInput = element("textarea", { className: "chat-dropdown-input", rows: 3, maxLength: 1000, placeholder: presentation.kind === "campaign" ? "询问当前战况、作战单元、节点或行动任务…" : "询问当前项目、团队、里程碑或任务…" });
   const sendBtn = element("button", { type: "submit", className: "primary-button chat-dropdown-send", text: "发送" });
   const errorMsg = element("p", { className: "form-error", role: "alert" });
-  const closeButton = iconButton("关闭问答", "×", () => closePanel(), "chat-dropdown-close");
+  const closeButton = iconButton("关闭问答", "x", () => closePanel(), "chat-dropdown-close");
 
   const form = element("form", { className: "chat-dropdown-form", onSubmit: async event => {
     event.preventDefault();
@@ -387,7 +396,6 @@ function projectCard(project, { recent = false, refresh } = {}) {
       element("span", { className: `badge ${isArchived ? "archived" : "active"}`, text: isArchived ? "已归档" : "进行中" })
     ]),
     title,
-    element("div", { className: "project-id", text: project.id }),
     element("p", { className: "card-summary", text: project.summary || "暂无正式项目摘要" }),
     element("div", { className: "card-meta" }, [
       element("span", { text: project.publishedVersion || "未发布" }),
@@ -398,14 +406,18 @@ function projectCard(project, { recent = false, refresh } = {}) {
       element("span", { text: `${project.taskCount} ${presentation.task}` }),
       element("span", { text: `${project.stageCount} ${presentation.stage}` }),
       element("span", { className: "badge role", text: roleLabels[project.role] ?? project.role })
-    ])
+    ]),
+    ...(project.role === "viewer" ? [] : [element("details", { className: "technical-details project-technical-details" }, [
+      element("summary", { text: "技术信息" }),
+      element("div", { className: "project-id", text: project.id })
+    ])])
   ]);
   if (state.session.user.isPlatformAdmin && !recent) {
     const actions = element("div", { className: "card-actions" });
-    if (isArchived) actions.append(iconButton(`恢复 ${project.name}`, "恢复项目", () => openRestoreDialog(project, refresh)));
+    if (isArchived) actions.append(iconButton(`恢复 ${project.name}`, "refresh-cw", () => openRestoreDialog(project, refresh)));
     else {
-      actions.append(iconButton(`编辑 ${project.name}`, "编辑", () => openEditDialog(project, refresh)));
-      actions.append(iconButton(`归档 ${project.name}`, "归档", () => openArchiveDialog(project, refresh)));
+      actions.append(iconButton(`编辑 ${project.name}`, "pencil", () => openEditDialog(project, refresh)));
+      actions.append(iconButton(`归档 ${project.name}`, "archive", () => openArchiveDialog(project, refresh)));
     }
     card.append(actions);
   }
@@ -437,7 +449,7 @@ async function renderProjects() {
   const results = element("div", { className: "project-grid", ariaLive: "polite", ariaBusy: "true" }, Array.from({ length: 6 }, () => element("div", { className: "project-card skeleton", ariaHidden: "true" })));
   const recentSection = element("section", { hidden: true });
   const search = element("input", { id: "project-search", type: "search", value: filters.q, placeholder: "搜索项目名称或稳定 ID" });
-  const clear = iconButton("清除搜索条件", "×", () => {
+  const clear = iconButton("清除搜索条件", "x", () => {
     search.value = "";
     clear.hidden = true;
     filters.q = "";
@@ -478,20 +490,15 @@ async function renderProjects() {
     element("div", { className: "field" }, [element("label", { htmlFor: "project-sort", text: "排序方式" }), sort])
   ]);
   const refresh = () => load();
-  const page = element("div", {}, [
-    element("header", { className: "page-head command-center-hero" }, [
+  const page = element("div", { className: "projects-workbench" }, [
+    element("header", { className: "page-head operational-page-head" }, [
       element("div", {}, [
-        element("span", { className: "eyebrow", text: "项目控制中心" }),
+        element("span", { className: "eyebrow", text: "项目工作台" }),
         element("h1", { text: "项目作战台" }),
-        element("p", { text: "查看获授权的项目，快速切换作战现场，并管理平台级项目生命周期。" })
+        element("p", { text: "查找并进入获授权的项目。" })
       ]),
       element("div", { className: "head-actions" }, [
-        element("div", { className: "command-orbit", ariaHidden: "true" }, [element("i"), element("b", { text: "PLAN" })]),
-        element("div", { className: "command-status" }, [
-          element("small", { text: "MULTI-PROJECT COMMAND" }),
-          element("strong", { text: "统一项目作战现场" }),
-          element("span", { className: "count-pill", id: "active-project-count", text: "正在载入项目" })
-        ]),
+        element("span", { className: "count-pill", id: "active-project-count", text: "正在载入项目" }),
         ...(state.session.user.isPlatformAdmin ? [element("button", { type: "button", className: "primary-button", text: "新建项目", onClick: () => openCreateDialog(refresh) })] : [])
       ])
     ]),
@@ -562,7 +569,7 @@ function moduleDisplayTitle(module) {
   return module.title;
 }
 
-function moduleNavigation(project, manifest, activeType) {
+function moduleNavigation(project, manifest, activeType, activeWorkspace = "") {
   const scrollBehavior = matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
   const modules = new Map(manifest.modules.map(module => [module.type, module]));
   const groups = [
@@ -571,24 +578,17 @@ function moduleNavigation(project, manifest, activeType) {
     { types: ["units"], title: modules.get("units")?.title },
     { types: ["gantt"], title: "排期甘特" },
     { types: ["risks", "metrics"], title: "项目健康" },
-    { types: ["materials"], title: "项目材料" },
-    { types: ["materials"], title: "项目更新", sectionOverride: "updates" }
+    { types: ["outcomes", "materials"], title: "项目资料" }
   ].map(group => ({ ...group, target: group.types.map(type => modules.get(type)).find(Boolean) })).filter(group => group.target);
   const list = element("ul", {}, groups.map(group => {
     let path = canonicalModulePath(project.id, group.target.type);
     let active;
-    if (group.sectionOverride === "updates") {
-      path = `/projects/${encodeURIComponent(project.id)}/modules/materials?view=proposals`;
-      const currentView = new URLSearchParams(location.search).get("view");
-      active = activeType === "materials" && (
-        currentView === "proposals" ||
-        currentView === "release" ||
-        location.pathname.includes("/materials/proposals/") ||
-        location.pathname.includes("/materials/generation-tasks/")
-      );
+    if (activeWorkspace) {
+      active = false;
+    } else if (group.types.includes("outcomes") && activeType === "outcomes") {
+      active = true;
     } else if (group.types.includes("materials")) {
-      active = activeType === "materials" && new URLSearchParams(location.search).get("view") !== "proposals"
-        && new URLSearchParams(location.search).get("view") !== "release";
+      active = activeType === "materials";
     } else {
       active = group.types.includes(activeType);
     }
@@ -610,19 +610,16 @@ function moduleNavigation(project, manifest, activeType) {
     links[(current + (event.key === "ArrowRight" ? 1 : -1) + links.length) % links.length].focus();
   });
   return element("nav", { className: "project-nav section-card", ariaLabel: "项目模块" }, [
-    element("button", { type: "button", className: "module-scroll-button previous", ariaLabel: "向前滚动模块", text: "‹", onClick: () => list.scrollBy({ left: -280, behavior: scrollBehavior }) }),
+    element("button", { type: "button", className: "module-scroll-button previous", ariaLabel: "向前滚动模块", title: "向前滚动模块", onClick: () => list.scrollBy({ left: -280, behavior: scrollBehavior }) }, [icon("chevron-left")]),
     list,
-    element("button", { type: "button", className: "module-scroll-button next", ariaLabel: "向后滚动模块", text: "›", onClick: () => list.scrollBy({ left: 280, behavior: scrollBehavior }) })
+    element("button", { type: "button", className: "module-scroll-button next", ariaLabel: "向后滚动模块", title: "向后滚动模块", onClick: () => list.scrollBy({ left: 280, behavior: scrollBehavior }) }, [icon("chevron-right")])
   ]);
 }
 
-function moduleSectionNavigation(project, manifest, activeType) {
+function moduleSectionNavigation(project, manifest, activeType, activeWorkspace = "") {
+  if (activeWorkspace === "update") return null;
   const modules = new Map(manifest.modules.map(module => [module.type, module]));
-  const query = new URLSearchParams(location.search);
   const materialPath = `/projects/${encodeURIComponent(project.id)}/modules/materials`;
-  const role = project.role;
-  const canReview = ["platform_admin", "project_admin", "project_editor"].includes(role);
-  const canOperate = ["platform_admin", "project_admin"].includes(role);
   let label = "";
   let entries = [];
   if (["risks", "metrics"].includes(activeType)) {
@@ -631,25 +628,12 @@ function moduleSectionNavigation(project, manifest, activeType) {
       modules.has("risks") ? { key: "risks", label: modules.get("risks").title, href: canonicalModulePath(project.id, "risks"), active: activeType === "risks" } : null,
       modules.has("metrics") ? { key: "metrics", label: modules.get("metrics").title, href: canonicalModulePath(project.id, "metrics"), active: activeType === "metrics" } : null
     ].filter(Boolean);
-  } else if (activeType === "materials") {
-    const currentView = query.get("view") ?? "ledger";
-    const isProposalView = currentView === "proposals" || location.pathname.includes("/materials/proposals/") || location.pathname.includes("/materials/generation-tasks/");
-    const isReleaseView = currentView === "release";
-    const isOperationsView = currentView === "operations";
-    const isLedger = !isProposalView && !isReleaseView && !isOperationsView;
-    if (isProposalView || isReleaseView) {
-      label = "项目更新";
-      entries = [
-        { key: "proposals", label: "更新建议", href: `${materialPath}?view=proposals`, active: isProposalView },
-        canReview ? { key: "release", label: "审核与发布", href: `${materialPath}?view=release`, active: isReleaseView } : null
-      ].filter(Boolean);
-    } else {
-      label = "项目材料";
-      entries = [
-        { key: "materials", label: "项目材料", href: `${materialPath}?view=ledger`, active: isLedger },
-        canOperate && isOperationsView ? { key: "operations", label: "运维自检", href: `${materialPath}?view=operations`, active: isOperationsView } : null
-      ].filter(Boolean);
-    }
+  } else if (["outcomes", "materials"].includes(activeType)) {
+    label = "项目资料";
+    entries = [
+      modules.has("outcomes") ? { key: "outcomes", label: modules.get("outcomes").title, href: canonicalModulePath(project.id, "outcomes"), active: activeType === "outcomes" } : null,
+      { key: "materials", label: "项目材料", href: `${materialPath}?view=ledger`, active: activeType === "materials" }
+    ].filter(Boolean);
   }
   if (entries.length < 2) return null;
   const links = entries.map(entry => element("a", {
@@ -674,13 +658,39 @@ function canConfigureModules(project) {
   return ["platform_admin", "project_admin", "project_editor"].includes(project.role);
 }
 
-function compactModuleHeading(project, module, presentation, version) {
+function compactModuleHeading(project, module, presentation, version, activeWorkspace = "") {
+  if (activeWorkspace === "update") {
+    const updateCopy = location.pathname.includes("/updates/preview/")
+      ? "核对本次材料生成的节点变化及其在主路线图中的位置。"
+      : location.pathname.endsWith("/updates/release")
+        ? "检查草稿差异和发布条件，由项目管理员完成最终发布。"
+        : "上传或选择本次更新材料，依次完成生成、模拟路线图、人工审核和发布。";
+    return element("header", { className: "module-page-heading" }, [
+      element("div", {}, [
+        element("span", { className: "eyebrow", text: "PROJECT UPDATE" }),
+        element("h1", { text: "项目更新" }),
+        element("p", { text: updateCopy })
+      ]),
+      element("div", { className: "module-heading-meta" }, [element("span", { className: "badge version", text: version }), element("span", { text: `更新于 ${formatDate(project.updatedAt)}` })])
+    ]);
+  }
   const materials = module.type === "materials";
+  const materialView = new URLSearchParams(location.search).get("view");
+  const proposalView = materials && (materialView === "proposals" || location.pathname.includes("/materials/proposals/") || location.pathname.includes("/materials/generation-tasks/"));
+  const releaseView = materials && materialView === "release";
+  const headingTitle = proposalView ? "AI 生成项目节点预览" : releaseView ? "审核与发布" : module.title;
+  const headingCopy = proposalView
+    ? "查看 AI 基于项目材料生成的节点卡片，并在路线图中核对位置与展示效果。"
+    : releaseView
+      ? "核对已接受的节点变化，完成草稿合并、发布检查与人工发布。"
+      : materials
+        ? `归档 ${project.name} 的材料，形成可追溯内容并进行只读项目问答。`
+        : `查看 ${project.name} 当前已发布的${module.title}事实。`;
   return element("header", { className: "module-page-heading" }, [
     element("div", {}, [
       element("span", { className: "eyebrow", text: materials ? (presentation.kind === "campaign" ? "项目材料" : "项目材料") : (presentation.kind === "campaign" ? "作战模块" : "项目模块") }),
-      element("h1", { text: module.title }),
-      element("p", { text: materials ? `归档 ${project.name} 的材料，形成可追溯内容并进行只读项目问答。` : `查看 ${project.name} 当前已发布的${module.title}事实。` })
+      element("h1", { text: headingTitle }),
+      element("p", { text: headingCopy })
     ]),
     element("div", { className: "module-heading-meta" }, [element("span", { className: "badge version", text: version }), element("span", { text: `更新于 ${formatDate(project.updatedAt)}` })])
   ]);
@@ -710,6 +720,16 @@ async function renderProject(projectId, requestedType = "overview", materialId =
     ]);
     if (requestId !== state.routeRequest) return;
     const { project, snapshot } = detail;
+    const activeWorkspace = materialRoute.workspace ?? "";
+    const requestedMaterialView = new URLSearchParams(location.search).get("view");
+    const restrictedViewerRoute = project.role === "viewer" && requestedType === "materials" && (
+      ["proposals", "release", "operations"].includes(requestedMaterialView) ||
+      Boolean(materialRoute.proposalId || materialRoute.previewProposalId || materialRoute.generationTaskId || activeWorkspace === "update")
+    );
+    if (restrictedViewerRoute) {
+      navigate(`/projects/${encodeURIComponent(project.id)}/modules/materials?view=ledger`, { replace: true });
+      return;
+    }
     const expectedManifest = { projectId, version: project.publishedVersion, templateId: project.templateId, templateVersion: project.templateVersion };
     if (!validateManifest(manifest, expectedManifest, moduleTypes)) {
       app.replaceChildren(appFrame(unsupportedState(() => renderProject(projectId, requestedType)), { projectMode: true, project }));
@@ -718,22 +738,24 @@ async function renderProject(projectId, requestedType = "overview", materialId =
     const module = manifest.modules.find(candidate => candidate.type === requestedType);
     if (!module) { projectNotFound(projectId); return; }
     const presentation = projectPresentation(project);
-    const displayModule = { ...module, title: moduleDisplayTitle(module) };
+    const displayModule = { ...module, title: activeWorkspace === "update" ? "项目更新" : moduleDisplayTitle(module) };
     state.projects = list.projects;
     const slot = element("section", { className: "module-content", ariaLive: "polite", ariaBusy: "true" }, [moduleSkeleton(requestedType)]);
     const breadcrumb = element("nav", { className: "breadcrumb", ariaLabel: "面包屑" }, [
-      element("a", { href: "/projects", text: "Projects", onClick: event => { event.preventDefault(); navigate("/projects"); } }),
+      element("a", { href: "/projects", text: "项目", onClick: event => { event.preventDefault(); navigate("/projects"); } }),
       element("span", { ariaHidden: "true", text: "/" }), element("span", { text: project.name }),
       ...(requestedType === "overview" ? [] : [element("span", { ariaHidden: "true", text: "/" }), element("span", { text: displayModule.title })])
     ]);
-    const sectionNavigation = moduleSectionNavigation(project, manifest, requestedType);
+    const sectionNavigation = moduleSectionNavigation(project, manifest, requestedType, activeWorkspace);
+    const rendererOwnsHeading = Boolean(materialId || materialRoute.proposalId || materialRoute.generationTaskId);
     const projectPage = element("div", { className: "project-route" }, [
       breadcrumb,
-      ...(requestedType === "overview" || materialId ? [] : [compactModuleHeading(project, displayModule, presentation, manifest.version)]),
-      moduleNavigation(project, manifest, requestedType), sectionNavigation, slot
+      moduleNavigation(project, manifest, requestedType, activeWorkspace), sectionNavigation,
+      ...(requestedType === "overview" || rendererOwnsHeading ? [] : [compactModuleHeading(project, displayModule, presentation, manifest.version, activeWorkspace)]),
+      slot
     ]);
-    const configAction = canConfigureModules(project) ? [element("button", { type: "button", className: "admin-entry module-config-entry", text: "模块配置", onClick: event => openModuleConfiguration(project, presentation, event.currentTarget) })] : [];
-    app.replaceChildren(appFrame(projectPage, { projectMode: true, project, presentation, moduleTitle: module.title, switcher: projectSwitcher(list.projects, project.id), projectActions: configAction }));
+    const configAction = canConfigureModules(project) ? [iconButton("模块配置", "panel-top", event => openModuleConfiguration(project, presentation, event.currentTarget), "admin-entry header-icon-button module-config-entry")] : [];
+    app.replaceChildren(appFrame(projectPage, { projectMode: true, project, presentation, moduleTitle: displayModule.title, switcher: projectSwitcher(list.projects, project.id), projectActions: configAction }));
     let slowTimer = setTimeout(() => {
       if (requestId === state.routeRequest && slot.getAttribute("aria-busy") === "true") slot.append(element("p", { className: "slow-loading", text: "加载时间较长，请稍候…" }));
     }, 10_000);
@@ -749,6 +771,8 @@ async function renderProject(projectId, requestedType = "overview", materialId =
           updatedAt: formatDate(snapshot.updatedAt || project.updatedAt), roleLabel: roleLabels[project.role] ?? project.role,
           templateLabel: templateLabels[project.templateId] ?? project.templateId,
           materialId, generationTaskId: materialRoute.generationTaskId ?? "", proposalId: materialRoute.proposalId ?? "",
+          previewProposalId: materialRoute.previewProposalId ?? "",
+          updateWorkspace: activeWorkspace === "update", updateView: materialRoute.updateView ?? "",
           api, showToast, session: state.session
         });
         slot.replaceChildren(rendered);
@@ -794,7 +818,7 @@ async function openModuleConfiguration(project, presentation, returnFocus) {
     document.body.append(confirmationBackdrop);
     continueEditing.focus();
   };
-  const closeButton = iconButton("关闭模块配置", "×", confirmDiscard, "dialog-close");
+  const closeButton = iconButton("关闭模块配置", "x", confirmDiscard, "dialog-close");
   sheet.replaceChildren(element("header", { className: "sheet-header" }, [
     element("div", {}, [element("span", { className: "eyebrow", text: "草稿配置" }), element("h2", { id: "module-config-title", text: "模块配置" })]), closeButton
   ]), element("p", { className: "draft-banner", text: "正在配置草稿模块；当前发布页面不会立即变化。" }), moduleSkeleton("units"));
@@ -877,14 +901,14 @@ async function openModuleConfiguration(project, presentation, returnFocus) {
   }
 }
 
-function openDialog({ title, copy, fields = [], submitLabel, destructive = false, onSubmit }) {
-  state.dialogReturnFocus = document.activeElement;
+function openDialog({ title, copy, fields = [], submitLabel, destructive = false, onSubmit, returnFocus = document.activeElement }) {
+  state.dialogReturnFocus = returnFocus;
   const error = element("p", { className: "form-error", role: "alert" });
   const close = () => {
     backdrop.remove();
     state.dialogReturnFocus?.focus?.();
   };
-  const closeButton = iconButton("关闭对话框", "×", close, "dialog-close");
+  const closeButton = iconButton("关闭对话框", "x", close, "dialog-close");
   const cancel = element("button", { type: "button", className: "secondary-button", text: "取消", onClick: close });
   const submit = element("button", { type: "submit", className: destructive ? "danger-button" : "primary-button", text: submitLabel });
   const form = element("form", { onSubmit: async event => {
@@ -917,14 +941,14 @@ function openDialog({ title, copy, fields = [], submitLabel, destructive = false
   backdrop.addEventListener("keydown", event => {
     if (event.key === "Escape" && !submit.disabled) close();
     if (event.key !== "Tab") return;
-    const focusable = [...dialog.querySelectorAll("button:not(:disabled), input:not(:disabled), select:not(:disabled)")];
+    const focusable = [...dialog.querySelectorAll('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
     const first = focusable[0];
     const last = focusable.at(-1);
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
   document.body.append(backdrop);
-  const initial = dialog.querySelector("input, select, button");
+  const initial = dialog.querySelector("input, textarea, select, button");
   initial?.focus();
 }
 
@@ -935,37 +959,68 @@ function fieldControl({ id, name, label, value = "", help = "", type = "text", r
   return element("div", { className: "field" }, [element("label", { htmlFor: id, text: label }), control, ...(help ? [element("small", { text: help })] : [])]);
 }
 
+function installDialogBehavior(backdrop, dialog, close, initialFocus) {
+  backdrop.addEventListener("keydown", event => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...dialog.querySelectorAll('a[href], button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')]
+      .filter(node => !node.hidden && node.getAttribute("aria-hidden") !== "true");
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
+  document.body.append(backdrop);
+  (initialFocus ?? dialog.querySelector("input, textarea, select, button"))?.focus();
+}
+
 function openCreateDialog(refresh) {
   const backdrop = element("div", { className: "dialog-backdrop" });
   const dialog = element("section", { className: "dialog create-dialog", role: "dialog", ariaModal: "true", ariaLabelledby: "create-dialog-title" });
-  const closeButton = iconButton("关闭对话框", "×", () => { backdrop.remove(); state.dialogReturnFocus?.focus?.(); }, "dialog-close");
   state.dialogReturnFocus = document.activeElement;
+  const returnFocus = state.dialogReturnFocus;
+  const close = () => { backdrop.remove(); returnFocus?.focus?.(); };
+  const closeButton = iconButton("关闭对话框", "x", close, "dialog-close");
 
   const startForm = () => {
     backdrop.remove();
-    openCreateFormDialog(refresh);
+    openCreateFormDialog(refresh, returnFocus);
   };
   const startMaterial = () => {
     backdrop.remove();
-    openCreateFromMaterialDialog(refresh);
+    openCreateFromMaterialDialog(refresh, returnFocus);
   };
   const startConversational = () => {
     backdrop.remove();
-    openCreateConversationalDialog(refresh);
+    openCreateConversationalDialog(refresh, returnFocus);
   };
 
   const choices = [
-    { icon: "\u{1F4C4}", title: "上传材料创建", desc: "上传项目启动会纪要、计划等文档，系统自动提取项目信息并生成骨架。", onClick: startMaterial, badge: "推荐" },
-    { icon: "\u{1F4AC}", title: "对话式创建", desc: "通过 AI 引导的对话逐步描述项目目标、团队和里程碑，自动生成项目结构。", onClick: startConversational, badge: "AI 引导" },
-    { icon: "\u{270F}\u{FE0F}", title: "手动填写创建", desc: "直接填写项目 ID、名称和模板，适合已规划好的项目。", onClick: startForm }
+    { iconName: "upload", title: "上传材料创建", desc: "上传项目启动会纪要、计划等文档，系统自动提取项目信息并生成骨架。", onClick: startMaterial, badge: "推荐" },
+    { iconName: "message-square", title: "对话式创建", desc: "通过 AI 引导的对话逐步描述项目目标、团队和里程碑，自动生成项目结构。", onClick: startConversational, badge: "AI 引导" },
+    { iconName: "square-pen", title: "手动填写创建", desc: "直接填写项目 ID、名称和模板，适合已规划好的项目。", onClick: startForm }
   ];
 
   dialog.append(
     element("header", {}, [element("h2", { id: "create-dialog-title", text: "新建项目" }), closeButton]),
     element("p", { className: "dialog-copy", text: "选择适合的创建方式。三种方式最终都生成标准项目实体和模板配置。" }),
+    element("div", { className: "creation-template-action" }, [
+      element("span", { text: "准备项目材料？先按标准结构填写。" }),
+      element("button", { type: "button", className: "secondary-button", text: "下载项目创建模板", onClick: () => downloadMaterialTemplate("new-project-material") })
+    ]),
     element("div", { className: "create-choice-grid" }, choices.map(choice => {
       const card = element("button", { type: "button", className: "create-choice-card", onClick: choice.onClick }, [
-        element("span", { className: "create-choice-icon", text: choice.icon }),
+        element("span", { className: "create-choice-icon", ariaHidden: "true" }, [icon(choice.iconName, { size: 22 })]),
         element("div", { className: "create-choice-content" }, [
           element("strong", { text: choice.title }),
           element("p", { text: choice.desc })
@@ -976,12 +1031,10 @@ function openCreateDialog(refresh) {
     }))
   );
   backdrop.append(dialog);
-  backdrop.addEventListener("keydown", event => { if (event.key === "Escape") { backdrop.remove(); state.dialogReturnFocus?.focus?.(); } });
-  document.body.append(backdrop);
-  closeButton.focus();
+  installDialogBehavior(backdrop, dialog, close, dialog.querySelector(".create-choice-card"));
 }
 
-function openCreateFormDialog(refresh) {
+function openCreateFormDialog(refresh, returnFocus) {
   openDialog({
     title: "手动填写创建",
     copy: "创建独立的发布版与草稿版，并将你设为项目管理员。",
@@ -994,19 +1047,22 @@ function openCreateFormDialog(refresh) {
       ] })
     ],
     onSubmit: async values => {
-      const payload = await api("/api/projects", { method: "POST", mutation: true, body: values });
-      showToast("项目创建成功");
-      await refresh?.();
-      navigate(`/projects/${encodeURIComponent(payload.project.id)}`);
-    }
+      setTimeout(() => openConfirmProjectDialog(refresh, {
+        ...values,
+        summary: "",
+        sourceHint: "请检查项目骨架，确认后再创建项目。"
+      }, returnFocus), 0);
+    },
+    returnFocus
   });
 }
 
-function openCreateFromMaterialDialog(refresh) {
+function openCreateFromMaterialDialog(refresh, returnFocus = document.activeElement) {
   const backdrop = element("div", { className: "dialog-backdrop" });
   const dialog = element("section", { className: "dialog create-material-dialog", role: "dialog", ariaModal: "true", ariaLabelledby: "create-material-title" });
-  const closeButton = iconButton("关闭", "×", () => { backdrop.remove(); state.dialogReturnFocus?.focus?.(); }, "dialog-close");
-  state.dialogReturnFocus = document.activeElement;
+  state.dialogReturnFocus = returnFocus;
+  const close = () => { backdrop.remove(); returnFocus?.focus?.(); };
+  const closeButton = iconButton("关闭", "x", close, "dialog-close");
 
   const input = element("input", { type: "file", accept: ".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.json", multiple: false });
   const drop = element("div", { className: "upload-drop create-material-drop", tabIndex: 0, role: "button", ariaLabel: "选择或拖入文件" }, [
@@ -1027,7 +1083,7 @@ function openCreateFromMaterialDialog(refresh) {
 
   const error = element("p", { className: "form-error", role: "alert" });
   const analyzeBtn = element("button", { type: "submit", className: "primary-button", text: "分析并创建项目" });
-  const cancelBtn = element("button", { type: "button", className: "secondary-button", text: "取消", onClick: () => { backdrop.remove(); state.dialogReturnFocus?.focus?.(); } });
+  const cancelBtn = element("button", { type: "button", className: "secondary-button", text: "取消", onClick: close });
 
   const form = element("form", { onSubmit: async event => {
     event.preventDefault();
@@ -1049,7 +1105,7 @@ function openCreateFromMaterialDialog(refresh) {
         templateId: payload.suggestedTemplate ?? "standard-project-v1",
         summary: payload.summary ?? "",
         sourceHint: `基于上传的「${file.name}」自动提取`
-      });
+      }, returnFocus);
     } catch (err) {
       error.textContent = err.message;
       analyzeBtn.disabled = false; analyzeBtn.textContent = "分析并创建项目";
@@ -1085,24 +1141,26 @@ function openCreateFromMaterialDialog(refresh) {
   dialog.append(
     element("header", {}, [element("h2", { id: "create-material-title", text: "上传材料创建项目" }), closeButton]),
     element("p", { className: "dialog-copy", text: "上传项目文档，系统会自动提取项目名称、目标和关键信息，生成项目骨架供你确认。" }),
+    element("div", { className: "creation-template-action" }, [
+      element("span", { text: "缺少现成文档时，可先填写标准模板。" }),
+      element("button", { type: "button", className: "secondary-button", text: "下载项目创建模板", onClick: () => downloadMaterialTemplate("new-project-material") })
+    ]),
     elementGuide,
     form
   );
   backdrop.append(dialog);
-  backdrop.addEventListener("keydown", e => { if (e.key === "Escape") { backdrop.remove(); state.dialogReturnFocus?.focus?.(); } });
-  document.body.append(backdrop);
-  closeButton.focus();
+  installDialogBehavior(backdrop, dialog, close, drop);
 }
 
-function openConfirmProjectDialog(refresh, suggested) {
+function openConfirmProjectDialog(refresh, suggested, returnFocus = document.activeElement) {
   const idField = fieldControl({ id: "confirm-project-id", name: "id", label: "稳定项目 ID", value: suggested.id, help: "仅小写字母、数字、点、下划线或连字符。" });
   const nameField = fieldControl({ id: "confirm-project-name", name: "name", label: "项目名称", value: suggested.name });
   const templateField = fieldControl({ id: "confirm-project-template", name: "templateId", label: "项目模板", value: suggested.templateId, options: [
     { value: "standard-project-v1", label: "标准项目" }, { value: "campaign-map-v1", label: "作战地图" }
   ] });
   openDialog({
-    title: "确认项目信息",
-    copy: suggested.sourceHint ?? "请确认提取的项目信息。",
+    title: "确认项目骨架",
+    copy: suggested.sourceHint ?? "请确认项目骨架后再创建。",
     submitLabel: "创建项目",
     fields: [idField, nameField, templateField, fieldControl({ id: "confirm-project-summary", name: "summary", label: "项目摘要（可选）", value: suggested.summary ?? "", type: "text", required: false })],
     onSubmit: async values => {
@@ -1110,15 +1168,17 @@ function openConfirmProjectDialog(refresh, suggested) {
       showToast("项目创建成功");
       await refresh?.();
       navigate(`/projects/${encodeURIComponent(payload.project.id)}`);
-    }
+    },
+    returnFocus
   });
 }
 
-function openCreateConversationalDialog(refresh) {
+function openCreateConversationalDialog(refresh, returnFocus = document.activeElement) {
   const backdrop = element("div", { className: "dialog-backdrop create-convo-backdrop" });
   const dialog = element("section", { className: "dialog create-convo-dialog", role: "dialog", ariaModal: "true", ariaLabelledby: "create-convo-title" });
-  const closeButton = iconButton("关闭", "×", () => { backdrop.remove(); state.dialogReturnFocus?.focus?.(); }, "dialog-close");
-  state.dialogReturnFocus = document.activeElement;
+  state.dialogReturnFocus = returnFocus;
+  const close = () => { backdrop.remove(); returnFocus?.focus?.(); };
+  const closeButton = iconButton("关闭", "x", close, "dialog-close");
 
   const conversation = element("div", { className: "qa-conversation", ariaLive: "polite" }, [
     element("article", { className: "qa-message assistant" }, [
@@ -1132,6 +1192,7 @@ function openCreateConversationalDialog(refresh) {
 
   let collectedInfo = { name: "", goal: "", team: "", milestones: "" };
   let step = 0;
+  const progress = element("p", { className: "convo-progress", ariaLive: "polite", text: "第 1 步，共 4 步" });
   const steps = [
     "项目叫什么名称？",
     "项目的主要目标是什么？",
@@ -1152,6 +1213,7 @@ function openCreateConversationalDialog(refresh) {
     else if (step === 3) collectedInfo.milestones = value;
 
     step++;
+    progress.textContent = `第 ${Math.min(step + 1, steps.length)} 步，共 ${steps.length} 步`;
     sendBtn.disabled = true; sendBtn.textContent = "思考中…";
 
     try {
@@ -1177,10 +1239,11 @@ function openCreateConversationalDialog(refresh) {
             templateId: suggested.templateId ?? "standard-project-v1",
             summary: suggested.summary ?? collectedInfo.goal,
             sourceHint: "基于对话引导自动生成"
-          });
+          }, returnFocus);
         } });
         const cancelBtn = element("button", { type: "button", className: "secondary-button", text: "重新对话", onClick: () => {
           step = 0;
+          progress.textContent = `第 1 步，共 ${steps.length} 步`;
           collectedInfo = { name: "", goal: "", team: "", milestones: "" };
           conversation.append(element("article", { className: "qa-message assistant" }, [element("strong", { text: "项目创建助手" }), element("p", { text: "好的，让我们重新开始。你的项目叫什么？" })]));
         } });
@@ -1199,13 +1262,12 @@ function openCreateConversationalDialog(refresh) {
   dialog.append(
     element("header", {}, [element("h2", { id: "create-convo-title", text: "对话式创建项目" }), closeButton]),
     element("p", { className: "dialog-copy", text: "通过对话描述你的项目，AI 会引导你完成信息收集并生成项目结构。" }),
+    progress,
     conversation,
     form
   );
   backdrop.append(dialog);
-  backdrop.addEventListener("keydown", e => { if (e.key === "Escape") { backdrop.remove(); state.dialogReturnFocus?.focus?.(); } });
-  document.body.append(backdrop);
-  input.focus();
+  installDialogBehavior(backdrop, dialog, close, input);
 }
 
 function openEditDialog(project, refresh) {
@@ -1288,15 +1350,37 @@ async function renderSettings() {
       element("option", { value: "disabled", text: "未启用", selected: config.provider === "disabled" }),
       element("option", { value: "openai-compatible", text: "OpenAI 兼容", selected: config.provider === "openai-compatible" })
     ]);
-    const baseUrl = element("input", { type: "text", id: `${label}-base-url`, value: config.baseUrl ?? "", placeholder: "api.example.com/v1" });
-    const apiKey = element("input", { type: "password", id: `${label}-api-key`, value: "", placeholder: config.apiKeySet ? `已配置（${config.apiKeyMasked}）` : "输入 API Key" });
-    const model = element("input", { type: "text", id: `${label}-model`, value: config.model ?? "", placeholder: "glm-5.2 / gpt-4o 等" });
-    const allowedHosts = element("input", { type: "text", id: `${label}-hosts`, value: config.allowedHosts ?? "", placeholder: "api.example.com" });
+    const baseUrl = element("input", { type: "url", id: `${label}-base-url`, name: `${label}-base-url`, autoComplete: "url", value: config.baseUrl ?? "", placeholder: ["https:", "//api.example.com/v1"].join("") });
+    const apiKey = element("input", { type: "password", id: `${label}-api-key`, name: `${label}-api-key`, autoComplete: "new-password", value: "", placeholder: config.apiKeySet ? `已配置（${config.apiKeyMasked}）` : "输入 API Key" });
+    const model = element("input", { type: "text", id: `${label}-model`, name: `${label}-model`, autoComplete: "off", value: config.model ?? "", placeholder: "glm-5.2 / gpt-4o 等" });
+    const allowedHosts = element("input", { type: "text", id: `${label}-hosts`, name: `${label}-hosts`, autoComplete: "off", value: config.allowedHosts ?? "", placeholder: "api.example.com" });
     const err = element("p", { className: "form-error", role: "alert" });
     const save = element("button", { type: "submit", className: "primary-button", text: "保存" });
+    const status = element("span", {
+      className: `provider-status ${config.provider === "disabled" ? "disabled" : config.apiKeySet ? "configured" : "incomplete"}`,
+      text: config.provider === "disabled" ? "未启用" : config.apiKeySet ? "已配置" : "缺少密钥"
+    });
+    const testConnection = element("button", { type: "button", className: "secondary-button", text: "测试连接", disabled: config.provider === "disabled", onClick: async () => {
+      err.textContent = "";
+      testConnection.disabled = true;
+      testConnection.textContent = "测试中…";
+      try {
+        const result = await api("/api/settings/test-connection", {
+          method: "POST",
+          mutation: true,
+          body: { scope: label === "gen" ? "generation" : label }
+        });
+        showToast(`连接成功 · ${result.latencyMs}ms`);
+      } catch (requestError) {
+        err.textContent = requestError.message;
+      } finally {
+        testConnection.disabled = config.provider === "disabled";
+        testConnection.textContent = "测试连接";
+      }
+    } });
 
     const form = element("form", { className: "settings-form" });
-    form.addEventListener("submit", async event => {
+    const submitProvider = async event => {
       event.preventDefault();
       err.textContent = "";
       save.disabled = true;
@@ -1321,9 +1405,15 @@ async function renderSettings() {
         save.disabled = false;
         save.textContent = "保存";
       }
-    });
+    };
+    form.addEventListener("submit", submitProvider);
+    form._baseSubmitHandler = submitProvider;
 
     form.replaceChildren(
+      element("div", { className: "provider-form-status" }, [
+        element("strong", { text: "连接配置" }),
+        element("div", { className: "provider-status-actions" }, [status, testConnection])
+      ]),
       element("div", { className: "field" }, [
         element("label", { htmlFor: `${label}-provider`, text: "服务类型" }), providerSelect
       ]),
@@ -1337,18 +1427,22 @@ async function renderSettings() {
       element("div", { className: "field" }, [
         element("label", { htmlFor: `${label}-model`, text: "模型名称" }), model
       ]),
-      element("div", { className: "field" }, [
-        element("label", { htmlFor: `${label}-hosts`, text: "允许的域名" }), allowedHosts,
-        element("small", { className: "form-hint", text: "多个用逗号分隔，必须与 API 地址域名一致" })
+      element("details", { className: "settings-advanced" }, [
+        element("summary", { text: "高级设置" }),
+        element("div", { className: "field" }, [
+          element("label", { htmlFor: `${label}-hosts`, text: "允许的域名" }), allowedHosts,
+          element("small", { className: "form-hint", text: "多个用逗号分隔，必须与 API 地址域名一致" })
+        ])
       ]),
       err,
-      save
+      element("div", { className: "settings-form-actions" }, [save])
     );
     return form;
   }
 
   function genProviderForm(label, config, endpoint) {
     const form = providerForm(label, config, endpoint);
+    form.removeEventListener("submit", form._baseSubmitHandler);
     // Add generation-specific fields before the error/save buttons
     const timeout = element("input", { type: "number", id: `${label}-timeout`, value: config.timeoutMs ?? 60000, min: 1000, max: 600000, step: 1000 });
     const maxTokens = element("input", { type: "number", id: `${label}-tokens`, value: config.maxOutputTokens ?? 8000, min: 100, max: 8000, step: 100 });
@@ -1362,17 +1456,17 @@ async function renderSettings() {
     ]);
 
     // Patch the submit handler to include gen-specific fields
-    const extraFields = [
+    const extraFields = element("details", { className: "settings-advanced" }, [
+      element("summary", { text: "生成高级设置" }),
       element("div", { className: "field" }, [element("label", { htmlFor: `${label}-timeout`, text: "超时（毫秒）" }), timeout]),
       element("div", { className: "field" }, [element("label", { htmlFor: `${label}-tokens`, text: "最大输出 Token" }), maxTokens]),
       element("div", { className: "field" }, [element("label", { htmlFor: `${label}-reasoning`, text: "推理强度" }), reasoning])
-    ];
+    ]);
     // Insert extra fields before the last two children (error + save)
     const kids = [...form.children];
-    form.replaceChildren(...kids.slice(0, -2), ...extraFields, ...kids.slice(-2));
+    form.replaceChildren(...kids.slice(0, -2), extraFields, ...kids.slice(-2));
 
-    // Override submit
-    form.onsubmit = async (event) => {
+    form.addEventListener("submit", async event => {
       event.preventDefault();
       const save = form.querySelector("button[type=submit]");
       const err = form.querySelector(".form-error");
@@ -1402,7 +1496,7 @@ async function renderSettings() {
         save.disabled = false;
         save.textContent = "保存";
       }
-    };
+    });
     return form;
   }
 
@@ -1411,8 +1505,8 @@ async function renderSettings() {
       element("option", { value: "disabled", text: "未启用", selected: config.provider === "disabled" }),
       element("option", { value: "openai-compatible", text: "OpenAI 兼容", selected: config.provider === "openai-compatible" })
     ]);
-    const baseUrl = element("input", { type: "text", id: `${label}-base-url`, value: config.baseUrl ?? "", placeholder: "https://open.bigmodel.cn/api/paas/v4" });
-    const apiKey = element("input", { type: "password", id: `${label}-api-key`, value: "", placeholder: config.apiKeySet ? `已配置（${config.apiKeyMasked}）` : "输入 API Key（留空则复用上方项目更新 AI 的 Key）" });
+    const baseUrl = element("input", { type: "url", id: `${label}-base-url`, name: `${label}-base-url`, autoComplete: "url", value: config.baseUrl ?? "", placeholder: ["https:", "//open.bigmodel.cn/api/paas/v4"].join("") });
+    const apiKey = element("input", { type: "password", id: `${label}-api-key`, name: `${label}-api-key`, autoComplete: "new-password", value: "", placeholder: config.apiKeySet ? `已配置（${config.apiKeyMasked}）` : "输入 API Key（留空则复用上方项目更新 AI 的 Key）" });
 
     // 模型下拉菜单：Coding Plan 内置的视觉模型优先，需要单独充值的标注在后
     const VISION_MODELS = [
@@ -1433,11 +1527,29 @@ async function renderSettings() {
     // 默认选中 Coding Plan 内置的最佳视觉模型
     if (!currentModel) model.value = "glm-4.6v";
 
-    const allowedHosts = element("input", { type: "text", id: `${label}-hosts`, value: config.allowedHosts ?? "", placeholder: "open.bigmodel.cn" });
+    const allowedHosts = element("input", { type: "text", id: `${label}-hosts`, name: `${label}-hosts`, autoComplete: "off", value: config.allowedHosts ?? "", placeholder: "open.bigmodel.cn" });
     const timeout = element("input", { type: "number", id: `${label}-timeout`, value: config.timeoutMs ?? 120000, min: 1000, max: 600000, step: 1000 });
     const maxTokens = element("input", { type: "number", id: `${label}-tokens`, value: config.maxOutputTokens ?? 4000, min: 100, max: 16000, step: 100 });
     const err = element("p", { className: "form-error", role: "alert" });
     const save = element("button", { type: "submit", className: "primary-button", text: "保存" });
+    const status = element("span", {
+      className: `provider-status ${config.provider === "disabled" ? "disabled" : config.apiKeySet ? "configured" : "incomplete"}`,
+      text: config.provider === "disabled" ? "未启用" : config.apiKeySet ? "已配置" : "复用更新 AI 密钥"
+    });
+    const testConnection = element("button", { type: "button", className: "secondary-button", text: "测试连接", disabled: config.provider === "disabled", onClick: async () => {
+      err.textContent = "";
+      testConnection.disabled = true;
+      testConnection.textContent = "测试中…";
+      try {
+        const result = await api("/api/settings/test-connection", { method: "POST", mutation: true, body: { scope: "vision" } });
+        showToast(`连接成功 · ${result.latencyMs}ms`);
+      } catch (requestError) {
+        err.textContent = requestError.message;
+      } finally {
+        testConnection.disabled = config.provider === "disabled";
+        testConnection.textContent = "测试连接";
+      }
+    } });
 
     const form = element("form", { className: "settings-form" });
     form.addEventListener("submit", async event => {
@@ -1470,6 +1582,10 @@ async function renderSettings() {
     });
 
     form.replaceChildren(
+      element("div", { className: "provider-form-status" }, [
+        element("strong", { text: "连接配置" }),
+        element("div", { className: "provider-status-actions" }, [status, testConnection])
+      ]),
       element("div", { className: "field" }, [
         element("label", { htmlFor: `${label}-provider`, text: "服务类型" }), providerSelect
       ]),
@@ -1485,14 +1601,17 @@ async function renderSettings() {
         element("label", { htmlFor: `${label}-api-key`, text: "API Key" }), apiKey,
         config.apiKeySet ? element("small", { className: "form-hint", text: `当前: ${config.apiKeyMasked}，留空则不修改` }) : element("small", { className: "form-hint", text: "留空则复用项目更新 AI 的 Key" })
       ]),
-      element("div", { className: "field" }, [
-        element("label", { htmlFor: `${label}-hosts`, text: "允许的域名" }), allowedHosts,
-        element("small", { className: "form-hint", text: "多个用逗号分隔" })
+      element("details", { className: "settings-advanced" }, [
+        element("summary", { text: "高级设置" }),
+        element("div", { className: "field" }, [
+          element("label", { htmlFor: `${label}-hosts`, text: "允许的域名" }), allowedHosts,
+          element("small", { className: "form-hint", text: "多个用逗号分隔" })
+        ]),
+        element("div", { className: "field" }, [element("label", { htmlFor: `${label}-timeout`, text: "超时（毫秒）" }), timeout]),
+        element("div", { className: "field" }, [element("label", { htmlFor: `${label}-tokens`, text: "最大输出 Token" }), maxTokens])
       ]),
-      element("div", { className: "field" }, [element("label", { htmlFor: `${label}-timeout`, text: "超时（毫秒）" }), timeout]),
-      element("div", { className: "field" }, [element("label", { htmlFor: `${label}-tokens`, text: "最大输出 Token" }), maxTokens]),
       err,
-      save
+      element("div", { className: "settings-form-actions" }, [save])
     );
     return form;
   }
@@ -1539,7 +1658,7 @@ async function renderSettings() {
       ]),
       element("section", { className: "settings-section" }, [
         element("h2", { text: "项目更新 AI" }),
-        element("p", { className: "settings-desc", text: "用于从材料自动生成任务、路线等项目更新建议。配置后可在项目资料中生成更新。" }),
+        element("p", { className: "settings-desc", text: "用于从材料生成任务、路线等项目节点预览。配置后可在项目更新流程中生成并核对。" }),
         genProviderForm("gen", settings.aiGeneration, "/api/settings/ai-generation")
       ]),
       element("section", { className: "settings-section" }, [
@@ -1659,10 +1778,44 @@ async function renderRoute() {
     await renderProject(match[1], "overview");
     return;
   }
+  const updateProposalMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/updates\/proposals\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,127})$/);
+  if (updateProposalMatch) {
+    await renderProject(updateProposalMatch[1], "materials", "", { workspace: "update", proposalId: updateProposalMatch[2] });
+    return;
+  }
+  const updatePreviewMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/updates\/preview\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,127})$/);
+  if (updatePreviewMatch) {
+    await renderProject(updatePreviewMatch[1], "materials", "", { workspace: "update", previewProposalId: updatePreviewMatch[2] });
+    return;
+  }
+  const updateGenerationTaskMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/updates\/generation-tasks\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,127})$/);
+  if (updateGenerationTaskMatch) {
+    await renderProject(updateGenerationTaskMatch[1], "materials", "", { workspace: "update", generationTaskId: updateGenerationTaskMatch[2] });
+    return;
+  }
+  const updateReleaseMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/updates\/release$/);
+  if (updateReleaseMatch) {
+    await renderProject(updateReleaseMatch[1], "materials", "", { workspace: "update", updateView: "release" });
+    return;
+  }
+  const updateMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/updates$/);
+  if (updateMatch) {
+    await renderProject(updateMatch[1], "materials", "", { workspace: "update" });
+    return;
+  }
   const moduleMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/modules\/([a-z0-9][a-z0-9-]{1,63})$/);
   if (moduleMatch) {
     if (moduleMatch[2] === "overview") {
       navigate(`/projects/${encodeURIComponent(moduleMatch[1])}${location.search}`, { replace: true });
+      return;
+    }
+    const legacyMaterialView = new URLSearchParams(location.search).get("view");
+    if (moduleMatch[2] === "materials" && legacyMaterialView === "proposals") {
+      navigate(`/projects/${encodeURIComponent(moduleMatch[1])}/updates`, { replace: true });
+      return;
+    }
+    if (moduleMatch[2] === "materials" && legacyMaterialView === "release") {
+      navigate(`/projects/${encodeURIComponent(moduleMatch[1])}/updates/release`, { replace: true });
       return;
     }
     if (!getClientModule(moduleMatch[2])) { projectNotFound(moduleMatch[1]); return; }
@@ -1681,7 +1834,7 @@ async function renderRoute() {
   }
   const proposalMatch = location.pathname.match(/^\/projects\/([a-z0-9][a-z0-9._-]{2,63})\/modules\/materials\/proposals\/([a-zA-Z0-9][a-zA-Z0-9._-]{0,127})$/);
   if (proposalMatch) {
-    await renderProject(proposalMatch[1], "materials", "", { proposalId: proposalMatch[2] });
+    navigate(`/projects/${encodeURIComponent(proposalMatch[1])}/updates/proposals/${encodeURIComponent(proposalMatch[2])}${location.search}`, { replace: true });
     return;
   }
   navigate("/projects", { replace: true });

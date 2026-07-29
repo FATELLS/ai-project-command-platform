@@ -5,7 +5,7 @@ import { test, expect } from "@playwright/test";
  *
  * 覆盖完整的用户交互流程：
  *   登录 → 项目列表 → 进入项目 → 路线图 → 切换 Tab →
- *   材料管理 → 更新建议 → 审核与发布 → 运维自检 → 退出
+ *   材料管理 → AI 节点预览 → 审核与发布 → 运维自检 → 退出
  *
  * 测试使用真实浏览器（Chromium headless），覆盖 UI 渲染、交互、路由、CSS。
  * 前提：服务器运行在 http://127.0.0.1:4173，数据库有测试项目数据。
@@ -68,8 +68,12 @@ test.describe("02 项目列表页", () => {
     await expect(firstCard.locator(".template-label")).toBeVisible();
     await expect(firstCard.locator(".badge.active, .badge.archived")).toBeVisible();
     await expect(firstCard.locator("h3")).toBeVisible();
-    await expect(firstCard.locator(".project-id")).toBeVisible();
     await expect(firstCard.locator(".card-footer")).toBeVisible();
+    const technicalDetails = firstCard.locator("details.project-technical-details");
+    await expect(technicalDetails.locator("summary")).toBeVisible();
+    await expect(firstCard.locator(".project-id")).toBeHidden();
+    await technicalDetails.locator("summary").click();
+    await expect(firstCard.locator(".project-id")).toBeVisible();
   });
 
   test("搜索过滤项目", async ({ page }) => {
@@ -129,6 +133,21 @@ test.describe("03 项目详情页 — 模块导航", () => {
     const moduleLinks = nav.locator("ul li a");
     const count = await moduleLinks.count();
     expect(count).toBeGreaterThanOrEqual(3);
+  });
+
+  test("总览的项目更新进入独立更新流程", async ({ page }) => {
+    const updateLink = page.getByRole("link", { name: "项目更新", exact: true });
+    await expect(updateLink).toBeVisible();
+    await updateLink.click();
+    await page.waitForURL(/\/updates$/, { timeout: 10_000 });
+    await expect(page.getByRole("heading", { name: "项目更新", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "先提交本次更新材料" })).toBeVisible();
+    const uploadUpdateMaterial = page.getByRole("button", { name: "上传本次更新材料" });
+    await expect(uploadUpdateMaterial).toBeVisible();
+    await expect(page.locator(".project-update-roadmap")).toHaveCount(0);
+    await uploadUpdateMaterial.click();
+    await expect(page.getByRole("dialog", { name: /上传.*材料/ })).toBeVisible();
+    await page.locator(".dialog-close").click();
   });
 
   test("切换到路线图模块", async ({ page }) => {
@@ -195,31 +214,25 @@ test.describe("04 项目资料 — 子分区导航", () => {
     }
   });
 
-  test("切换到更新建议视图", async ({ page }) => {
-    const proposalsTab = page.locator('.module-section-nav a[href*="view=proposals"]');
-    if (await proposalsTab.count() > 0) {
-      await proposalsTab.click();
-      await page.waitForTimeout(1000);
-      await expect(page.locator(".module-content")).toBeVisible();
-    }
+  test("项目资料不混入项目更新入口", async ({ page }) => {
+    const sectionNav = page.locator("nav.module-section-nav");
+    await expect(sectionNav.locator("a")).toHaveText(["战果档案", "项目材料"]);
+    await expect(sectionNav.locator('a[href*="view=proposals"], a[href*="/updates"]')).toHaveCount(0);
   });
 
-  test("切换到审核与发布视图", async ({ page }) => {
-    const releaseTab = page.locator('.module-section-nav a[href*="view=release"]');
-    if (await releaseTab.count() > 0) {
-      await releaseTab.click();
-      await page.waitForTimeout(1000);
-      await expect(page.locator(".module-content")).toBeVisible();
-    }
+  test("旧节点预览入口兼容跳转到项目更新材料起点", async ({ page }) => {
+    const projectPath = new URL(page.url()).pathname.split("/modules/")[0];
+    await page.goto(`${projectPath}/modules/materials?view=proposals`);
+    await expect(page).toHaveURL(/\/updates$/);
+    await expect(page.getByRole("heading", { name: "项目更新", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "先提交本次更新材料" })).toBeVisible();
   });
 
-  test("切换到运维自检视图", async ({ page }) => {
-    const operationsTab = page.locator('.module-section-nav a[href*="view=operations"]');
-    if (await operationsTab.count() > 0) {
-      await operationsTab.click();
-      await page.waitForTimeout(1000);
-      await expect(page.locator(".module-content")).toBeVisible();
-    }
+  test("项目更新页没有项目资料分区导航", async ({ page }) => {
+    const projectPath = new URL(page.url()).pathname.split("/modules/")[0];
+    await page.goto(`${projectPath}/updates`);
+    await expect(page.locator("nav.module-section-nav")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "项目更新", exact: true })).toBeVisible();
   });
 
   test("切换回项目材料视图", async ({ page }) => {
@@ -290,14 +303,10 @@ test.describe("05 材料管理", () => {
 test.describe("06 路线图视图", () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
-    await page.locator("article.project-card h3 a").first().click();
-    await page.waitForURL(/\/projects\/[^/]+/, { timeout: 10_000 });
-
-    const roadmapLink = page.locator('nav.project-nav a[href*="/modules/roadmap"], nav.project-nav a[href*="/modules/task-network"]');
-    if (await roadmapLink.count() > 0) {
-      await roadmapLink.first().click();
-      await page.waitForURL(/\/modules\/(roadmap|task-network)/, { timeout: 10_000 });
-    }
+    const href = await page.locator("article.project-card h3 a").first().getAttribute("href");
+    await page.goto(`${href}/modules/roadmap`);
+    await expect(page).toHaveURL(/\/modules\/roadmap$/);
+    await expect(page.locator(".module-content")).toBeVisible();
   });
 
   test("路线图页面渲染", async ({ page }) => {
@@ -313,6 +322,24 @@ test.describe("06 路线图视图", () => {
     const hasHeading = await page.locator('h2:has-text("路线图"), h2:has-text("路线")').count();
     // 至少渲染出了某种内容
     expect(hasTimeline + hasBoard + hasStageButton + hasEmpty + hasHeading).toBeGreaterThan(0);
+  });
+
+  test("正式路线图卡片编辑创建待审核节点预览且不直改发布图", async ({ page }) => {
+    await expect(page.locator(".swimlane-stage-cell").first()).toBeVisible();
+    const originalTitle = (await page.locator(".swimlane-stage-title").first().textContent()).trim();
+    await page.locator(".swimlane-stage-cell .roadmap-card-edit-button").first().click();
+
+    const dialog = page.getByRole("dialog", { name: /编辑.*(节点|里程碑|任务)/ });
+    await expect(dialog).toBeVisible();
+    await dialog.getByLabel("标题").fill(`${originalTitle}（编辑预览）`);
+    await dialog.getByRole("button", { name: "提交编辑审核" }).click();
+
+    await expect(page).toHaveURL(/\/updates\/preview\/[^/]+$/);
+    await expect(page.getByRole("heading", { name: "项目更新", level: 1 })).toBeVisible();
+    await expect(page.getByText(`${originalTitle}（编辑预览）`, { exact: true }).first()).toBeVisible();
+    await page.goto(page.url().replace(/\/updates.*$/, "/modules/roadmap"));
+    await expect(page.locator(".swimlane-stage-title").filter({ hasText: originalTitle }).first()).toBeVisible();
+    await expect(page.getByText(`${originalTitle}（编辑预览）`, { exact: true })).toHaveCount(0);
   });
 });
 
@@ -424,29 +451,38 @@ test.describe("06b 材料工具栏新功能", () => {
   });
 });
 
-test.describe("06c 更新建议工作区", () => {
+test.describe("06c 项目更新流程与模拟路线图", () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
     const firstCard = page.locator("article.project-card h3 a").first();
     const href = await firstCard.getAttribute("href");
-    await page.goto(`${href}/modules/materials?view=proposals`);
+    await page.goto(`${href}/updates`);
     await page.waitForTimeout(2000);
   });
 
-  test("更新建议页面渲染", async ({ page }) => {
+  test("通用项目更新入口先显示材料步骤", async ({ page }) => {
     await expect(page.locator(".module-content")).toBeVisible();
-    await page.waitForTimeout(1000);
-    const hasProposalList = await page.locator(".proposal-list, .proposal-row, .generation-task-list").count();
-    const hasEmpty = await page.locator(".module-empty").count();
-    const hasButton = await page.locator('button:has-text("生成"), button:has-text("更新")').count();
-    expect(hasProposalList + hasEmpty + hasButton).toBeGreaterThan(0);
+    await expect(page.getByRole("heading", { name: "项目更新", level: 1 })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "先提交本次更新材料" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "上传本次更新材料" })).toBeVisible();
+    await expect(page.locator(".project-update-flow-steps [aria-current=step]")).toContainText("本次材料");
+    await expect(page.locator(".project-update-roadmap")).toHaveCount(0);
   });
 
-  test("一键全部生成按钮存在", async ({ page }) => {
-    const batchBtn = page.locator('button:has-text("一键全部生成"), button:has-text("批量生成")');
-    // 按钮可能存在也可能不存在（取决于是否有 ready 材料）
-    const moduleOk = await page.locator(".module-content").count();
-    expect(moduleOk).toBeGreaterThan(0);
+  test("继续具体更新时只渲染一张复用主视图的路线图", async ({ page }) => {
+    await page.getByRole("link", { name: "继续上一次更新" }).click();
+    await expect(page).toHaveURL(/\/updates\/preview\/[^/]+$/);
+    const roadmap = page.locator(".project-update-roadmap");
+    await expect(roadmap).toHaveCount(1);
+    await expect(page.locator(".material-summary-grid, .proposal-list, .proposal-row, .generation-task-list")).toHaveCount(0);
+    await expect(page.locator(".project-update-roadmap .swimlane-card-board")).toHaveCount(await roadmap.count());
+  });
+
+  test("模拟路线图不重复材料生成控制台", async ({ page }) => {
+    await page.getByRole("link", { name: "继续上一次更新" }).click();
+    await expect(page.getByText("一键全部生成", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("材料模板", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("生成的节点预览", { exact: true })).toHaveCount(0);
   });
 });
 
@@ -455,7 +491,7 @@ test.describe("06d 审核与发布页面", () => {
     await login(page);
     const firstCard = page.locator("article.project-card h3 a").first();
     const href = await firstCard.getAttribute("href");
-    await page.goto(`${href}/modules/materials?view=release`);
+    await page.goto(`${href}/updates/release`);
     await page.waitForTimeout(2000);
   });
 
@@ -614,6 +650,14 @@ test.describe("10 响应式布局", () => {
     await expect(page.locator("article.project-card").first()).toBeVisible();
   });
 
+  test("1280 首屏包含搜索、创建和项目入口", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await login(page);
+    await expect(page.locator("#project-search")).toBeVisible();
+    await expect(page.getByRole("button", { name: "新建项目" })).toBeVisible();
+    await expect(page.locator("article.project-card").first()).toBeVisible();
+  });
+
   test("平板尺寸正常显示", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await login(page);
@@ -621,11 +665,20 @@ test.describe("10 响应式布局", () => {
   });
 
   test("手机尺寸正常显示", async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 812 });
+    await page.setViewportSize({ width: 390, height: 844 });
     await login(page);
-    await page.waitForTimeout(1000);
-    // 在手机尺寸可能只显示一列，但页面不应该崩溃
     const cardCount = await page.locator("article.project-card").count();
     expect(cardCount).toBeGreaterThan(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test("手机路线图保留可滚动核心内容", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page);
+    await page.locator("article.project-card h3 a").first().click();
+    await page.getByRole("link", { name: "项目路线图" }).click();
+    const visual = page.locator(".visual-scroll").first();
+    await expect(visual).toBeVisible();
+    expect(await visual.evaluate(node => node.scrollWidth > 0 && node.clientHeight > 0)).toBe(true);
   });
 });

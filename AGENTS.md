@@ -15,6 +15,10 @@
 - 路线图：`.planning/ROADMAP.md`
 - 当前状态：`.planning/STATE.md`
 - 决策：`.planning/DECISIONS.md`
+- 全项目系统设计：`.planning/design/system/README.md`
+- 系统 SPEC：`.planning/design/system/SYSTEM-SPEC.md`
+- 系统架构：`.planning/design/system/ARCHITECTURE.md`
+- 需求追踪：`.planning/design/system/TRACEABILITY.md`
 - 过程：`.planning/PROCESS.md`
 - 交接：`.planning/HANDOFF.md`
 - 已实现结果：`docs/RESULT.md`

@@ -15,6 +15,7 @@ function deriveStagesFromTasks(tasks) {
     const dateLabel = start === end ? start : `${start}–${end}`;
     return {
       id: `derived-stage-${index + 1}`,
+      sourceTaskId: task.id,
       title: task.title,
       state: task.state || (Number(task.progress) >= 100 ? "已完成" : "进行中"),
       dateLabel,
@@ -82,6 +83,7 @@ export function loadRoadmap(graph) {
     currentStageId: currentStageId(graph),
     stages: stages.map(stage => ({
       id: stage.id,
+      sourceTaskId: optional(stage.sourceTaskId),
       title: stage.title,
       state: optional(stage.state),
       dateLabel: optional(stage.dateLabel),
@@ -165,6 +167,22 @@ export function loadGantt(graph) {
       dependencyIds: [...task.dependsOn]
     })),
     unscheduledIds: graph.tasks.filter(task => !task.startDate || !task.endDate).map(task => task.id)
+  };
+}
+
+export function loadOutcomes(graph) {
+  return {
+    outcomes: graph.closures.map(closure => ({
+      id: closure.id,
+      title: closure.title,
+      dateLabel: optional(closure.dateLabel),
+      state: optional(closure.state),
+      description: optional(closure.description),
+      result: optional(closure.result),
+      source: optional(closure.source),
+      previewAssets: Array.isArray(closure.previewAssets) ? [...closure.previewAssets] : [],
+      between: [...closure.between]
+    }))
   };
 }
 

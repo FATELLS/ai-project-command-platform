@@ -65,10 +65,12 @@ test.describe("认证与平台导航", () => {
     await expect(page).toHaveURL(/\/modules\/outcomes$/);
     await expect(page.locator(".module-section-nav a", { hasText: "战果档案" })).toHaveCount(1);
     await expect(page.locator(".module-section-nav a", { hasText: "项目材料" })).toHaveCount(1);
-    await expect(page.locator(".module-section-nav a", { hasText: "更新建议" })).toHaveCount(1);
-    await page.locator(".module-section-nav a", { hasText: "更新建议" }).click();
-    await expect(page).toHaveURL(/\/modules\/materials\?view=proposals$/);
-    await expect(page.locator(".project-nav a.active")).toHaveText("项目资料");
-    await expect(page.locator(".module-section-nav a.active")).toHaveText("更新建议");
+    await expect(page.locator(".module-section-nav a")).toHaveCount(2);
+    await expect(page.locator(".module-section-nav a", { hasText: "项目更新" })).toHaveCount(0);
+
+    await page.goto("/projects/xugu-agentic-group/updates");
+    await expect(page.getByRole("heading", { name: "项目更新", exact: true })).toBeVisible();
+    await expect(page.locator(".module-section-nav")).toHaveCount(0);
+    await expect(page.locator(".project-nav a.active")).toHaveCount(0);
   });
 });

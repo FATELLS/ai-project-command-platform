@@ -26,7 +26,7 @@ export function boundedPublished(graph) {
     tasks: graph.tasks.map(item => ({ id: item.id, unitId: item.unitId, parentId: item.parentId, title: item.title, startDate: item.startDate, endDate: item.endDate, progress: item.progress, dependsOn: item.dependsOn, owner: item.owner, state: item.state })),
     risks: graph.risks.map(item => ({ id: item.id, title: item.title, severity: item.severity, status: item.status, owner: item.owner, dueDate: item.dueDate })),
     metrics: graph.metrics.map(item => ({ id: item.id, name: item.name, value: item.value, unit: item.unit, status: item.status, asOf: item.asOf, target: item.target })),
-    outcomes: graph.closures.map(item => ({ id: item.id, title: item.title, state: item.state, date: item.dateLabel }))
+    outcomes: graph.closures.map(item => ({ id: item.id, title: item.title, state: item.state, date: item.dateLabel, between: [...(item.between ?? [])] }))
   };
   const encoded = JSON.stringify(value);
   if (Buffer.byteLength(encoded) > MAX_PUBLISHED_BYTES) throw proposalError("PUBLISHED_CONTEXT_TOO_LARGE", "当前发布版本超出生成上下文限制", 409);

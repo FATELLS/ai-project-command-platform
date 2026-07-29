@@ -3,7 +3,7 @@ import { createAuthService, GENERIC_LOGIN_ERROR } from "../services/auth-service
 import { createProjectService, ProjectServiceError } from "../services/project-service.mjs";
 import { createModuleService, ModuleServiceError } from "../modules/module-service.mjs";
 import { AiServiceError } from "../ai/errors.mjs";
-import { MaterialGateError } from "../materials/policy.mjs";
+import { MaterialGateError, declaredMaterialType, sanitizeDisplayName, validateMagic } from "../materials/policy.mjs";
 import { createProjectRepository } from "../repositories/project-repository.mjs";
 import { clearSessionCookie, sessionCookie, sessionTokenFromRequest } from "../security/sessions.mjs";
 import { createChatService } from "../services/chat-service.mjs";
@@ -112,7 +112,21 @@ export function createApp(options) {
   const loginAttempts = new Map();
 
   function enforceLoginRate(request) {
-    // Login rate limiting disabled per user request
+    const key = remoteAddress(request);
+    const timestamp = now();
+    const current = loginAttempts.get(key);
+    if (!current || timestamp - current.windowStart >= loginWindowMs) {
+      loginAttempts.set(key, { windowStart: timestamp, count: 1 });
+      return;
+    }
+    if (current.count >= loginLimit) {
+      throw new HttpError(429, "LOGIN_RATE_LIMITED", "登录尝试过于频繁，请稍后再试");
+    }
+    current.count += 1;
+  }
+
+  function clearLoginRate(request) {
+    loginAttempts.delete(remoteAddress(request));
   }
 
   function resolvePrincipal(request) {
@@ -186,6 +200,7 @@ export function createApp(options) {
           remoteAddress: remoteAddress(request)
         });
         if (!result.ok) throw new HttpError(401, "LOGIN_FAILED", GENERIC_LOGIN_ERROR);
+        clearLoginRate(request);
         return respond(response, 200, sessionPayload(result.principal), {
           "set-cookie": sessionCookie(result.sessionToken, { secure: secureCookies })
         });
@@ -220,6 +235,13 @@ export function createApp(options) {
         const principal = requirePrincipal(request);
         if (!principal.isPlatformAdmin) throw new HttpError(403, "FORBIDDEN", "仅平台管理员可访问设置");
         return respond(response, 200, settingsService.getAllSettings());
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/settings/test-connection") {
+        const principal = requirePrincipal(request);
+        if (!principal.isPlatformAdmin) throw new HttpError(403, "FORBIDDEN", "仅平台管理员可测试 AI 连接");
+        requireCsrf(request, principal);
+        return respond(response, 200, await settingsService.testConnection(principal, (await readJson(request, 4 * 1024)).scope));
       }
 
       if (request.method === "PUT" && url.pathname === "/api/settings/ai-chat") {
@@ -323,14 +345,34 @@ export function createApp(options) {
         const parts = parseMultipart(rawBuffer, boundary);
         const filePart = parts.find(p => p.filename);
         if (!filePart) throw new HttpError(400, "NO_FILE", "未找到上传文件");
-        const extractedText = filePart.data.toString("utf8").replace(/[^\x20-\x7E\u4e00-\u9fff\u3000-\u303f\n\r\t]/g, "").slice(0, 5000);
+        if (filePart.data.length === 0) throw new HttpError(400, "EMPTY_FILE", "空文件不能用于创建项目");
+        const filename = sanitizeDisplayName(filePart.filename);
+        let declared;
+        try {
+          declared = declaredMaterialType(filename, filePart.contentType || "application/octet-stream");
+          await validateMagic(filePart.data.subarray(0, 8_192), declared);
+        } catch (error) {
+          if (error instanceof MaterialGateError) throw new HttpError(400, error.code.toUpperCase(), error.message);
+          throw error;
+        }
+        const textLike = [".txt", ".md", ".csv", ".json", ".yaml"].includes(declared.extension);
+        let extractedText = filePart.data.toString("utf8").replace(/[^\x20-\x7E\u4e00-\u9fff\u3000-\u303f\n\r\t]/g, "").slice(0, 5000);
+        if (textLike && extractedText.trim().length < 20) {
+          throw new HttpError(422, "PROJECT_CREATION_MATERIAL_INCOMPLETE", "材料内容不足，请至少包含项目名称和项目目标");
+        }
         const lines = extractedText.split(/\n/).map(l => l.trim()).filter(Boolean);
-        const titleMatch = extractedText.match(/(?:项目|计划|方案)\s*[:：]?\s*(.{2,40})/) ?? lines.find(l => l.length > 2 && l.length < 40);
-        const suggestedName = titleMatch ? (titleMatch[1] ?? titleMatch).trim() : (filePart.filename ?? "新项目").replace(/\.[^.]+$/, "");
+        const heading = lines.find(line => /^#{1,3}\s+\S/.test(line))?.replace(/^#{1,3}\s+/, "");
+        const titleMatch = extractedText.match(/(?:项目名称|项目|计划|方案)\s*[:：]\s*(.{2,40})/);
+        const extractedTitle = titleMatch?.[1]?.trim() || heading;
         const goalMatch = extractedText.match(/(?:目标|目的|使命)\s*[:：]?\s*(.{5,100})/);
+        if (textLike && (!extractedTitle || !goalMatch)) {
+          const missing = [!extractedTitle ? "项目名称" : "", !goalMatch ? "项目目标" : ""].filter(Boolean).join("、");
+          throw new HttpError(422, "PROJECT_CREATION_MATERIAL_INCOMPLETE", `材料缺少${missing}，请补充后重试或下载项目创建模板`);
+        }
+        const suggestedName = extractedTitle || filename.replace(/\.[^.]+$/, "");
         const templateId = extractedText.includes("作战") || extractedText.includes("战役") ? "campaign-map-v1" : "standard-project-v1";
         const suggestedId = suggestedName.toLowerCase().replace(/[^a-z0-9._-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 30) || "new-project";
-        const summary = goalMatch ? goalMatch[1].trim() : `基于上传文档「${filePart.filename}」自动提取`;
+        const summary = goalMatch ? goalMatch[1].trim() : `基于上传文档「${filename}」自动提取`;
         return respond(response, 200, { suggestedId, suggestedName, suggestedTemplate: templateId, summary });
       }
 
@@ -431,6 +473,10 @@ export function createApp(options) {
         if (segments.length === 6 && segments[5] === "merge" && request.method === "POST") {
           requireCsrf(request, principal);
           return respond(response, 200, reviewService.merge(principal, projectId, segments[4]));
+        }
+        if (segments.length === 7 && segments[5] === "preview" && request.method === "PATCH") {
+          requireCsrf(request, principal);
+          return respond(response, 200, reviewService.updatePreviewItem(principal, projectId, segments[4], segments[6], await readJson(request, 16 * 1024)));
         }
         // 预览模块：GET /api/projects/{id}/change-proposals/{proposalId}/preview/modules/{moduleType}
         if (segments.length === 8 && segments[5] === "preview" && segments[6] === "modules" && request.method === "GET") {
@@ -645,7 +691,8 @@ function parseMultipart(buffer, boundary) {
     const headers = partData.slice(0, headerEnd).toString("utf8");
     const body = partData.slice(headerEnd + 4, partData.length - 2);
     const filenameMatch = headers.match(/filename="([^"]*)"/);
-    parts.push({ headers, filename: filenameMatch?.[1], data: body });
+    const contentType = headers.match(/content-type:\s*([^\r\n]+)/i)?.[1]?.trim();
+    parts.push({ headers, filename: filenameMatch?.[1], contentType, data: body });
     start = nextStart;
   }
   return parts;

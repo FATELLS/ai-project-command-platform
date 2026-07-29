@@ -57,6 +57,11 @@ function normalizeEnum(value,map,defaultValue){if(!value)return defaultValue;con
 
 function writeCard(database,versionId,change,elementType){
   const{columnFields,attrsFields}=splitPatch(change.patch,elementType);
+  // Roadmap/outcome proposals use `date`; unified cards expose it as dateLabel.
+  if(["stage","outcome"].includes(elementType)&&attrsFields.date!==undefined&&attrsFields.dateLabel===undefined){
+    attrsFields.dateLabel=attrsFields.date;
+    delete attrsFields.date;
+  }
   // risk / metric 枚举值规范化（LLM 可能输出中文或近义词）
   if(elementType==="risk"){
     if(attrsFields.status!==undefined)attrsFields.status=normalizeEnum(attrsFields.status,RISK_STATUS_MAP,"open");

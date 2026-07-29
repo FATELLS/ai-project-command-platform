@@ -74,25 +74,41 @@ try {
     console.log(`AI Project Command Platform listening on http://${host}:${port}`);
   });
 } catch (error) {
-  database.close();
+  database.close?.();
   console.error(error.message);
   process.exitCode = 1;
 }
 
-let closing = false;
-async function shutdown() {
-  if (closing) return;
-  closing = true;
-  if (!server?.listening) {
-    await materialWorker?.stop();
-    if (database.isOpen) database.close();
-    return;
-  }
-  server.close(async () => {
-    await materialWorker?.stop();
-    if (database.isOpen) database.close();
+let shutdownPromise;
+
+function closeHttpServer() {
+  if (!server?.listening) return Promise.resolve();
+  return new Promise((resolveClose, rejectClose) => {
+    server.close(error => error ? rejectClose(error) : resolveClose());
+    server.closeIdleConnections?.();
   });
 }
 
-process.on("SIGINT", () => { void shutdown(); });
-process.on("SIGTERM", () => { void shutdown(); });
+function closeDatabase() {
+  if (database.isOpen === false) return;
+  database.close?.();
+}
+
+async function shutdown(signal) {
+  if (shutdownPromise) return shutdownPromise;
+  shutdownPromise = (async () => {
+    console.log(`正在停止平台服务（${signal}）...`);
+    const httpClosed = closeHttpServer();
+    await materialWorker?.stop();
+    await httpClosed;
+    closeDatabase();
+    console.log("平台服务已停止。");
+  })().catch(error => {
+    console.error(`平台服务停止失败：${error.message}`);
+    process.exitCode = 1;
+  });
+  return shutdownPromise;
+}
+
+process.on("SIGINT", () => { void shutdown("SIGINT"); });
+process.on("SIGTERM", () => { void shutdown("SIGTERM"); });

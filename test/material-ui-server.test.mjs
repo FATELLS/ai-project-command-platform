@@ -35,7 +35,7 @@ test("campaign and standard workspaces share a fixed renderer with resolved term
 test("ledger exposes server-authoritative quotas, gates, persistent states and role-gated actions", () => {
   for (const copy of [
     "材料总数", "已处理完成", "存储用量", "项目配额",
-    "门阀校验中", "等待上传", "上传中", "预处理中", "需人工确认", "处理失败",
+    "正在检查", "等待上传", "正在上传", "等待处理", "正在处理", "需要补充环境", "处理失败",
     "文件内容与扩展名不一致", "不支持此文件类型", "项目材料配额已用完", "相同内容已归档",
     "上传过于频繁", "已有材料正在上传或预处理", "文件展开后超过安全限制"
   ]) assert.match(renderers, new RegExp(copy));
@@ -50,7 +50,7 @@ test("intake sheets are accessible, bounded and preserve the proposal-only bound
   for (const copy of [
     "选择文件", "选择或拖入文件到当前项目", "松开以上传到当前项目", "更新模板", "材料备注",
     "填写人工材料", "来源 / 发生日期", "贡献人", "正文（纯文本）", "归档人工材料",
-    "材料归档后可按更新类型生成带来源的更新建议；不会直接修改项目草稿或发布版本。",
+    "材料归档后可按更新类型生成带来源的节点预览；不会直接修改项目草稿或发布版本。",
     "开始上传", "正在上传…", "关闭上传面板"
   ]) assert.match(renderers, new RegExp(copy.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   assert.match(renderers, /role: "dialog", ariaModal: "true"/);
@@ -58,6 +58,9 @@ test("intake sheets are accessible, bounded and preserve the proposal-only bound
   assert.match(renderers, /event\.key !== "Tab"/);
   assert.match(renderers, /maxLength: 500/);
   assert.match(renderers, /maxLength: 1000/);
+  assert.match(renderers, /input\.value = ""/);
+  assert.match(renderers, /submit\.disabled = false/);
+  assert.match(renderers, /submit\.textContent = "开始上传"/);
   assert.doesNotMatch(renderers, /merge-draft|publish-version|model selector|prompt editor/i);
 });
 
@@ -87,5 +90,6 @@ test("safe DOM and responsive CSS cover the accepted desktop, tablet and mobile 
     /\.material-summary-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/
   ]) assert.match(css, contract);
   assert.match(css, /min-height:\s*40px/);
+  assert.ok(css.lastIndexOf(".visual-scroll {\n    display: block") > css.lastIndexOf(".visual-scroll { display: none"));
   assert.doesNotMatch(css, /@import|url\(["']?https?:/);
 });

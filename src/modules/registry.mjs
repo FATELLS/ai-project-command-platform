@@ -1,6 +1,6 @@
 import {
   loadGantt, loadMaterials, loadMetrics, loadOverview,
-  loadRisks, loadRoadmap, loadTaskNetwork, loadUnits
+  loadOutcomes, loadRisks, loadRoadmap, loadTaskNetwork, loadUnits
 } from "./loaders.mjs";
 
 const definitions = [
@@ -9,6 +9,7 @@ const definitions = [
   ["units", "Units", ["campaign-cards", "team-cards"], loadUnits],
   ["task-network", "Task Network", ["branching-network", "dependency-list"], loadTaskNetwork],
   ["gantt", "Gantt", ["branching", "lanes"], loadGantt],
+  ["outcomes", "Outcomes", ["closure-detail", "archive-grid"], loadOutcomes],
   ["risks", "Risks", ["risk-register"], loadRisks],
   ["metrics", "Metrics", ["metric-cards"], loadMetrics],
   ["materials", "Materials", ["materials-empty"], loadMaterials]
@@ -30,4 +31,3 @@ export function getModuleDefinition(type) {
 export function listModuleDefinitions() {
   return definitions.slice();
 }
-

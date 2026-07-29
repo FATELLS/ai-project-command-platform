@@ -3,6 +3,7 @@ import {
   renderMaterials,
   renderMetrics,
   renderOverview,
+  renderOutcomes,
   renderRisks,
   renderRoadmap,
   renderTaskNetwork,
@@ -15,6 +16,7 @@ const definitions = [
   ["units", ["campaign-cards", "team-cards"], renderUnits],
   ["task-network", ["branching-network", "dependency-list"], renderTaskNetwork],
   ["gantt", ["branching", "lanes"], renderGantt],
+  ["outcomes", ["closure-detail", "archive-grid"], renderOutcomes],
   ["risks", ["risk-register"], renderRisks],
   ["metrics", ["metric-cards"], renderMetrics],
   ["materials", ["materials-empty"], renderMaterials]

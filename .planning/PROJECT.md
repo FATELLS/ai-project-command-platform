@@ -68,3 +68,13 @@
 - 当前虚谷项目完整迁移且关键视图不回退；
 - 任意材料、问答和提案不能跨项目访问；
 - 重复材料、版本冲突和无来源完成状态被明确拦截。
+
+## 系统设计入口
+
+- 全项目 SPEC：`.planning/design/system/SYSTEM-SPEC.md`
+- 系统架构：`.planning/design/system/ARCHITECTURE.md`
+- 模块索引：`.planning/design/system/README.md`
+- 全项目追踪：`.planning/design/system/TRACEABILITY.md`
+- AI 专项契约：`AI-SPEC.md`
+
+阶段目录描述一次演进；`.planning/design/system/` 描述整个系统长期有效的模块边界、数据流、信任边界和不变式。

@@ -117,19 +117,23 @@ export function createProposalService(database, options = {}) {
     audit(principal, "proposal.interaction_created", projectId, "change_proposal", saved.proposalId, { changes: saved.changes.length, materials: materialIds.length, evidence: evidence.length });
     return { proposal: enrichProposal(projectId, saved) };
   }
-  // Phase 8：交互提案引用项目内已就绪材料证据。复用证据校验边界（项目隔离、ready 状态、去重）。
-  // 交互提案不调用 LLM，因此不要求生成授权或更新模板，但仍需材料/证据归属本项目。
+  // Phase 8：交互提案引用项目内已就绪材料证据。低影响人工编辑可不附材料；
+  // 高影响字段和删除仍由 validator 强制要求证据。
   function loadInteractionEvidence(projectId, input) {
     const rawMaterialIds = Array.isArray(input.materialIds) ? input.materialIds : [];
-    if (rawMaterialIds.length < 1 || rawMaterialIds.length > 8) throw proposalError("INVALID_MATERIAL_SELECTION", "交互提案必须引用 1 至 8 份项目材料", 422);
+    if (rawMaterialIds.length > 8) throw proposalError("INVALID_MATERIAL_SELECTION", "交互提案最多引用 8 份项目材料", 422);
     const materialIds = rawMaterialIds.map(id => String(id ?? "").trim());
     if (materialIds.some(id => !/^[a-zA-Z0-9._-]{16,128}$/.test(id)) || new Set(materialIds).size !== materialIds.length) throw proposalError("INVALID_MATERIAL_SELECTION", "交互提案材料选择无效", 422);
+    const requestedEvidence = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(id => String(id ?? "").trim()) : [];
+    if (!materialIds.length) {
+      if (requestedEvidence.length) throw proposalError("EVIDENCE_NOT_ALLOWED", "未选择材料时不能引用证据", 422);
+      return Object.freeze({ materialIds: [], evidence: [] });
+    }
     const placeholders = materialIds.map(() => "?").join(",");
     const rows = database.prepare(`SELECT id, display_name AS name, active_extraction_version AS extractionVersion, status FROM project_materials WHERE project_id=? AND id IN (${placeholders})`).all(projectId, ...materialIds);
     if (rows.length !== materialIds.length) throw proposalError("MATERIAL_NOT_FOUND", "材料不存在或你无权访问", 404);
     if (rows.some(row => row.status !== "ready" || !row.extractionVersion)) throw proposalError("MATERIAL_NOT_READY", "所选材料尚未处理完成", 409);
     const byMaterial = new Map(rows.map(row => [row.id, row]));
-    const requestedEvidence = Array.isArray(input.evidenceIds) ? input.evidenceIds.map(id => String(id ?? "").trim()) : [];
     const selectEvidence = database.prepare(`SELECT external_id AS evidenceId, material_id AS materialId, kind, location_json AS locationJson, text, summary, content_hash AS contentHash, extraction_version AS extractionVersion FROM evidence_blocks WHERE project_id=? AND external_id=?`);
     const evidence = [];
     let evidenceBytes = 0;

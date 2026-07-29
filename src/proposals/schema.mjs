@@ -36,7 +36,7 @@ export function parseProposal(raw) {
   if (!Number.isSafeInteger(value.baseVersionId) || value.baseVersionId < 1) fail("baseVersionId 无效");
   exact(value.template, ["id", "version"], "template");
   if (!stableId.test(value.template.id) || !/^\d+\.\d+\.\d+$/.test(value.template.version)) fail("template 无效");
-  if (!Array.isArray(value.materialIds) || value.materialIds.length < 1 || value.materialIds.length > 8 || new Set(value.materialIds).size !== value.materialIds.length || value.materialIds.some(id => typeof id !== "string" || !/^[a-zA-Z0-9._-]{16,128}$/.test(id))) fail("materialIds 无效");
+  if (!Array.isArray(value.materialIds) || value.materialIds.length > 8 || new Set(value.materialIds).size !== value.materialIds.length || value.materialIds.some(id => typeof id !== "string" || !/^[a-zA-Z0-9._-]{16,128}$/.test(id))) fail("materialIds 无效");
   text(value.summary, "summary", 1, 2_000); warnings(value.warnings, "proposal");
   if (!Array.isArray(value.changes) || value.changes.length < 1 || value.changes.length > 100) fail("changes 数量无效");
   const changes = value.changes.map((change, index) => {

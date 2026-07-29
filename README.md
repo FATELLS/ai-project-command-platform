@@ -83,6 +83,17 @@ PLATFORM_BOOTSTRAP_PASSWORD=请替换为强密码
 npm start
 ```
 
+`npm start` 是前台开发模式，使用 `Ctrl+C` 优雅停止。需要关闭终端后继续运行时，使用受管理后台模式：
+
+```bash
+npm run start:background
+npm run status
+npm run restart
+npm run stop
+```
+
+`npm run stop` 只停止本平台 Node 进程，并按 HTTP、材料 worker、数据库连接的顺序收尾；不会停止虚谷数据库或任何 Docker 容器。
+
 默认账号为 `admin`，默认地址为 <http://127.0.0.1:4173>。全新数据库不会自动导入任何公司项目；登录后可创建项目，或通过显式导入命令导入已经脱敏并确认可用的项目夹具。
 
 ## LLM 配置

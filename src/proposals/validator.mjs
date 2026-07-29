@@ -95,6 +95,19 @@ function validateTaskGraph(context, changes) {
   for (const id of tasks.keys()) visit(id);
 }
 
+function validateStageGraph(context, changes) {
+  const stages = new Set(context.published.stages.map(item => item.id));
+  for (const change of changes.filter(item => item.module === "roadmap")) {
+    if (change.operation === "delete") stages.delete(change.targetId);
+    else stages.add(change.targetId);
+  }
+  for (const outcome of context.published.outcomes ?? []) {
+    for (const stageId of outcome.between ?? []) {
+      if (!stages.has(stageId)) fail("STAGE_STILL_REFERENCED", "路线节点仍被成果闭环引用，不能删除", { targetId: stageId, outcomeId: outcome.id });
+    }
+  }
+}
+
 export function validateProposal(raw, context) {
   const proposal = parseProposal(raw);
   const template = getProposalTemplate(context.templateId, context.templateVersion);
@@ -121,7 +134,7 @@ export function validateProposal(raw, context) {
     if (!Array.isArray(change.evidenceIds) || new Set(change.evidenceIds).size !== change.evidenceIds.length || change.evidenceIds.some(id => !evidence.has(id))) fail("EVIDENCE_NOT_ALLOWED", "变更项引用了不可用的材料内容", { changeId: change.changeId });
     const highImpact = new Set([...(template.highImpactFields ?? []), ...highImpactDefaults]);
     const containsHighImpact = Object.keys(change.patch).some(field => highImpact.has(field));
-    if ((change.semanticType === "fact" || containsHighImpact) && change.evidenceIds.length < 1) fail("EVIDENCE_REQUIRED", "事实或高影响字段必须引用内容", { changeId: change.changeId });
+    if ((change.semanticType === "fact" || containsHighImpact || change.operation === "delete") && change.evidenceIds.length < 1) fail("EVIDENCE_REQUIRED", "事实、高影响字段或删除操作必须引用内容", { changeId: change.changeId });
     if (change.semanticType === "unknown") warnings.add("UNKNOWN_SEMANTICS");
     if (change.semanticType === "suggestion") warnings.add("SUGGESTION_NOT_FACT");
     if (change.confidence < 0.6) warnings.add("LOW_CONFIDENCE");
@@ -130,5 +143,6 @@ export function validateProposal(raw, context) {
     validateDates(change.patch, change.changeId);
   }
   validateTaskGraph(context, proposal.changes);
+  validateStageGraph(context, proposal.changes);
   return Object.freeze({ ...proposal, warnings: [...warnings].sort(), validation: { status: "passed", schema: true, ownership: true, baseVersion: true, evidence: true, dates: true, taskGraph: true, duplicates: true, semantics: true, validatedAt: new Date().toISOString() } });
 }

@@ -1,10 +1,18 @@
-import { definitionList, el, emptyState, formatDay, localScroller, safeText, statusText, svgEl } from "./shared.js";
+import { definitionList, el, emptyState, formatDay, icon, localScroller, safeText, statusText, svgEl } from "./shared.js";
+import { MATERIAL_TEMPLATE_OPTIONS, downloadMaterialTemplate } from "../material-template-downloads.js";
 
 function cardHeading(kicker, title, copy) {
   return el("header", { className: "module-card-heading" }, [
     el("span", { className: "eyebrow", text: kicker }),
     el("h2", { text: title }),
     copy ? el("p", { text: copy }) : null
+  ]);
+}
+
+function iconCountBadge(className, iconName, count, label) {
+  return el("span", { className, title: `${count} 个${label}` }, [
+    icon(iconName, { size: 12 }),
+    el("span", { text: String(count) })
   ]);
 }
 
@@ -134,61 +142,53 @@ export function renderOverview(context) {
   };
   const currentStage = (snapshot?.stages ?? []).find(stage => stage.id === data.currentStageId);
   const currentLabel = currentStage?.title ?? data.statusLabel ?? "待配置";
+  const canEdit = ["platform_admin", "project_admin", "project_editor"].includes(context.project.role);
+  const taskCount = Number(facts.get("tasks") ?? 0);
+  const materialHref = `/projects/${encodeURIComponent(project.id)}/modules/materials?view=ledger`;
+  const updateHref = `/projects/${encodeURIComponent(project.id)}/updates`;
+  const progressText = data.overallProgress == null ? "暂无正式完成率" : `${data.overallProgress}%`;
   return el("div", { className: "overview-module" }, [
-    el("section", { className: "project-hero goal-hero" }, [
-      el("div", { className: "hero-copy goal-copy" }, [
-        el("span", { className: "single-goal", text: presentation.heroKicker }),
+    el("header", { className: "project-context-strip" }, [
+      el("div", {}, [
+        el("span", { className: "eyebrow", text: presentation.overviewLabel }),
         el("h1", { text: project.name }),
-        el("div", { className: "project-id", text: project.id }),
-        el("p", { text: data.summary ?? data.goal ?? "项目概览尚待补充" }),
-        el("div", { className: "hero-badges goal-tags" }, [
-          el("span", { className: "badge active", text: project.status === "active" ? "进行中" : project.status }),
-          el("span", { className: "badge role", text: context.roleLabel }),
-          el("span", { className: "badge version", text: context.version }),
-          el("span", { className: "badge archived", text: context.templateLabel })
-        ])
+        el("p", { text: data.statusLabel ?? "依据当前已发布项目事实推进工作。" })
       ]),
-      el("aside", { className: "overall-card campaign-status-card" }, [
-        el("div", { className: "planning-orbit", ariaHidden: "true" }, [el("i"), el("b", { text: "PLAN" })]),
-        el("div", { className: "overall-copy" }, [
-          el("small", { text: presentation.currentKicker }),
-          el("b", { text: currentLabel }),
-          el("span", { text: data.statusLabel ?? "依据已发布项目事实推进当前工作" }),
-          el("div", { className: "planning-badge", text: data.overallProgress == null ? "暂无正式完成率" : `正式完成率 ${data.overallProgress}%` })
-        ]),
-        el("img", { src: "/assets/transformation-group-transparent-v2.png", alt: "" })
+      el("div", { className: "project-context-actions" }, [
+        el("span", { className: "badge active", text: project.status === "active" ? "进行中" : project.status }),
+        canEdit ? templateDownloadDisclosure("材料模板") : null,
+        canEdit ? el("a", { href: updateHref, className: "primary-button", text: "项目更新", onClick: event => { event.preventDefault(); context.navigate(updateHref); } }) : null
       ])
     ]),
-    (() => {
-      const isEmpty = (facts.get("tasks") ?? 0) === 0;
-      if (!isEmpty) return null;
-      const canEdit = ["platform_admin", "project_admin", "project_editor"].includes(context.project.role);
-      const matPath = `/projects/${encodeURIComponent(project.id)}/modules/materials`;
-      return el("section", { className: "quick-start-card" }, [
-        el("div", { className: "quick-start-icon", ariaHidden: "true" }, [el("b", { text: "1" })]),
-        el("div", { className: "quick-start-body" }, [
-          el("h2", { text: "开始使用项目" }),
-          el("p", { text: canEdit
-            ? "上传会议纪要、项目计划或其他文档，系统会自动提取内容，生成任务和路线建议。"
-            : "等待项目管理员上传材料并配置项目内容。" }),
-          canEdit ? el("a", { href: `${matPath}?view=ledger`, className: "primary-button quick-start-cta", text: "上传项目材料", onClick: event => { event.preventDefault(); context.navigate(`${matPath}?view=ledger`); } }) : null
-        ])
-      ]);
-    })(),
-    el("section", { className: "fact-grid", ariaLabel: "项目事实计数" }, ["units", "tasks", "stages"].map(id =>
-      el("article", { className: "fact-card" }, [el("strong", { text: String(facts.get(id) ?? 0) }), el("span", { text: factLabels[id] })]))),
-    el("div", { className: "detail-grid" }, [
-      el("section", { className: "detail-panel" }, [
-        el("h2", { text: "当前状态" }),
+    el("section", { className: "overview-priority-grid", ariaLabel: "项目当前推进" }, [
+      el("article", { className: `overview-priority${taskCount === 0 ? " needs-attention" : ""}` }, [
+        el("span", { className: "eyebrow", text: taskCount === 0 ? "需要处理" : "当前推进" }),
+        el("h2", { text: taskCount === 0 ? "建立第一批项目内容" : currentLabel }),
+        el("p", { text: taskCount === 0
+          ? (canEdit ? "上传计划、会议纪要或成果材料，生成可审核的项目节点预览。" : "项目管理员尚未建立任务和路线内容。")
+          : (data.statusLabel ?? "按当前阶段继续推进已确认任务。") }),
+        canEdit && taskCount === 0 ? el("a", { href: materialHref, className: "secondary-button", text: "开始上传", onClick: event => { event.preventDefault(); context.navigate(materialHref); } }) : null
+      ]),
+      el("article", { className: "overview-progress" }, [
+        el("span", { className: "eyebrow", text: "进展" }),
+        el("strong", { text: progressText }),
+        el("p", { text: `当前阶段：${currentLabel}` }),
+        data.overallProgress != null ? el("progress", { max: 100, value: data.overallProgress, ariaLabel: `正式完成率 ${progressText}` }) : null
+      ]),
+      el("section", { className: "fact-grid overview-facts", ariaLabel: "项目事实计数" }, ["units", "tasks", "stages"].map(id =>
+        el("article", { className: "fact-card" }, [el("strong", { text: String(facts.get(id) ?? 0) }), el("span", { text: factLabels[id] })])))
+    ]),
+    el("section", { className: "project-description-section" }, [
+      el("h2", { text: "项目说明" }),
+      el("p", { text: data.summary ?? data.goal ?? "项目概览尚待补充。" })
+    ]),
+    context.project.role === "viewer" ? null : el("details", { className: "technical-details overview-technical-details" }, [
+      el("summary", { text: "版本与技术信息" }),
+      el("div", { className: "detail-panel" }, [
         definitionList([
-          ["状态说明", data.statusLabel], ["当前阶段", currentLabel],
-          ["正式完成率", data.overallProgress == null ? "暂无正式完成率" : `${data.overallProgress}%`],
+          ["项目 ID", project.id], ["当前角色", context.roleLabel], ["项目模板", context.templateLabel],
           ["更新时间", context.updatedAt], ["发布版本", context.version]
         ], "detail-list")
-      ]),
-      el("section", { className: "detail-panel" }, [
-        el("h2", { text: "发布数据边界" }),
-        el("p", { className: "boundary-note", text: "当前页面只读取已发布数据。草稿模块配置不会立即改变本页，审核与发布仍属于后续受控工作流。" })
       ])
     ])
   ]);
@@ -243,7 +243,7 @@ function roadmapViewSwitcher(context) {
   }));
 }
 
-// 阶段卡片板：按任务状态泳道排列，卡片可拖拽；拖拽只发起受控提案，不直写 draft/published
+// 阶段卡片板：按任务状态泳道排列；拖拽只发起受控变更，不直写 draft/published
 // 健康度标记：on-track 绿 / at-risk 橙 / off-track 红。无值默认不显示。
 function healthDot(health) {
   const h = String(health ?? "").toLowerCase();
@@ -258,6 +258,239 @@ function parseArrayField(value) {
   if (Array.isArray(value)) return value;
   if (typeof value === "string" && value.trim()) { try { const p = JSON.parse(value); return Array.isArray(p) ? p : []; } catch { return []; } }
   return [];
+}
+
+const roadmapCardFields = Object.freeze({
+  stage: Object.freeze([
+    { key: "title", label: "标题", type: "text", required: true, group: "基本属性" },
+    { key: "date", source: "dateLabel", label: "日期", type: "date", group: "基本属性" },
+    { key: "state", label: "状态", type: "text", group: "基本属性" },
+    { key: "description", label: "说明", type: "textarea", group: "内容" },
+    { key: "expectedOutput", label: "预期产出", type: "textarea", group: "内容" }
+  ]),
+  task: Object.freeze([
+    { key: "title", label: "标题", type: "text", required: true, group: "基本属性" },
+    { key: "objective", label: "目标与范围", type: "textarea", group: "基本属性" },
+    { key: "owner", label: "负责人", type: "text", group: "基本属性" },
+    { key: "state", label: "状态", type: "text", group: "基本属性" },
+    { key: "startDate", label: "开始日期", type: "date", group: "排期与健康" },
+    { key: "endDate", label: "结束日期", type: "date", group: "排期与健康" },
+    { key: "progress", label: "完成率", type: "number", min: 0, max: 100, group: "排期与健康" },
+    { key: "health", label: "健康度", type: "select", options: [["", "待确认"], ["on-track", "正常"], ["at-risk", "有风险"], ["off-track", "已偏离"]], group: "排期与健康" },
+    { key: "unitId", label: "所属团队", type: "unit", group: "关系" },
+    { key: "parentId", label: "上级任务", type: "task", group: "关系" },
+    { key: "dependsOn", label: "前置任务", type: "array", group: "关系" },
+    { key: "stakeholders", label: "相关方", type: "array", group: "交付与治理" },
+    { key: "deliverables", label: "交付物", type: "array", group: "交付与治理" },
+    { key: "risks", label: "风险", type: "array", group: "交付与治理" },
+    { key: "acceptanceCriteria", label: "验收标准", type: "textarea", group: "交付与治理" },
+    { key: "decisions", label: "决策记录", type: "array", group: "交付与治理" },
+    { key: "expectedOutput", label: "预期产出", type: "textarea", group: "交付与治理" },
+    { key: "source", label: "来源说明", type: "textarea", group: "交付与治理" }
+  ])
+});
+
+const roadmapHighImpactFields = new Set(["date", "state", "owner", "startDate", "endDate", "progress", "health"]);
+
+function editableRoadmapRole(context) {
+  return ["platform_admin", "project_admin", "project_editor"].includes(context.project?.role);
+}
+
+function arrayEditorText(value) {
+  return parseArrayField(value).map(item => typeof item === "string" ? item : JSON.stringify(item)).join("\n");
+}
+
+function parseArrayEditor(value) {
+  return String(value ?? "").split(/\r?\n|,/).map(item => item.trim()).filter(Boolean).map(item => {
+    if (!/^[{[]/.test(item)) return item;
+    try { return JSON.parse(item); } catch { return item; }
+  });
+}
+
+function comparableCardValue(value) {
+  return JSON.stringify(value ?? "");
+}
+
+function cardFieldValue(card, field) {
+  return card?.[field.source ?? field.key] ?? (field.type === "array" ? [] : "");
+}
+
+function cardEditorInput(field, value, context, card) {
+  const id = `roadmap-card-field-${field.key}`;
+  if (field.type === "textarea" || field.type === "array") {
+    return el("textarea", { id, rows: field.type === "array" ? 4 : 3, value: field.type === "array" ? arrayEditorText(value) : String(value ?? ""), required: field.required });
+  }
+  if (field.type === "select") {
+    const input = el("select", { id }, field.options.map(([optionValue, label]) => el("option", { value: optionValue, text: label })));
+    input.value = String(value ?? "");
+    return input;
+  }
+  if (field.type === "unit") {
+    const input = el("select", { id }, (context.data.units ?? []).map(unit => el("option", { value: unit.id, text: unit.name })));
+    input.value = String(value ?? "");
+    return input;
+  }
+  if (field.type === "task") {
+    const options = (context.data.tasks ?? []).filter(task => task.id !== card.id && (!card.unitId || task.unitId === card.unitId));
+    const input = el("select", { id }, [el("option", { value: "", text: "无上级任务" }), ...options.map(task => el("option", { value: task.id, text: task.title }))]);
+    input.value = String(value ?? "");
+    return input;
+  }
+  return el("input", { id, type: field.type, value: value == null ? "" : String(value), required: field.required, min: field.min, max: field.max, step: field.type === "number" ? "1" : null });
+}
+
+function readCardEditorValue(field, input) {
+  if (field.type === "array") return parseArrayEditor(input.value);
+  if (field.type === "number") return input.value === "" ? null : Number(input.value);
+  return input.value.trim();
+}
+
+function cardPatchFromInputs(fields, inputs, original) {
+  const patch = {};
+  for (const field of fields) {
+    const next = readCardEditorValue(field, inputs.get(field.key));
+    const previous = cardFieldValue(original, field);
+    if (comparableCardValue(next) !== comparableCardValue(previous)) patch[field.key] = next;
+  }
+  return patch;
+}
+
+function openRoadmapCardEditor(context, options) {
+  const kind = options.kind;
+  const fields = roadmapCardFields[kind];
+  const card = options.card;
+  modalSheet({
+    title: `编辑${kind === "stage" ? context.presentation.stage : context.presentation.task}`,
+    eyebrow: options.scope === "preview" ? "本次 AI 节点预览" : "正式路线图受控编辑",
+    project: context.project,
+    returnFocus: options.returnFocus,
+    className: "material-sheet roadmap-card-edit-sheet",
+    closeLabel: "关闭卡片编辑",
+    titleId: "roadmap-card-edit-title",
+    render: controls => {
+      const inputs = new Map();
+      const groups = [...new Set(fields.map(field => field.group))].map(group => el("fieldset", { className: "card-editor-group" }, [
+        el("legend", { text: group }),
+        ...fields.filter(field => field.group === group).map(field => {
+          const input = cardEditorInput(field, cardFieldValue(card, field), context, card);
+          inputs.set(field.key, input);
+          return el("div", { className: "field" }, [
+            el("label", { htmlFor: input.id, text: field.label }),
+            input,
+            field.type === "array" ? el("small", { text: "每行一项；清空后保存可移除此属性。" }) : null
+          ]);
+        })
+      ]));
+      const error = el("p", { className: "form-error", role: "alert" });
+      const note = el("textarea", { id: "roadmap-edit-note", rows: 2, maxLength: 500, placeholder: "可选：说明这次调整的原因" });
+      const materialSelect = el("select", { id: "roadmap-edit-material" }, [el("option", { value: "", text: "不引用材料" })]);
+      const evidenceSelect = el("select", { id: "roadmap-edit-evidence", disabled: true }, [el("option", { value: "", text: "请先选择材料" })]);
+      const evidenceStatus = el("small", { text: "关键字段或正式路线图删除必须选择材料依据。" });
+      const evidenceSection = options.scope === "main" ? el("fieldset", { className: "card-editor-group card-editor-evidence" }, [
+        el("legend", { text: "变更依据" }),
+        el("div", { className: "field" }, [el("label", { htmlFor: materialSelect.id, text: "项目材料" }), materialSelect]),
+        el("div", { className: "field" }, [el("label", { htmlFor: evidenceSelect.id, text: "引用位置" }), evidenceSelect, evidenceStatus])
+      ]) : null;
+      if (evidenceSection) {
+        void context.api(generationPath(context, "/capabilities")).then(envelope => {
+          const materials = (envelope.eligibleMaterials ?? []).filter(item => item.status === "ready" && Number(item.evidenceCount) > 0);
+          materialSelect.append(...materials.map(item => el("option", { value: item.id, text: item.name })));
+          if (!materials.length) evidenceStatus.textContent = "当前没有已就绪且包含可引用内容的材料。";
+        }).catch(requestError => { evidenceStatus.textContent = requestError.message; });
+        materialSelect.addEventListener("change", async () => {
+          evidenceSelect.disabled = true;
+          evidenceSelect.replaceChildren(el("option", { value: "", text: materialSelect.value ? "正在加载引用位置…" : "请先选择材料" }));
+          if (!materialSelect.value) return;
+          try {
+            const response = await context.api(materialPath(context, `/${encodeURIComponent(materialSelect.value)}/evidence`));
+            evidenceSelect.replaceChildren(el("option", { value: "", text: "选择一条引用位置" }), ...(response.items ?? []).map(item => el("option", { value: item.evidenceId, text: `${locatorLabel(item)} · ${safeText(item.summary || item.text, "材料内容")}` })));
+            evidenceSelect.disabled = false;
+          } catch (requestError) {
+            evidenceStatus.textContent = requestError.message;
+          }
+        });
+      }
+      const submit = el("button", { type: "submit", className: "primary-button", text: options.scope === "preview" ? "保存预览修改" : "提交编辑审核" });
+      const form = el("form", { className: "roadmap-card-edit-form", onSubmit: async event => {
+        event.preventDefault();
+        error.textContent = "";
+        const baseline = options.original ?? card;
+        const patch = cardPatchFromInputs(fields, inputs, baseline);
+        if (!Object.keys(patch).length) { error.textContent = "没有检测到属性变化。"; return; }
+        const needsEvidence = Object.keys(patch).some(key => roadmapHighImpactFields.has(key));
+        if (options.scope === "main" && needsEvidence && !evidenceSelect.value) { error.textContent = "状态、负责人、日期、进度或健康度变化必须选择材料依据。"; return; }
+        submit.disabled = true;
+        controls.setCommitting(true);
+        try {
+          if (options.scope === "preview") {
+            await context.api(proposalPath(context, `/${encodeURIComponent(options.proposalId)}/preview/${encodeURIComponent(options.change.changeId)}`), { method: "PATCH", mutation: true, body: { patch, note: note.value } });
+            controls.setCommitting(false);
+            controls.close();
+            await options.onSaved();
+            context.showToast("节点预览已更新，审核状态未改变");
+          } else {
+            const materialIds = materialSelect.value ? [materialSelect.value] : [];
+            const evidenceIds = evidenceSelect.value ? [evidenceSelect.value] : [];
+            const response = await context.api(proposalPath(context), { method: "POST", mutation: true, body: {
+              summary: `编辑节点：${safeText(card.title, card.id)}`,
+              materialIds,
+              evidenceIds,
+              changes: [{ changeId: `edit-${crypto.randomUUID()}`, module: kind === "stage" ? "roadmap" : "task-network", operation: "update", targetId: card.id, semanticType: "plan", patch, evidenceIds, confidence: 1, warnings: [] }]
+            } });
+            controls.setCommitting(false);
+            controls.close();
+            context.navigate(previewHref(context, response.proposal.proposalId));
+          }
+        } catch (requestError) {
+          error.textContent = requestError.message;
+          controls.setCommitting(false);
+          submit.disabled = false;
+        }
+      } }, [...groups, el("div", { className: "field" }, [el("label", { htmlFor: note.id, text: "编辑说明" }), note]), evidenceSection, error, el("footer", { className: "sheet-actions" }, [el("button", { type: "button", className: "secondary-button", text: "取消", onClick: controls.close }), submit])]);
+      const confirmInput = el("input", { id: "roadmap-delete-confirm", type: "text", autoComplete: "off", placeholder: "输入：确认删除" });
+      const deleteButton = el("button", { type: "button", className: "danger-button", text: options.scope === "preview" ? "删除本次预览卡片" : "提交删除审核", disabled: true });
+      confirmInput.addEventListener("input", () => { deleteButton.disabled = confirmInput.value.trim() !== "确认删除"; });
+      deleteButton.addEventListener("click", async () => {
+        error.textContent = "";
+        if (confirmInput.value.trim() !== "确认删除") return;
+        if (options.scope === "main" && !evidenceSelect.value) { error.textContent = "正式路线图删除必须选择材料依据。"; return; }
+        deleteButton.disabled = true;
+        controls.setCommitting(true);
+        try {
+          if (options.scope === "preview") {
+            await context.api(proposalPath(context, `/${encodeURIComponent(options.proposalId)}/review/${encodeURIComponent(options.change.changeId)}`), { method: "PATCH", mutation: true, body: { decision: "rejected", note: "从本次节点预览中删除" } });
+            controls.setCommitting(false);
+            controls.close();
+            await options.onSaved();
+            context.showToast("已从本次节点预览中移除");
+          } else {
+            const materialIds = [materialSelect.value];
+            const evidenceIds = [evidenceSelect.value];
+            const response = await context.api(proposalPath(context), { method: "POST", mutation: true, body: {
+              summary: `删除节点：${safeText(card.title, card.id)}`,
+              materialIds,
+              evidenceIds,
+              changes: [{ changeId: `delete-${crypto.randomUUID()}`, module: kind === "stage" ? "roadmap" : "task-network", operation: "delete", targetId: card.id, semanticType: "plan", patch: {}, evidenceIds, confidence: 1, warnings: ["DELETE_OPERATION"] }]
+            } });
+            controls.setCommitting(false);
+            controls.close();
+            context.navigate(previewHref(context, response.proposal.proposalId));
+          }
+        } catch (requestError) {
+          error.textContent = requestError.message;
+          controls.setCommitting(false);
+          deleteButton.disabled = false;
+        }
+      });
+      const danger = el("section", { className: "card-editor-danger" }, [
+        el("h3", { text: options.scope === "preview" ? "移除本次预览卡片" : "删除路线图卡片" }),
+        el("p", { text: options.scope === "preview" ? "只移除本次材料生成的变化，正式路线图节点不会被删除。" : "删除会创建待审核节点预览，不会直接修改已发布路线图。" }),
+        el("div", { className: "field" }, [el("label", { htmlFor: confirmInput.id, text: "删除确认" }), confirmInput]),
+        deleteButton
+      ]);
+      controls.body.replaceChildren(el("p", { className: "material-boundary", text: options.scope === "preview" ? "只能编辑本次材料生成的卡片；保存后路线图投影会立即重算。" : "保存后生成待审核节点预览；审核、应用草稿和发布仍是独立步骤。" }), form, danger);
+    }
+  });
 }
 
 // 作战单元进度视图：以单元为入口，展示覆盖阶段、任务、完成度
@@ -473,7 +706,7 @@ function renderRoadmapSwimlaneLegacy(context) {
       ariaExpanded: stage.id === openStageId ? "true" : "false",
       title: `${stage.title} · ${bandLabels[stage.band]}`, onClick: () => toggleStage(stage.id)
     }, [
-      el("span", { className: "phase-anchor-mark", ariaHidden: "true", text: "▾", title: "项目锚点·拆解" }),
+      el("span", { className: "phase-anchor-mark", ariaHidden: "true", title: "项目锚点·拆解" }, [icon("chevron-down", { size: 12 })]),
       el("span", { className: "phase-station-title", text: stage.title }),
       el("span", { className: "phase-station-meta", text: bandLabels[stage.band] })
     ]);
@@ -482,7 +715,7 @@ function renderRoadmapSwimlaneLegacy(context) {
     type: "button", className: `closure-anchor${closure.id === selectedAnchor ? " selected" : ""}`,
     style: `left:${pos}%;top:${anchorBandTop + (anchorPlan.laneOf.get(closure.id) ?? 0) * ANCHOR_LANE_PX}px`, dataset: { anchor: closure.id }, title: `${closure.title} · 收口锚点`,
     ariaLabel: `${closure.title}，收口锚点`, onClick: () => selectAnchor(closure.id)
-  }, [el("span", { ariaHidden: "true", text: "◆" }), el("span", { className: "closure-anchor-label", text: closure.title })]));
+  }, [icon("diamond", { size: 11 }), el("span", { className: "closure-anchor-label", text: closure.title })]));
 
   const mainTrackStyle = hasTimeline ? `min-height:${24 + stationPlan.laneCount * STATION_LANE_PX + anchorPlan.laneCount * ANCHOR_LANE_PX + 14}px` : null;
   const mainTrack = el("div", { className: "swimlane-main-track", style: mainTrackStyle }, [...guideSpans(), ...phaseNodes, ...anchorNodes]);
@@ -501,13 +734,13 @@ function renderRoadmapSwimlaneLegacy(context) {
      const barRisks = parseArrayField(task.risks).length;
      const barHasPmbok = Boolean(healthDot(task.health)) || barDeliverables > 0 || barRisks > 0;
      const barChildren = [
-       hasParent ? el("span", { className: "swimlane-bar-decomp", ariaHidden: "true", text: "⇢", title: `拆解自 ${taskById.get(task.parentId)?.title ?? task.parentId}` }) : null,
+       hasParent ? el("span", { className: "swimlane-bar-decomp", title: `拆解自 ${taskById.get(task.parentId)?.title ?? task.parentId}` }, [icon("git-branch", { size: 12 })]) : null,
        healthDot(task.health),
        el("span", { className: "swimlane-bar-title", text: task.title }),
        Number.isFinite(task.progress) ? el("span", { className: "swimlane-bar-progress", text: `${task.progress}%` }) : null,
        barHasPmbok ? el("span", { className: "swimlane-bar-badges" }, [
-         barDeliverables ? el("span", { className: "bar-badge bar-badge-deliverable", title: `${barDeliverables} 个交付物`, text: `📦${barDeliverables}` }) : null,
-         barRisks ? el("span", { className: "bar-badge bar-badge-risk", title: `${barRisks} 个风险`, text: `⚠${barRisks}` }) : null
+         barDeliverables ? iconCountBadge("bar-badge bar-badge-deliverable", "package", barDeliverables, "交付物") : null,
+         barRisks ? iconCountBadge("bar-badge bar-badge-risk", "triangle-alert", barRisks, "风险") : null
        ].filter(Boolean)) : null
      ].filter(Boolean);
      return el("button", {
@@ -527,9 +760,9 @@ function renderRoadmapSwimlaneLegacy(context) {
     el("li", { className: "band-prepare" }, [el("i", { className: "dot" }), bandLabels.prepare]),
     el("li", { className: "band-active" }, [el("i", { className: "dot" }), bandLabels.active]),
     el("li", { className: "band-converged" }, [el("i", { className: "dot" }), bandLabels.converged]),
-    el("li", {}, [el("span", { className: "anchor-glyph", text: "▾", ariaHidden: "true" }), "拆解锚点"]),
-    el("li", {}, [el("span", { className: "anchor-glyph", text: "◆", ariaHidden: "true" }), "收口锚点"]),
-    el("li", {}, [el("span", { className: "anchor-glyph decomp-glyph", text: "⇢", ariaHidden: "true" }), "同单元拆解链"])
+    el("li", {}, [icon("chevron-down", { size: 13, className: "anchor-glyph" }), "拆解锚点"]),
+    el("li", {}, [icon("diamond", { size: 11, className: "anchor-glyph" }), "收口锚点"]),
+    el("li", {}, [icon("git-branch", { size: 13, className: "anchor-glyph decomp-glyph" }), "同单元拆解链"])
   ]);
   const chart = el("div", { className: "swimlane-chart", dataset: { timeline: hasTimeline ? "1" : "0" } }, [
     el("div", { className: "swimlane-main", role: "row", ariaLabel: "主泳道" }, [el("span", { className: "swimlane-rail swimlane-rail-main", text: "主泳道" }), mainTrack]),
@@ -577,9 +810,9 @@ function renderRoadmapSwimlaneLegacy(context) {
                  el("span", { className: "aggregation-count", text: `${stageHealthCounts["on-track"]}/${stageHealthCounts["at-risk"]}/${stageHealthCounts["off-track"]}` })
                ].filter(Boolean))
              : null,
-           stageDeliverables ? el("span", { className: "card-badge badge-deliverable", title: `${stageDeliverables} 个交付物`, text: `📦 ${stageDeliverables}` }) : null,
-           stageRisks ? el("span", { className: "card-badge badge-risk", title: `${stageRisks} 个风险`, text: `⚠ ${stageRisks}` }) : null,
-           stageDecisions ? el("span", { className: "card-badge badge-decision", title: `${stageDecisions} 个决策`, text: `✓ ${stageDecisions}` }) : null
+           stageDeliverables ? iconCountBadge("card-badge badge-deliverable", "package", stageDeliverables, "交付物") : null,
+           stageRisks ? iconCountBadge("card-badge badge-risk", "triangle-alert", stageRisks, "风险") : null,
+           stageDecisions ? iconCountBadge("card-badge badge-decision", "circle-check", stageDecisions, "决策") : null
          ].filter(Boolean))
        ]) : null
      ])
@@ -594,7 +827,7 @@ function renderRoadmapSwimlaneLegacy(context) {
       el("article", { className: "swimlane-overlay-panel" }, [
         el("header", {}, [
           el("div", {}, [el("span", { className: "eyebrow", text: `${unit?.name ?? unitTerm} · 副泳道卡片` }), el("h3", { text: task.title })]),
-          el("button", { type: "button", className: "icon-button", ariaLabel: "关闭浮层", text: "✕", onClick: closeOverlay })
+          el("button", { type: "button", className: "icon-button", ariaLabel: "关闭浮层", title: "关闭浮层", onClick: closeOverlay }, [icon("x")])
         ]),
         taskInlineDetail(context, task, unit?.name ?? ""),
         el("div", { className: "swimlane-overlay-actions" }, [
@@ -643,6 +876,7 @@ function renderRoadmapSwimlane(context) {
   const units = Array.isArray(context.data.units) ? context.data.units : [];
   const tasks = Array.isArray(context.data.tasks) ? context.data.tasks : [];
   const closures = Array.isArray(context.data.closures) ? context.data.closures : [];
+  const roadmapPreview = context.roadmapPreview ?? null;
   if (!stages.length) return emptyState(context.module.emptyState);
 
   const stageTerm = context.presentation.stage;
@@ -662,11 +896,26 @@ function renderRoadmapSwimlane(context) {
   const stageIndex = new Map(phaseStages.map((stage, index) => [stage.id, index]));
   const taskById = new Map(tasks.map(task => [task.id, task]));
   const unitById = new Map(units.map(unit => [unit.id, unit]));
+  const previewAdded = new Set(roadmapPreview?.changeMarkers?.added ?? []);
+  const previewModified = new Set(roadmapPreview?.changeMarkers?.modified ?? []);
+  const previewChanges = new Map((roadmapPreview?.editableChanges ?? []).map(change => [change.targetId, change]));
+  const previewMarkerFor = (...ids) => ids.some(id => id && previewAdded.has(id))
+    ? "added"
+    : ids.some(id => id && previewModified.has(id))
+      ? "modified"
+      : "";
+  const previewChangeFor = (...ids) => ids.map(id => previewChanges.get(id)).find(Boolean);
+  const previewCardClass = marker => roadmapPreview
+    ? marker
+      ? ` update-preview-${marker}`
+      : " update-preview-readonly"
+    : "";
   const requestedStageId = context.query.get("stage");
   const selectedUnitId = context.query.get("unit");
   const selectedTaskId = context.query.get("task");
   const selectedAnchorId = context.query.get("anchor");
   const selectedTask = taskById.get(selectedTaskId) ?? null;
+  const canEditCards = !roadmapPreview && editableRoadmapRole(context);
 
   function phaseOf(task) {
     const start = task?.startDate;
@@ -732,6 +981,10 @@ function renderRoadmapSwimlane(context) {
 
   const stageCards = phaseStages.map((stage, index) => {
     const selected = stage.id === openStageId;
+    const sourceTask = stage.sourceTaskId ? taskById.get(stage.sourceTaskId) : null;
+    const previewMarker = previewMarkerFor(stage.id, sourceTask?.id);
+    const previewChange = previewChangeFor(stage.id, sourceTask?.id);
+    const previewEditable = Boolean(roadmapPreview?.capabilities?.edit && previewMarker);
     const stageTaskList = tasks.filter(task => phaseOf(task) === stage.id);
     const taskCount = stageTaskList.length;
     // PMBOK 聚合：该阶段下所有任务的健康度分布 + 交付物/风险/决策总数
@@ -746,7 +999,7 @@ function renderRoadmapSwimlane(context) {
     }
     const hasAggregation = stageDeliverables > 0 || stageRisks > 0 || stageDecisions > 0 || healthCounts["on-track"] + healthCounts["at-risk"] + healthCounts["off-track"] > 0;
     return el("div", {
-      className: "swimlane-stage-cell",
+      className: `swimlane-stage-cell${previewCardClass(previewMarker)}`,
       style: `--stage-column:${index + 1}`,
       dataset: { stageId: stage.id, expandAlign: expansionAlign(index) }
     }, [
@@ -759,6 +1012,10 @@ function renderRoadmapSwimlane(context) {
         onClick: () => toggleStage(stage.id)
       }, [
         el("strong", { className: "swimlane-stage-title", text: stage.title }),
+        roadmapPreview ? el("span", {
+          className: `roadmap-preview-marker${previewMarker ? ` ${previewMarker}` : " readonly"}`,
+          text: previewMarker === "added" ? "AI 新增" : previewMarker === "modified" ? "AI 修改" : "当前节点 · 只读"
+        }) : null,
         selected ? el("span", { className: "swimlane-stage-status", text: `${safeText(stage.dateLabel, "时间待确认")} · ${bandLabels[stage.band]}${taskCount ? ` · ${taskCount} ${taskTerm}` : ""}` }) : null,
         selected ? el("span", { className: "swimlane-stage-description", text: safeText(stage.description, "阶段说明待补充") }) : null,
         selected ? el("span", { className: "swimlane-stage-output", text: `预期产出：${safeText(stage.expectedOutput, "待确认")}` }) : null,
@@ -771,11 +1028,35 @@ function renderRoadmapSwimlane(context) {
                 healthCounts["off-track"] ? el("span", { className: "health-dot health-red" }) : null
               ].filter(Boolean))
             : null,
-          stageDeliverables ? el("span", { className: "mini-badge mini-deliverable", text: `📦${stageDeliverables}` }) : null,
-          stageRisks ? el("span", { className: "mini-badge mini-risk", text: `⚠${stageRisks}` }) : null,
-          stageDecisions ? el("span", { className: "mini-badge mini-decision", text: `✓${stageDecisions}` }) : null
+          stageDeliverables ? iconCountBadge("mini-badge mini-deliverable", "package", stageDeliverables, "交付物") : null,
+          stageRisks ? iconCountBadge("mini-badge mini-risk", "triangle-alert", stageRisks, "风险") : null,
+          stageDecisions ? iconCountBadge("mini-badge mini-decision", "circle-check", stageDecisions, "决策") : null
         ].filter(Boolean)) : null
-      ])
+      ]),
+      canEditCards || previewEditable ? el("button", {
+        type: "button",
+        className: `roadmap-card-edit-button${roadmapPreview ? " preview-edit" : ""}`,
+        title: roadmapPreview ? `编辑本次生成${stageTerm}` : `编辑${stageTerm}`,
+        ariaLabel: roadmapPreview ? `编辑本次生成${stageTerm}：${stage.title}` : `编辑${stageTerm}：${stage.title}`,
+        onClick: event => {
+          event.stopPropagation();
+          openRoadmapCardEditor(context, roadmapPreview ? {
+            scope: "preview",
+            kind: sourceTask ? "task" : "stage",
+            card: sourceTask ?? stage,
+            original: previewChange.original ?? {},
+            change: previewChange,
+            proposalId: roadmapPreview.proposalId,
+            returnFocus: event.currentTarget,
+            onSaved: roadmapPreview.onSaved
+          } : {
+            scope: "main",
+            kind: sourceTask ? "task" : "stage",
+            card: sourceTask ?? stage,
+            returnFocus: event.currentTarget
+          });
+        }
+      }, [icon("pencil", { size: 14 })]) : null
     ]);
   });
 
@@ -791,7 +1072,7 @@ function renderRoadmapSwimlane(context) {
       ariaLabel: `${closure.title}，收口锚点`,
       onClick: () => selectAnchor(closure.id)
     }, [
-      el("span", { className: "closure-anchor-mark", ariaHidden: "true", text: "◆" }),
+      el("span", { className: "closure-anchor-mark", ariaHidden: "true" }, [icon("diamond", { size: 10 })]),
       el("span", { className: "closure-anchor-label", text: closure.title })
     ]);
   }).filter(Boolean);
@@ -811,11 +1092,14 @@ function renderRoadmapSwimlane(context) {
     const childCount = (childrenOf.get(task.id) ?? []).length;
     const inChain = activeChain.has(task.id);
     const visualState = taskVisualState(task);
+    const previewMarker = previewMarkerFor(task.id);
+    const previewChange = previewChangeFor(task.id);
+    const previewEditable = Boolean(roadmapPreview?.capabilities?.edit && previewMarker);
     // PMBOK 摘要：P0 health 色点、P1 交付物/风险计数
     const taskDeliverables = parseArrayField(task.deliverables).length;
     const taskRisks = parseArrayField(task.risks).length;
     return el("article", {
-      className: `swimlane-task-card-shell unit-color-${colorIndex}${expanded ? " expanded" : ""}${inChain ? " chain" : ""}`,
+      className: `swimlane-task-card-shell unit-color-${colorIndex}${expanded ? " expanded" : ""}${inChain ? " chain" : ""}${previewCardClass(previewMarker)}`,
       dataset: { taskId: task.id, parent: task.parentId || "" }
     }, [
       el("button", {
@@ -830,11 +1114,39 @@ function renderRoadmapSwimlane(context) {
           el("strong", { className: "swimlane-task-title", text: task.title }),
           healthDot(task.health)
         ]),
+        roadmapPreview ? el("span", {
+          className: `roadmap-preview-marker${previewMarker ? ` ${previewMarker}` : " readonly"}`,
+          text: previewMarker === "added" ? "AI 新增" : previewMarker === "modified" ? "AI 修改" : "当前节点 · 只读"
+        }) : null,
         (taskDeliverables > 0 || taskRisks > 0) ? el("div", { className: "swimlane-task-badges" }, [
-          taskDeliverables ? el("span", { className: "card-badge badge-deliverable", title: `${taskDeliverables} 个交付物`, text: `📦 ${taskDeliverables}` }) : null,
-          taskRisks ? el("span", { className: "card-badge badge-risk", title: `${taskRisks} 个风险`, text: `⚠ ${taskRisks}` }) : null
+          taskDeliverables ? iconCountBadge("card-badge badge-deliverable", "package", taskDeliverables, "交付物") : null,
+          taskRisks ? iconCountBadge("card-badge badge-risk", "triangle-alert", taskRisks, "风险") : null
         ].filter(Boolean)) : null
       ]),
+      canEditCards || previewEditable ? el("button", {
+        type: "button",
+        className: `roadmap-card-edit-button task-edit${roadmapPreview ? " preview-edit" : ""}`,
+        title: roadmapPreview ? `编辑本次生成${taskTerm}` : `编辑${taskTerm}`,
+        ariaLabel: roadmapPreview ? `编辑本次生成${taskTerm}：${task.title}` : `编辑${taskTerm}：${task.title}`,
+        onClick: event => {
+          event.stopPropagation();
+          openRoadmapCardEditor(context, roadmapPreview ? {
+            scope: "preview",
+            kind: "task",
+            card: task,
+            original: previewChange.original ?? {},
+            change: previewChange,
+            proposalId: roadmapPreview.proposalId,
+            returnFocus: event.currentTarget,
+            onSaved: roadmapPreview.onSaved
+          } : {
+            scope: "main",
+            kind: "task",
+            card: task,
+            returnFocus: event.currentTarget
+          });
+        }
+      }, [icon("pencil", { size: 14 })]) : null,
       expanded ? el("div", { className: "swimlane-task-detail" }, [
         parent ? el("p", { className: "swimlane-decomposition-note", text: `拆解自：${parent.title}` }) : null,
         childCount ? el("p", { className: "swimlane-decomposition-note", text: `已拆解出 ${childCount} 个同单元子任务` }) : null,
@@ -842,6 +1154,19 @@ function renderRoadmapSwimlane(context) {
       ]) : null
     ]);
   }
+
+  const unscheduledTasks = tasks
+    .filter(task => !phaseOf(task))
+    .sort((left, right) => safeText(left.title).localeCompare(safeText(right.title), "zh-CN"));
+  const unscheduledSection = unscheduledTasks.length ? el("section", { className: "unscheduled-lane roadmap-unscheduled-cards" }, [
+    el("h3", { text: "待排期卡片" }),
+    el("p", { text: "这些任务还不能归入现有阶段；补充或调整日期后会自动进入上方路线。" }),
+    el("div", { className: "roadmap-unscheduled-grid" }, unscheduledTasks.map(task => {
+      const unit = unitById.get(task.unitId) ?? { name: "团队待确认" };
+      const colorIndex = Math.max(0, units.findIndex(item => item.id === task.unitId)) % 7;
+      return taskCard(task, unit, colorIndex);
+    }))
+  ]) : null;
 
   const unitRows = involvedUnits.map(unit => {
     const colorIndex = Math.max(0, units.findIndex(item => item.id === unit.id)) % 7;
@@ -869,9 +1194,9 @@ function renderRoadmapSwimlane(context) {
     el("li", { className: "band-prepare" }, [el("i", { className: "dot" }), bandLabels.prepare]),
     el("li", { className: "band-active" }, [el("i", { className: "dot" }), bandLabels.active]),
     el("li", { className: "band-converged" }, [el("i", { className: "dot" }), bandLabels.converged]),
-    el("li", {}, [el("span", { className: "anchor-glyph", text: "◆", ariaHidden: "true" }), "收口"]),
-    el("li", {}, [el("span", { className: "anchor-glyph decomp-glyph", text: "⇢", ariaHidden: "true" }), "同单元拆解"]),
-    el("li", {}, [el("span", { className: "status-glyph overdue", text: "!", ariaHidden: "true" }), "超时"])
+    el("li", {}, [icon("diamond", { size: 11, className: "anchor-glyph" }), "收口"]),
+    el("li", {}, [icon("git-branch", { size: 13, className: "anchor-glyph decomp-glyph" }), "同单元拆解"]),
+    el("li", {}, [icon("circle-alert", { size: 13, className: "status-glyph overdue" }), "超时"])
   ]);
 
   const mainLane = el("section", { className: "swimlane-main-row", ariaLabel: "主任务时间线" }, [
@@ -941,12 +1266,29 @@ function renderRoadmapSwimlane(context) {
     dataset: { openStage: openStage?.id ?? "", stageCount: String(phaseStages.length) }
   }, [mainLane, closureLane, expansion]);
 
-  const section = el("section", { className: "module-primary-card roadmap-workbench roadmap-swimlane roadmap-card-swimlane" }, [
-    roadmapViewSwitcher(context),
-    cardHeading("PROJECT ROADMAP", context.module.title, `主任务组成项目路线；点击${stageTerm}后，相关${unitTerm}以不同颜色的卡片集合展开，副任务不按工期拉长。`),
+  const previewStatus = roadmapPreview ? el("div", { className: "project-update-status" }, [
+    el("div", {}, [
+      el("span", { className: "badge version", text: `基于 ${roadmapPreview.version ?? context.version}` }),
+      el("span", { text: `${previewAdded.size} 个新增 · ${previewModified.size} 个修改 · ${(roadmapPreview.changeMarkers?.removed ?? []).length} 个移除` }),
+      el("span", { text: `${roadmapPreview.pendingCount ?? 0} 项待确认` })
+    ]),
+    roadmapPreview.reviewHref ? linkTo(context, roadmapPreview.reviewHref, "审核本次更新", "primary-button") : null
+  ]) : null;
+  const section = el("section", { className: `module-primary-card roadmap-workbench roadmap-swimlane roadmap-card-swimlane${roadmapPreview ? " project-update-roadmap" : ""}` }, [
+    roadmapPreview ? null : roadmapViewSwitcher(context),
+    cardHeading(
+      roadmapPreview ? "PROJECT UPDATE PREVIEW" : "PROJECT ROADMAP",
+      roadmapPreview ? "更新后的项目路线图" : context.module.title,
+      roadmapPreview
+        ? `正式路线图叠加本次材料生成的节点变化；高亮卡片属于本次更新，其余节点只用于定位。`
+        : `主任务组成项目路线；点击${stageTerm}后，相关${unitTerm}以不同颜色的卡片集合展开，副任务不按工期拉长。`
+    ),
+    previewStatus,
     legend,
-    localScroller("卡片式项目路线图，可水平滚动", board),
-    detail
+    localScroller(roadmapPreview ? "更新后的项目路线图，可水平滚动" : "卡片式项目路线图，可水平滚动", board),
+    unscheduledSection,
+    detail,
+    roadmapPreview ? el("p", { className: "material-boundary", text: "这是应用本次更新后的模拟效果，尚未写入项目草稿或发布版本。" }) : null
   ]);
   if (openStage) {
     requestAnimationFrame(() => {
@@ -1077,6 +1419,25 @@ export function renderGantt(context) {
   ]);
 }
 
+export function renderOutcomes(context) {
+  const outcomes = Array.isArray(context.data.outcomes) ? context.data.outcomes : [];
+  if (!outcomes.length) return emptyState(context.module.emptyState);
+  return el("section", { className: "module-primary-card" }, [
+    cardHeading("OUTCOME ARCHIVE", context.module.title, "按项目版本图展示成果、收口和来源，不接受项目配置提供自定义页面。"),
+    el("div", { className: "outcome-grid" }, outcomes.map(outcome => el("article", { className: "outcome-card" }, [
+      el("span", { className: `module-status ${stateClass(outcome.state)}`, text: statusText(outcome.state) }),
+      el("h3", { text: outcome.title }),
+      el("p", { text: safeText(outcome.result || outcome.description, "暂无成果说明") }),
+      definitionList([
+        ["日期", outcome.dateLabel || ""],
+        ["关联节点", Array.isArray(outcome.between) && outcome.between.length ? outcome.between.join(" → ") : ""],
+        ["本地预览", Array.isArray(outcome.previewAssets) && outcome.previewAssets.length ? `${outcome.previewAssets.length} 个资源` : "无本地预览"],
+        ["来源", outcome.source]
+      ])
+    ])))
+  ]);
+}
+
 function openLightbox(context, assets, startIndex, returnFocus) {
   let index = startIndex;
   const backdrop = el("div", { className: "lightbox-backdrop" });
@@ -1090,7 +1451,7 @@ function openLightbox(context, assets, startIndex, returnFocus) {
     caption.textContent = `${index + 1} / ${assets.length} · ${source.split("/").at(-1)}`;
   };
   const panel = el("section", { className: "lightbox", role: "dialog", ariaModal: "true", ariaLabel: "成果预览" }, [
-    el("button", { type: "button", className: "lightbox-close", ariaLabel: "关闭预览", text: "×", onClick: close }), image, caption,
+    el("button", { type: "button", className: "lightbox-close", ariaLabel: "关闭预览", title: "关闭预览", onClick: close }, [icon("x")]), image, caption,
     el("div", { className: "lightbox-actions" }, [
       el("button", { type: "button", className: "secondary-button", text: "上一张", disabled: assets.length < 2, onClick: () => { index = (index - 1 + assets.length) % assets.length; update(); } }),
       el("button", { type: "button", className: "secondary-button", text: "下一张", disabled: assets.length < 2, onClick: () => { index = (index + 1) % assets.length; update(); } })
@@ -1105,7 +1466,7 @@ function openLightbox(context, assets, startIndex, returnFocus) {
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
-  image.addEventListener("error", () => { image.hidden = true; caption.textContent = "预览资源不可用"; });
+  image.addEventListener("error", () => { image.hidden = true; caption.textContent = "无本地预览"; });
   document.body.append(backdrop); update(); panel.querySelector("button").focus();
 }
 
@@ -1143,8 +1504,8 @@ export function renderMetrics(context) {
 
 const phaseThreeMaterialsBoundaryCopy = Object.freeze(["项目材料功能将在下一阶段开放", "当前页面不会读取或上传材料。"]); // Historical acceptance marker.
 const materialStatus = Object.freeze({
-  gate_checking: "门阀校验中", staging: "等待上传", uploading: "上传中", queued: "预处理中",
-  processing: "预处理中", ready: "已处理完成", dependency_missing: "需人工确认", failed: "处理失败"
+  gate_checking: "正在检查", staging: "等待上传", uploading: "正在上传", queued: "等待处理",
+  processing: "正在处理", ready: "已处理完成", dependency_missing: "需要补充环境", failed: "处理失败"
 });
 
 function materialPath(context, suffix = "") {
@@ -1169,6 +1530,10 @@ function releasePath(context, suffix = "") {
 
 function materialsUiPath(context, suffix = "") {
   return `/projects/${encodeURIComponent(context.project.id)}/modules/materials${suffix}`;
+}
+
+function updateUiPath(context, suffix = "") {
+  return `/projects/${encodeURIComponent(context.project.id)}/updates${suffix}`;
 }
 
 function uiDate(value) {
@@ -1237,7 +1602,7 @@ function modalSheet({ title, eyebrow, project, returnFocus, className = "materia
   const panel = el("section", { className, role: "dialog", ariaModal: "true", ariaLabelledby: titleId });
   let committing = false;
   const close = () => { if (committing) return; backdrop.remove(); returnFocus?.focus?.(); };
-  const closeButton = el("button", { type: "button", className: "dialog-close", ariaLabel: closeLabel, text: "×", onClick: close });
+  const closeButton = el("button", { type: "button", className: "dialog-close", ariaLabel: closeLabel, title: closeLabel, onClick: close }, [icon("x")]);
   const body = el("div", { className: "material-sheet-body" });
   panel.append(el("header", { className: "sheet-header" }, [
     el("div", {}, [el("span", { className: "eyebrow", text: eyebrow }), el("h2", { id: titleId, text: title }), el("p", { text: `${project.name} · ${project.id}` })]), closeButton
@@ -1295,7 +1660,7 @@ function generationErrorMessage(error, resetTime = "配额重置") {
 function openGenerationSheet(context, originatingMaterial, returnFocus) {
   const campaign = context.presentation.kind === "campaign";
   modalSheet({
-    title: campaign ? "生成作战更新建议" : "生成项目更新建议",
+    title: "生成项目节点预览",
     eyebrow: campaign ? "作战更新" : "项目更新",
     project: context.project,
     returnFocus,
@@ -1326,7 +1691,7 @@ function openGenerationSheet(context, originatingMaterial, returnFocus) {
           const selection = el("fieldset", { className: "generation-materials" });
           const selectionCount = el("strong", { className: "generation-selection-count" });
           const summary = el("dl", { className: "generation-lock-summary" });
-          const create = el("button", { type: "submit", className: "primary-button", text: campaign ? "生成作战更新建议" : "生成项目更新建议" });
+          const create = el("button", { type: "submit", className: "primary-button", text: "生成节点预览" });
           const cancel = el("button", { type: "button", className: "secondary-button", text: "关闭生成面板", onClick: controls.close });
           const selectedItems = () => eligible.filter(item => selected.has(item.id));
           const renderSelection = focusId => {
@@ -1356,7 +1721,7 @@ function openGenerationSheet(context, originatingMaterial, returnFocus) {
             summary.replaceChildren(...[
               ["发布基准", capabilityEnvelope.baseVersion ?? capabilityEnvelope.publishedVersion ?? context.version],
               ["更新模板", template ? updateTemplateLabel(template) : "选择首份材料后锁定"],
-              ["提案 Schema", capabilityEnvelope.schemaVersion ?? "change-proposal-v1@1.0.0"],
+              ["预览结构版本", capabilityEnvelope.schemaVersion ?? "change-proposal-v1@1.0.0"],
               ["内容片段", `${Math.min(evidenceCount, maxEvidence)}/${maxEvidence}`],
               ["今日剩余", `${usage.remainingToday ?? usage.generationRemainingToday ?? "—"} 次`],
               ["重置时间", uiDate(usage.resetTime ?? capabilityEnvelope.resetTime)]
@@ -1380,14 +1745,15 @@ function openGenerationSheet(context, originatingMaterial, returnFocus) {
               if (!task.id) throw new Error("服务器未返回生成任务标识");
               controls.setCommitting(false); controls.close();
               context.showToast("生成任务已创建");
-              context.navigate(materialsUiPath(context, `/generation-tasks/${encodeURIComponent(task.id)}`));
+              context.navigate(taskHref(context, task.id));
             } catch (requestError) {
               error.textContent = generationErrorMessage(requestError, uiDate(usage.resetTime ?? capabilityEnvelope.resetTime));
-              controls.setCommitting(false); cancel.disabled = false; create.textContent = campaign ? "生成作战更新建议" : "生成项目更新建议"; renderSelection();
+              controls.setCommitting(false); cancel.disabled = false; create.textContent = "生成节点预览"; renderSelection();
             }
           } }, [
-            el("p", { className: "material-boundary", text: "AI 只生成带来源的更新建议；不会修改项目草稿或发布版本。" }),
+            el("p", { className: "material-boundary", text: "AI 只生成带来源的节点预览；不会修改项目草稿或发布版本。" }),
             el("p", { className: "generation-limit-copy", text: `每个任务最多 ${maxMaterials} 份同项目、同类型材料；服务端最多锁定 ${maxEvidence} 个当前内容片段。` }),
+            templateDownloadControl({ className: "generation-template-download" }),
             ...(providerEnabled ? [] : [el("p", { className: "generation-provider-disabled", role: "status", text: "更新生成当前未启用；材料和已有建议仍可查看。" })]),
             selectionCount, selection, summary, error,
             el("footer", { className: "sheet-actions" }, [cancel, create])
@@ -1395,6 +1761,7 @@ function openGenerationSheet(context, originatingMaterial, returnFocus) {
           controls.body.replaceChildren(eligible.length ? form : el("section", { className: "module-empty material-empty" }, [
             el("h3", { text: "暂无可用于生成的材料" }),
             el("p", { text: "材料必须已处理完成、已选择更新类型且内容完整性不缺失。" }),
+            templateDownloadControl({ className: "empty-template-download" }),
             el("button", { type: "button", className: "secondary-button", text: "关闭生成面板", onClick: controls.close })
           ]));
           if (eligible.length) renderSelection();
@@ -1436,6 +1803,7 @@ function openBatchSheet(context, returnFocus) {
             controls.body.replaceChildren(el("section", { className: "module-empty material-empty" }, [
               el("h3", { text: "当前没有可批量生成的材料" }),
               el("p", { text: "材料必须已处理完成（ready）、已配置更新模板、且内容完整性不缺失。" }),
+              templateDownloadControl({ className: "empty-template-download" }),
               el("button", { type: "button", className: "secondary-button", text: "关闭", onClick: controls.close })
             ]));
             return;
@@ -1476,7 +1844,7 @@ function openBatchSheet(context, returnFocus) {
               controls.setCommitting(false); controls.close();
               const msg = `批量生成完成：${summary.succeeded ?? 0} 成功 / ${summary.failed ?? 0} 失败 / 共 ${summary.total ?? 0} 个任务`;
               context.showToast(msg);
-              context.navigate(materialsUiPath(context, "?view=proposals"));
+              context.navigate(updateUiPath(context));
             } catch (requestError) {
               error.textContent = generationErrorMessage(requestError);
               controls.setCommitting(false); cancel.disabled = false; submit.disabled = false; submit.textContent = `开始批量生成（${totalTasks} 个任务）`;
@@ -1484,6 +1852,7 @@ function openBatchSheet(context, returnFocus) {
           };
           controls.body.replaceChildren(el("section", { className: "batch-generation-body" }, [
             el("p", { className: "material-boundary", text: "系统将自动发现所有符合条件的材料，按更新模板分组后批量创建生成任务。每个任务最多处理 8 份材料。" }),
+            templateDownloadControl({ className: "batch-template-download" }),
             el("div", { className: "batch-summary" }, [
               el("div", {}, [el("strong", { text: String(eligible.length) }), el("span", { text: "份可生成材料" })]),
               el("div", {}, [el("strong", { text: String(groups.size) }), el("span", { text: "个模板分组" })]),
@@ -1551,108 +1920,55 @@ const TEMPLATE_GUIDE = {
     good: "项目目标：实现99.9%可用性，降低运维成本30%\n团队：云基础设施组（5人）\n里程碑：\n- M1（8月）架构设计完成\n- M2（9月）MVP上线",
     bad: "Q4我们要：\n全力冲刺！\n抢占市场！\n具体方案后面再定。",
     tip: "口号不是目标——「全力冲刺」→「Q4营收目标5000万」。"
+  },
+  "outcome-archive": {
+    label: "成果归档",
+    required: [
+      { label: "成果名称或结果", hint: "形成了什么可核验成果", keywords: "成果 / 交付 / 结果 / 完成" },
+      { label: "成果来源", hint: "对应材料、链接或记录", keywords: "来源 / 证据 / 链接 / 记录" }
+    ],
+    optional: [{ label: "成果日期", hint: "完成或发布日期", keywords: "日期 / 完成于 / 发布于" }],
+    good: "成果：客户验收报告已签署\n来源：验收会议纪要及签署扫描件\n完成日期：2026-07-29",
+    bad: "项目做完了，效果不错。",
+    tip: "成果必须能回到具体来源，避免只有结论而没有证据。"
+  },
+  "new-project-material": {
+    label: "项目创建材料",
+    required: [
+      { label: "项目名称", hint: "稳定、可识别的项目名称", keywords: "项目名称 / 项目" },
+      { label: "项目目标", hint: "要解决什么问题、达成什么结果", keywords: "目标 / 目的 / 使命" },
+      { label: "初始团队", hint: "负责人或参与团队", keywords: "团队 / 负责人 / 作战单元" }
+    ],
+    optional: [{ label: "初始计划", hint: "里程碑、任务或交付物", keywords: "里程碑 / 任务 / 交付物" }],
+    good: "项目名称：云平台迁移\n项目目标：9月底完成核心系统迁移\n团队：基础设施组，负责人刘芳\n里程碑：8月完成架构设计",
+    bad: "准备做一个新项目，后面再讨论。",
+    tip: "创建材料至少要让系统识别项目名称和目标；团队与计划可在骨架确认时继续补充。"
   }
 };
 
-const TEMPLATE_DOWNLOAD_CONTENT = {
-  "meeting-notes": `# 会议纪要
+function templateDownloadControl({ ids, className = "", placeholder = "选择材料模板" } = {}) {
+  const allowed = ids?.length ? new Set(ids) : null;
+  const options = MATERIAL_TEMPLATE_OPTIONS.filter(item => !allowed || allowed.has(item.id));
+  const select = el("select", { ariaLabel: "选择模板类型" }, [
+    el("option", { value: "", text: placeholder }),
+    ...options.map(item => el("option", { value: item.id, text: `${item.label}模板` }))
+  ]);
+  const button = el("button", {
+    type: "button",
+    className: "secondary-button",
+    text: "下载模板",
+    disabled: true,
+    onClick: () => downloadMaterialTemplate(select.value)
+  });
+  select.addEventListener("change", () => { button.disabled = !select.value; });
+  return el("div", { className: `template-download-group ${className}`.trim() }, [select, button]);
+}
 
-> 上传此模板时请选择"更新模板：会议纪要"
-
-## 基本信息
-- 会议日期：YYYY-MM-DD
-- 参会人员：
-- 会议主题：
-
-## 讨论内容
-1.
-2.
-
-## 行动项（必填——缺失将无法生成更新建议）
-- [ ] 负责人：______ 任务：______ 截止：YYYY-MM-DD
-- [ ] 负责人：______ 任务：______ 截止：YYYY-MM-DD
-
-## 备注
-`,
-  "progress-report": `# 进度汇报
-
-> 上传此模板时请选择"更新模板：进度汇报"
-
-## 汇报周期（必填）
-截至日期：YYYY-MM-DD
-
-## 进度概览（必填——需要具体数字或状态）
-| 事项 | 进度/状态 | 说明 |
-|------|----------|------|
-|      |          |      |
-|      |          |      |
-
-## 本期完成
--
-
-## 下一步计划
--
-
-## 风险与阻塞
--
-`,
-  "metrics-data": `# 指标数据
-
-> 上传此模板时请选择"更新模板：指标数据"
-
-## 数据周期（必填）
-YYYY-MM-DD 或 YYYY年M月
-
-## 指标数据（必填——名称、数值、日期缺一不可）
-| 指标名称 | 数值 | 单位 | 备注 |
-|----------|------|------|------|
-|          |      |      |      |
-|          |      |      |      |
-
-## 趋势说明
-- 环比变化：
-- 同比变化：
-
-## 分析
--
-`,
-  "project-plan": `# 项目计划
-
-> 上传此模板时请选择"更新模板：项目计划"
-
-## 项目目标（必填）
-具体可量化的目标，例如：Q4营收5000万、系统可用性99.9%
-
-## 团队/作战单元（必填）
-| 角色 | 姓名 | 职责 |
-|------|------|------|
-|      |      |      |
-
-## 里程碑与任务（必填）
-| 里程碑 | 预计完成 | 状态 | 关键交付物 |
-|--------|---------|------|-----------|
-| M1     | YYYY-MM-DD | 未启动 |           |
-| M2     | YYYY-MM-DD | 未启动 |           |
-
-## 关键依赖
--
-
-## 风险预案
--
-`
-};
-
-function downloadTemplateFile(templateId) {
-  const info = TEMPLATE_GUIDE[templateId];
-  const content = TEMPLATE_DOWNLOAD_CONTENT[templateId];
-  if (!info || !content) return;
-  const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = el("a", { href: url, download: `${templateId}-模板.md` });
-  document.body.append(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+function templateDownloadDisclosure(label = "材料模板") {
+  return el("details", { className: "template-download-disclosure" }, [
+    el("summary", { text: label }),
+    templateDownloadControl({ className: "template-download-popover" })
+  ]);
 }
 
 function buildInlineGuidePanel() {
@@ -1750,16 +2066,17 @@ function openManualSheet(context, catalog, refresh, returnFocus) {
         el("div", { className: "field" }, [el("label", { htmlFor: "manual-update-template", text: "更新模板" }), template])
       ]),
       templateHint,
+      templateDownloadControl({ className: "sheet-template-download" }),
       el("div", { className: "field" }, [el("label", { htmlFor: "manual-body", text: "正文（纯文本）" }), body]),
       el("div", { className: "field" }, [el("label", { htmlFor: "manual-note", text: "备注（可选）" }), note, remaining]),
-      el("p", { className: "material-boundary", text: "材料归档后可按更新类型生成带来源的更新建议；不会直接修改项目草稿或发布版本。" }), error,
+      el("p", { className: "material-boundary", text: "材料归档后可按更新类型生成带来源的节点预览；不会直接修改项目草稿或发布版本。" }), error,
       el("footer", { className: "sheet-actions" }, [el("button", { type: "button", className: "secondary-button", text: "关闭", onClick: controls.close }), submit])
     ]);
     controls.body.append(form);
   }});
 }
 
-function openUploadSheet(context, ledger, refresh, returnFocus) {
+function openUploadSheet(context, ledger, refresh, returnFocus, options = {}) {
   modalSheet({ title: context.presentation.kind === "campaign" ? "上传作战材料" : "上传项目材料", eyebrow: context.presentation.kind === "campaign" ? "项目材料" : "项目材料", project: context.project, returnFocus, render: controls => {
     const input = el("input", { id: "material-files", name: "files", multiple: true, accept: ".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.json,.yaml,.png,.jpg,.jpeg,.webp" });
     input.type = "file";
@@ -1783,6 +2100,7 @@ function openUploadSheet(context, ledger, refresh, returnFocus) {
       if (!template.value) { error.textContent = "请选择更新模板"; template.focus(); return; }
       controls.setCommitting(true); submit.disabled = true; submit.textContent = "正在上传…";
       const rows = [...queue.children];
+      const uploadedMaterialIds = [];
       try {
         for (let index = 0; index < files.length; index += 1) {
           const file = files[index], row = rows[index]; row.querySelector(".status-label").textContent = "上传中";
@@ -1790,17 +2108,27 @@ function openUploadSheet(context, ledger, refresh, returnFocus) {
           const receipt = await context.api(materialPath(context, "/upload"), { method: "POST", mutation: true, rawBody: file, headers: { "content-type": file.type || "application/octet-stream", "x-file-name": encodeURIComponent(file.name) } });
           row.querySelector("progress").value = 1; row.querySelector(".status-label").textContent = "材料已归档，正在提取内容";
           if (receipt?.material?.id) {
+            uploadedMaterialIds.push(receipt.material.id);
             await context.api(materialPath(context, `/${encodeURIComponent(receipt.material.id)}/update-template`), { method: "PATCH", mutation: true, body: { id: template.value, version: "1.0.0" } });
             row.append(el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/materials/${encodeURIComponent(receipt.material.id)}`, text: "查看已归档材料" }));
           }
         }
-        context.showToast("材料已归档，正在提取内容"); controls.setCommitting(false); await refresh();
+        context.showToast("材料已归档，正在提取内容");
+        input.value = "";
+        queue.replaceChildren();
+        submit.disabled = false;
+        submit.textContent = "开始上传";
+        controls.setCommitting(false);
+        if (options.closeAfterUpload) controls.close();
+        if (typeof options.onUploaded === "function") await options.onUploaded(uploadedMaterialIds);
+        else await refresh();
       } catch (requestError) { error.textContent = materialErrorMessage(requestError); controls.setCommitting(false); submit.disabled = false; submit.textContent = "开始上传"; }
     } }, [
       el("div", { className: "quota-compact", text: `单文件 ${bytes(ledger.limits.maxFileBytes)} · 项目 ${ledger.usage.materials}/${ledger.limits.maxMaterials} 项 · 并发 ${ledger.limits.maxConcurrentUploads}` }), drop,
       el("div", { className: "form-grid" }, [el("div", { className: "field" }, [el("label", { htmlFor: "upload-category", text: "材料分类" }), el("select", { id: "upload-category", name: "category" }, ["会议纪要", "计划", "汇报", "表格/数据", "成果文件", "图片", "其他"].map(label => el("option", { text: label, value: label })))]), el("div", { className: "field" }, [el("label", { htmlFor: "upload-update-template", text: "更新模板" }), template])]),
+      templateDownloadControl({ className: "sheet-template-download" }),
       el("div", { className: "field" }, [el("label", { htmlFor: "upload-note", text: "材料备注（可选）" }), note, remaining]),
-      el("p", { className: "material-boundary", text: "材料归档后可按更新类型生成带来源的更新建议；不会直接修改项目草稿或发布版本。" }), queue, error,
+      el("p", { className: "material-boundary", text: "材料归档后可按更新类型生成带来源的节点预览；不会直接修改项目草稿或发布版本。" }), queue, error,
       el("footer", { className: "sheet-actions" }, [el("button", { type: "button", className: "secondary-button", text: "关闭上传面板", onClick: controls.close }), submit])
     ]);
     controls.body.append(form);
@@ -1819,32 +2147,35 @@ function renderLedger(context, root) {
       const caps = ledger.capabilities ?? {};
       const limits = ledger.limits ?? {}, usage = ledger.usage ?? {}, summary = ledger.summary ?? {};
       const upload = caps.upload ? el("button", { type: "button", className: "primary-button", text: context.presentation.kind === "campaign" ? "上传作战材料" : "上传项目材料", onClick: event => openUploadSheet(context, ledger, load, event.currentTarget) }) : null;
-      // "下载推荐模板"——按类型下载 .md 模板文件
-      const dlSelect = el("select", { id: "template-download-select", ariaLabel: "选择模板类型" }, [
-        el("option", { value: "", text: "下载推荐模板" }),
-        ...Object.entries(TEMPLATE_GUIDE).map(([id, info]) => el("option", { value: id, text: info.label + " 模板" }))
-      ]);
-      const dlBtn = el("button", { type: "button", className: "secondary-button", text: "下载", onClick: () => {
-        if (dlSelect.value) downloadTemplateFile(dlSelect.value);
-      } });
-      const manual = caps.manual ? el("div", { className: "template-download-group" }, [dlSelect, dlBtn]) : null;
+      const templateDownload = caps.manual ? templateDownloadControl({ placeholder: "下载推荐模板" }) : null;
+      const manual = caps.manual ? el("button", { type: "button", className: "secondary-button", text: "手动录入", onClick: event => openManualSheet(context, ledger.updateTemplates, load, event.currentTarget) }) : null;
       // "编写指南"——点击就地展开/收起
-      const guideToggle = el("button", { type: "button", className: "ghost-button guide-toggle-btn", text: "编写指南 ▸", onClick: event => {
+      const guideToggle = el("button", { type: "button", className: "ghost-button guide-toggle-btn", ariaExpanded: "false", text: "编写指南", onClick: () => {
         const isOpen = guidePanel.style.display === "block";
         guidePanel.style.display = isOpen ? "none" : "block";
-        guideToggle.textContent = isOpen ? "编写指南 ▸" : "编写指南 ▾";
+        guideToggle.setAttribute("aria-expanded", isOpen ? "false" : "true");
       } });
       const guidePanel = el("div", { className: "guide-inline-wrapper" });
       guidePanel.style.display = "none";
       guidePanel.append(buildInlineGuidePanel());
       const search = el("input", { type: "search", value: context.query.get("q") ?? "", placeholder: "搜索材料名称或来源", ariaLabel: "搜索材料" });
-      const status = el("select", { ariaLabel: "筛选处理状态" }, [el("option", { value: "", text: "全部状态" }), ...Object.entries(materialStatus).map(([value, label]) => el("option", { value, text: label }))]); status.value = context.query.get("status") ?? "";
+      const statusGroups = [
+        ["", "全部状态"],
+        ["in-progress", "处理中"],
+        ["ready", "已处理完成"],
+        ["needs-action", "需要处理"]
+      ];
+      const requestedStatus = context.query.get("status") ?? "";
+      const status = el("select", { ariaLabel: "筛选处理状态" }, statusGroups.map(([value, label]) => el("option", { value, text: label })));
+      status.value = statusGroups.some(([value]) => value === requestedStatus) ? requestedStatus : "";
       const sort = el("select", { ariaLabel: "材料排序" }, [["newest", "最新"], ["oldest", "最早"], ["name", "名称"]].map(([value, label]) => el("option", { value, text: label }))); sort.value = context.query.get("sort") ?? "newest";
       const list = el("div", { className: "material-ledger-list" });
       const updateList = () => {
         let items = [...(ledger.items ?? [])]; const query = search.value.trim().toLocaleLowerCase();
         if (query) items = items.filter(item => `${item.name} ${item.updateTemplate?.label ?? ""}`.toLocaleLowerCase().includes(query));
-        if (status.value) items = items.filter(item => item.status === status.value);
+        if (status.value === "in-progress") items = items.filter(item => ["gate_checking", "staging", "uploading", "queued", "processing"].includes(item.status));
+        else if (status.value === "ready") items = items.filter(item => item.status === "ready");
+        else if (status.value === "needs-action") items = items.filter(item => ["dependency_missing", "failed"].includes(item.status));
         items.sort((a, b) => sort.value === "oldest" ? String(a.createdAt).localeCompare(String(b.createdAt)) : sort.value === "name" ? String(a.name).localeCompare(String(b.name), "zh-CN") : String(b.createdAt).localeCompare(String(a.createdAt)));
         const params = new URLSearchParams(location.search); params.set("view", "ledger");
         for (const [key, value] of [["q", search.value.trim()], ["status", status.value], ["sort", sort.value === "newest" ? "" : sort.value]]) value ? params.set(key, value) : params.delete(key);
@@ -1876,11 +2207,18 @@ function renderLedger(context, root) {
       };
       let timer; search.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(updateList, 200); }); status.addEventListener("change", updateList); sort.addEventListener("change", updateList);
       root.replaceChildren(el("section", { className: "materials-workspace-card" }, [
-        el("div", { className: "material-summary-grid" }, [summaryCard("材料总数", summary.count ?? 0, `上限 ${limits.maxMaterials ?? "—"}`), summaryCard("已处理完成", summary.readyCount ?? 0, "可追溯内容"), summaryCard("可生成更新", summary.generationEnabledCount ?? summary.readyCount ?? 0, "满足生成条件"), summaryCard("存储用量", bytes(usage.materialBytes ?? 0), `上限 ${bytes(limits.maxProjectBytes)}`)]),
-        el("section", { className: "quota-panel", ariaLabel: "材料与问答配额" }, [el("div", { className: "quota-title" }, [el("h2", { text: "项目配额" }), el("span", { text: `剩余问答 ${usage.chatRemainingToday ?? "—"} 次` })]), el("progress", { max: Math.max(1, Number(limits.maxProjectBytes) || 1), value: Math.min(Number(usage.materialBytes) || 0, Number(limits.maxProjectBytes) || 1), ariaLabel: "项目存储用量" }), el("p", { text: `单文件 ${bytes(limits.maxFileBytes)} · 每分钟 ${limits.maxUploadsPerMinute ?? "—"} 次上传 · ${limits.maxConcurrentUploads ?? "—"} 个并发 · Office 展开 ${bytes(limits.maxZipExpandedBytes)} / ${limits.maxZipEntries ?? "—"} 条` })]),
-        el("div", { className: "material-toolbar" }, [el("div", { className: "material-actions" }, [upload, manual, guideToggle]), search, status, sort]),
+        el("header", { className: "workspace-action-header" }, [
+          el("div", {}, [el("h2", { text: "上传与管理材料" }), el("p", { text: "上传项目事实，处理完成后生成可审核的节点预览。" })]),
+          upload
+        ]),
+        el("div", { className: "material-toolbar" }, [el("div", { className: "material-actions" }, [manual, guideToggle, templateDownload]), search, status, sort]),
         guidePanel,
-        list
+        list,
+        el("details", { className: "workspace-usage-details" }, [
+          el("summary", { text: `用量与配额 · ${summary.count ?? 0} 项材料` }),
+          el("div", { className: "material-summary-grid" }, [summaryCard("材料总数", summary.count ?? 0, `上限 ${limits.maxMaterials ?? "—"}`), summaryCard("已处理完成", summary.readyCount ?? 0, "可追溯内容"), summaryCard("可生成更新", summary.generationEnabledCount ?? summary.readyCount ?? 0, "满足生成条件"), summaryCard("存储用量", bytes(usage.materialBytes ?? 0), `上限 ${bytes(limits.maxProjectBytes)}`)]),
+          el("section", { className: "quota-panel", ariaLabel: "材料与问答配额" }, [el("div", { className: "quota-title" }, [el("h2", { text: "项目配额" }), el("span", { text: `剩余问答 ${usage.chatRemainingToday ?? "—"} 次` })]), el("progress", { max: Math.max(1, Number(limits.maxProjectBytes) || 1), value: Math.min(Number(usage.materialBytes) || 0, Number(limits.maxProjectBytes) || 1), ariaLabel: "项目存储用量" }), el("p", { text: `单文件 ${bytes(limits.maxFileBytes)} · 每分钟 ${limits.maxUploadsPerMinute ?? "—"} 次上传 · ${limits.maxConcurrentUploads ?? "—"} 个并发` })])
+        ])
       ]));
       updateList();
     } catch (error) {
@@ -1902,7 +2240,7 @@ function materialTable(context, items, caps, refresh) {
     else if (item.status === "failed" || item.status === "dependency_missing") nextHint = el("span", { className: "next-step-hint failed", text: "需重试" });
     else if (item.status === "ready" && !item.updateTemplate?.id) nextHint = el("span", { className: "next-step-hint", text: "→ 选模板" });
     else if (item.status === "ready" && item.updateTemplate?.id && item.readiness?.status === "blocked") nextHint = el("span", { className: "next-step-hint", text: "→ 需补充内容" });
-    else if (item.status === "ready" && item.updateTemplate?.id) nextHint = el("span", { className: "next-step-hint ready", text: "→ 可生成建议" });
+    else if (item.status === "ready" && item.updateTemplate?.id) nextHint = el("span", { className: "next-step-hint ready", text: "→ 可生成预览" });
     return el("tr", {}, [el("th", { scope: "row" }, [link, el("small", { text: item.extension || item.sourceKind || "待补充" })]), el("td", { text: item.updateTemplate?.label ?? "未选择更新模板" }), el("td", {}, [readinessNode(item)]), el("td", {}, [el("span", { className: `material-status status-${item.status}`, text: materialStatus[item.status] ?? item.status })]), el("td", {}, item.evidenceCount > 0 ? [el("a", { href: detailLink(item), text: `${item.evidenceCount} 个内容片段`, onClick: event => { event.preventDefault(); context.navigate(detailLink(item)); } })] : [el("span", { text: "0 个内容片段" })]), el("td", {}, [el("span", { text: safeText(item.uploadedBy) }), el("small", { text: uiDate(item.createdAt) })]), el("td", { text: bytes(item.size) }), el("td", {}, [nextHint, el("div", { className: "row-actions" }, actions)])]);
   }));
   return el("div", { className: "table-scroll material-table-scroll", tabIndex: 0, role: "region", ariaLabel: "项目材料，可水平滚动" }, [el("table", { className: "module-table material-table" }, [el("caption", { text: "当前项目项目材料" }), el("thead", {}, [el("tr", {}, ["材料", "类型 / 模板", "内容完整性", "处理状态", "内容片段", "上传者 / 时间", "大小", "下一步 / 操作"].map(label => el("th", { scope: "col", text: label })))]), tbody])]);
@@ -1918,7 +2256,7 @@ function materialStepGuide(context, material, caps) {
     { id: "uploaded", label: "材料归档", detail: "文件已上传并记录 SHA-256" },
     { id: "extracted", label: "内容提取", detail: "证据片段已提取到平台" },
     { id: "template", label: "选择更新模板", detail: "告知平台这份材料的用途" },
-    { id: "generated", label: "生成更新建议", detail: "AI 基于材料生成结构化提案" },
+    { id: "generated", label: "生成节点预览", detail: "AI 基于材料生成带来源的结构化预览" },
     { id: "reviewed", label: "审核发布", detail: "人工审核建议并发布到草稿" }
   ];
   let currentStep = 0;
@@ -1939,27 +2277,27 @@ function materialStepGuide(context, material, caps) {
   const nextAction = el("div", { className: "step-next-action" });
   if (currentStep === 0) {
     nextAction.append(
-      el("span", { className: "step-hint", text: material.status === "processing" ? "⏳ 正在提取内容，请稍候…" : material.status === "failed" ? "❌ 处理失败，请重试" : "" }),
+      el("span", { className: "step-hint", text: material.status === "processing" ? "正在提取内容，请稍候。" : material.status === "failed" ? "处理失败，请重试。" : "" }),
     );
   } else if (currentStep === 1) {
-    nextAction.append(el("span", { className: "step-hint", text: "👉 下一步：选择更新模板，告知平台这份材料的用途" }));
+    nextAction.append(el("span", { className: "step-hint", text: "下一步：选择更新模板，告知平台这份材料的用途。" }));
   } else if (currentStep === 2) {
     if (material.readiness?.status === "blocked") {
-      nextAction.append(el("span", { className: "step-hint", text: "⛔ 内容完整性不足，需补充关键信息后才能生成建议" }));
+      nextAction.append(el("span", { className: "step-hint", text: "内容完整性不足，需补充关键信息后才能生成建议。" }));
     } else if (caps.createGenerationTask) {
-      const btn = el("button", { type: "button", className: "primary-button step-cta", text: campaign ? "👉 生成作战更新建议" : "👉 生成项目更新建议", onClick: event => openGenerationSheet(context, material, event.currentTarget) });
-      nextAction.append(el("span", { className: "step-hint", text: "材料已就绪，可以生成更新建议了" }), btn);
+      const btn = el("button", { type: "button", className: "primary-button step-cta", text: "生成节点预览", onClick: event => openGenerationSheet(context, material, event.currentTarget) });
+      nextAction.append(el("span", { className: "step-hint", text: "材料已就绪，可以生成项目节点预览了" }), btn);
     } else {
-      nextAction.append(el("span", { className: "step-hint", text: "✅ 材料已就绪，等待有权限的成员生成更新建议" }));
+      nextAction.append(el("span", { className: "step-hint", text: "材料已就绪，等待有权限的成员生成节点预览。" }));
     }
   } else if (currentStep >= 3) {
-    const proposalHref = `/projects/${encodeURIComponent(context.project.id)}/modules/materials?view=proposals`;
-    nextAction.append(el("a", { className: "primary-button step-cta", href: proposalHref, text: "👉 前往审核与发布", onClick: event => { event.preventDefault(); context.navigate(proposalHref); } }));
+    const projectUpdateHref = updateUiPath(context);
+    nextAction.append(el("a", { className: "primary-button step-cta", href: projectUpdateHref, text: "查看项目更新", onClick: event => { event.preventDefault(); context.navigate(projectUpdateHref); } }));
   }
   guide.append(
     el("header", { className: "step-guide-header" }, [
       el("span", { className: "eyebrow", text: "处理进度" }),
-      el("h2", { text: currentStep >= 3 ? "已生成更新建议" : "当前进度与下一步" })
+      el("h2", { text: currentStep >= 3 ? "已生成节点预览" : "当前进度与下一步" })
     ]),
     indicator,
     nextAction
@@ -1980,15 +2318,15 @@ function renderMaterialDetail(context, root) {
       const select = el("select", { className: "mobile-evidence-select", ariaLabel: "选择内容位置" }, items.map(item => el("option", { value: item.id, text: locatorLabel(item) }))); if (selected) select.value = selected.id; select.addEventListener("change", () => context.navigate(`${base}?evidence=${encodeURIComponent(select.value)}`));
       const preview = selected ? el("article", { className: "evidence-preview", ariaLive: "polite" }, [el("span", { className: "eyebrow", text: "内容预览" }), el("h2", { text: locatorLabel(selected) }), el("p", { className: "evidence-id", text: `内容片段 ${selected.id}` }), el("blockquote", { text: safeText(selected.summary, selected.text) }), el("details", {}, [el("summary", { text: "查看提取文本" }), el("pre", { text: safeText(selected.text) })]), el("p", { className: "locator-note", text: locatorLabel(selected) === "未提供精确区域" ? "未提供精确区域" : "定位信息来自预处理结果" })]) : el("div", { className: "evidence-preview empty-preview", text: "选择内容位置后查看可追溯文本。" });
       const controls = [];
+      if (caps.selectUpdateTemplate || caps.createGenerationTask) controls.push(templateDownloadDisclosure("材料模板"));
       if (caps.selectUpdateTemplate) {
         const template = templateSelect(catalog.updateTemplates, "detail-update-template"); template.value = material.updateTemplate?.id ?? "";
         controls.push(el("form", { className: "metadata-control", onSubmit: async event => { event.preventDefault(); await context.api(materialPath(context, `/${id}/update-template`), { method: "PATCH", mutation: true, body: { id: template.value, version: "1.0.0" } }); context.showToast("更新模板已记录"); await load(); } }, [el("label", { htmlFor: "detail-update-template", text: "材料用途" }), template, el("button", { type: "submit", className: "secondary-button", text: "保存材料用途" })]));
       }
-      if (caps.createGenerationTask && material.status === "ready" && material.updateTemplate && Number(material.evidenceCount) > 0 && material.readiness?.status !== "blocked") controls.push(el("button", { type: "button", className: "primary-button", text: context.presentation.kind === "campaign" ? "生成作战更新建议" : "生成项目更新建议", onClick: event => openGenerationSheet(context, material, event.currentTarget) }));
       if (caps.retry && ["failed", "dependency_missing"].includes(material.status)) controls.push(el("button", { type: "button", className: "secondary-button", text: "重试处理", onClick: async () => { await context.api(materialPath(context, `/${id}/retry`), { method: "POST", mutation: true }); context.showToast("材料已进入重试队列"); await load(); } }));
       const readiness = material.readiness;
       const stepGuide = materialStepGuide(context, material, caps);
-      root.replaceChildren(el("a", { className: "back-link", href: `/projects/${encodeURIComponent(context.project.id)}/modules/materials?view=ledger`, text: "← 返回项目材料", onClick: event => { event.preventDefault(); context.navigate(event.currentTarget.getAttribute("href")); } }), el("section", { className: "materials-detail-card" }, [el("header", { className: "material-detail-heading" }, [el("div", {}, [el("span", { className: "eyebrow", text: "材料内容" }), el("h1", { text: material.name })]), el("span", { className: `material-status status-${material.status}`, text: materialStatus[material.status] ?? material.status })]), detailMetadata(material), stepGuide, readiness ? el("section", { className: `readiness-panel readiness-${readiness.status}` }, [el("h2", { text: readinessText(material) }), el("p", { text: readiness.suggestion }), readiness.missing?.length ? el("ul", {}, readiness.missing.map(item => el("li", { text: `缺失：${item.label}` }))) : null, readiness.warnings?.length ? el("ul", {}, readiness.warnings.map(item => el("li", { text: `建议补充：${item.label}` }))) : null]) : null, el("p", { className: "material-boundary", text: "AI 只生成带来源的更新建议；不会修改项目草稿或发布版本。" }), controls.length ? el("div", { className: "material-detail-controls" }, controls) : null, el("div", { className: "evidence-layout" }, [el("aside", { ariaLabel: "内容位置索引" }, [index]), select, preview]) ]));
+      root.replaceChildren(el("a", { className: "back-link", href: `/projects/${encodeURIComponent(context.project.id)}/modules/materials?view=ledger`, text: "← 返回项目材料", onClick: event => { event.preventDefault(); context.navigate(event.currentTarget.getAttribute("href")); } }), el("section", { className: "materials-detail-card" }, [el("header", { className: "material-detail-heading" }, [el("div", {}, [el("span", { className: "eyebrow", text: "材料内容" }), el("h1", { text: material.name })]), el("span", { className: `material-status status-${material.status}`, text: materialStatus[material.status] ?? material.status })]), detailMetadata(material), stepGuide, readiness ? el("section", { className: `readiness-panel readiness-${readiness.status}` }, [el("h2", { text: readinessText(material) }), el("p", { text: readiness.suggestion }), readiness.missing?.length ? el("ul", {}, readiness.missing.map(item => el("li", { text: `缺失：${item.label}` }))) : null, readiness.warnings?.length ? el("ul", {}, readiness.warnings.map(item => el("li", { text: `建议补充：${item.label}` }))) : null]) : null, el("p", { className: "material-boundary", text: "AI 只生成带来源的节点预览；不会修改项目草稿或发布版本。" }), controls.length ? el("div", { className: "material-detail-controls" }, controls) : null, el("div", { className: "evidence-layout" }, [el("aside", { ariaLabel: "内容位置索引" }, [index]), select, preview]) ]));
     } catch (error) {
       if (error.message === "AUTHENTICATION_REQUIRED") return;
       root.replaceChildren(el("section", { className: "module-error error-panel", role: "alert" }, [el("h1", { text: error.status === 404 ? "材料不存在或你无权访问" : "无法加载材料详情" }), el("p", { text: materialErrorMessage(error) }), el("button", { type: "button", className: "secondary-button", text: "返回项目材料", onClick: () => context.navigate(`/projects/${encodeURIComponent(context.project.id)}/modules/materials?view=ledger`) })]));
@@ -2041,15 +2379,36 @@ function renderQa(context, root) {
   void load();
 }
 
-const generationStateLabels = Object.freeze({ queued: "等待生成资源", retrieving_evidence: "锁定并整理材料内容", generating: "生成更新内容", repairing: "修复输出格式", validating: "执行服务端校验", succeeded: "更新建议已生成", failed_retryable: "生成暂时失败，可重试", failed_terminal: "生成失败，未创建建议", stale: "发布基准已变化" });
-const semanticLabels = Object.freeze({ fact: "事实 fact", plan: "计划 plan", suggestion: "建议 suggestion", unknown: "待确认 unknown" });
-const operationLabels = Object.freeze({ create: "新增建议", update: "更新建议", delete: "删除建议" });
+const generationStateLabels = Object.freeze({ queued: "等待生成资源", retrieving_evidence: "锁定并整理材料内容", generating: "生成节点内容", repairing: "修复输出格式", validating: "执行服务端校验", succeeded: "节点预览已生成", failed_retryable: "生成暂时失败，可重试", failed_terminal: "生成失败，未创建预览", stale: "发布基准已变化" });
+const semanticLabels = Object.freeze({ fact: "已提取事实", plan: "计划调整", suggestion: "待评估建议", unknown: "语义待确认" });
+const operationLabels = Object.freeze({ create: "新增", update: "修改", delete: "删除" });
 const proposalStatusLabels = Object.freeze({ pending: "待审核", accepted: "已合并草稿", rejected: "已驳回", superseded: "基准已过期" });
 const reviewLabels = Object.freeze({ pending: "待决定", accepted: "已接受", rejected: "已驳回" });
+const updateFlowStepOrder = Object.freeze(["materials", "generation", "preview", "review"]);
 
-function taskHref(context, id) { return materialsUiPath(context, `/generation-tasks/${encodeURIComponent(id)}`); }
-function proposalHref(context, id, changeId = "") { const query = changeId ? `?change=${encodeURIComponent(changeId)}` : ""; return materialsUiPath(context, `/proposals/${encodeURIComponent(id)}${query}`); }
+function taskHref(context, id) { return updateUiPath(context, `/generation-tasks/${encodeURIComponent(id)}`); }
+function proposalHref(context, id, changeId = "") { const query = changeId ? `?change=${encodeURIComponent(changeId)}` : ""; return updateUiPath(context, `/proposals/${encodeURIComponent(id)}${query}`); }
+function previewHref(context, id) { return updateUiPath(context, `/preview/${encodeURIComponent(id)}`); }
 function linkTo(context, href, text, className = "") { return el("a", { href, className, text, onClick: event => { event.preventDefault(); context.navigate(href); } }); }
+
+function updateFlowSteps(activeStep) {
+  const activeIndex = Math.max(0, updateFlowStepOrder.indexOf(activeStep));
+  const steps = [
+    ["materials", "本次材料", "上传或选择材料"],
+    ["generation", "处理与生成", "提取并生成节点"],
+    ["preview", "模拟路线图", "核对节点位置"],
+    ["review", "审核与发布", "人工确认并发布"]
+  ];
+  return el("nav", { className: "project-update-flow-steps", ariaLabel: "项目更新步骤" }, [
+    el("ol", {}, steps.map(([id, label, detail], index) => el("li", {
+      className: `${index < activeIndex ? "complete" : ""}${index === activeIndex ? " active" : ""}`,
+      ariaCurrent: index === activeIndex ? "step" : null
+    }, [
+      el("span", { className: "update-flow-step-number", text: String(index + 1) }),
+      el("div", {}, [el("strong", { text: label }), el("small", { text: detail })])
+    ])))
+  ]);
+}
 
 function generationUsage(task) {
   const attempts = task.attempts ?? []; const input = attempts.reduce((sum,item)=>sum+Number(item.inputTokens??0),0), output = attempts.reduce((sum,item)=>sum+Number(item.outputTokens??0),0);
@@ -2057,48 +2416,165 @@ function generationUsage(task) {
   return { attempts: attempts.length, tokens: input + output, cost: priced.length ? `${priced[0].currency ?? ""} ${(cost/1_000_000).toFixed(6)}`.trim() : "未配置单价，仅记录 Token" };
 }
 
+function renderNodePreviewRoadmap(context, proposalId, options = {}) {
+  const panel = el("section", {
+    className: "project-update-roadmap-root",
+    ariaLabel: "项目更新模拟路线图",
+    ariaBusy: "true"
+  }, [el("div", { className: "route-loading", text: "正在生成更新后的项目路线图…" })]);
+
+  const load = async () => {
+    try {
+      const preview = await context.api(proposalPath(context, `/${encodeURIComponent(proposalId)}/preview/modules/roadmap`));
+      const previewContext = {
+        ...context,
+        data: preview.data ?? {},
+        module: { ...context.module, type: "roadmap", title: "更新后的项目路线图", emptyState: "当前更新还没有可展示的路线节点" },
+        roadmapPreview: {
+          ...preview,
+          proposalId,
+          reviewHref: options.showReviewAction === false ? "" : proposalHref(context, proposalId),
+          onSaved: load
+        }
+      };
+      panel.replaceChildren(renderRoadmapSwimlane(previewContext));
+    } catch (error) {
+      panel.replaceChildren(el("div", { className: "module-error error-panel", role: "alert" }, [
+        el("h3", { text: "无法生成更新后的项目路线图" }),
+        el("p", { text: error.message })
+      ]));
+    } finally {
+      panel.setAttribute("aria-busy", "false");
+    }
+  };
+  void load();
+  if (options.showSteps === false) return panel;
+  return el("div", { className: "project-update-flow" }, [
+    updateFlowSteps("preview"),
+    panel
+  ]);
+}
+
+function renderUpdateStartWorkspace(context, root) {
+  const load = async () => {
+    root.setAttribute("aria-busy", "true");
+    try {
+      const [ledger, proposalResponse] = await Promise.all([
+        context.api(materialPath(context)),
+        context.api(proposalPath(context))
+      ]);
+      const items = [...(ledger.items ?? [])].sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)));
+      const trackedId = context.query.get("material") ?? "";
+      const tracked = items.find(item => item.id === trackedId);
+      const pending = (proposalResponse.items ?? []).find(item => item.status === "pending");
+      const caps = ledger.capabilities ?? {};
+      const processing = tracked && ["gate_checking", "staging", "uploading", "queued", "processing"].includes(tracked.status);
+      const ready = tracked?.status === "ready" && tracked.updateTemplate?.id && tracked.readiness?.status !== "blocked";
+      const upload = caps.upload ? el("button", {
+        type: "button",
+        className: "primary-button",
+        text: "上传本次更新材料",
+        onClick: event => openUploadSheet(context, ledger, load, event.currentTarget, {
+          closeAfterUpload: true,
+          onUploaded: async ids => {
+            const materialId = ids.at(-1);
+            context.navigate(materialId ? `${updateUiPath(context)}?material=${encodeURIComponent(materialId)}` : updateUiPath(context));
+          }
+        })
+      }) : null;
+      const generate = el("button", {
+        type: "button",
+        className: ready ? "primary-button" : "secondary-button",
+        text: ready ? "使用本次材料生成模拟路线图" : "选择已处理材料生成预览",
+        onClick: event => openGenerationSheet(context, ready ? tracked : null, event.currentTarget)
+      });
+      const trackedCard = tracked ? el("article", { className: `update-current-material status-${tracked.status}` }, [
+        el("div", {}, [
+          el("span", { className: "eyebrow", text: "本次更新材料" }),
+          el("h3", { text: safeText(tracked.name, tracked.displayName) }),
+          el("p", { text: `${materialStatus[tracked.status] ?? tracked.status} · ${updateTemplateLabel(tracked)} · ${readinessText(tracked)}` })
+        ]),
+        processing ? el("span", { className: "material-status status-processing", text: "正在处理，页面会自动刷新" }) : null,
+        tracked.status === "ready" && tracked.readiness?.status === "blocked"
+          ? el("p", { className: "form-error", text: tracked.readiness?.suggestion ?? "材料缺少必要信息，请补充后再生成。" })
+          : null,
+        ready ? generate : null
+      ]) : null;
+      const recentMaterials = items.slice(0, 4).map(item => el("li", {}, [
+        el("span", {}, [el("strong", { text: safeText(item.name, item.displayName) }), el("small", { text: `${materialStatus[item.status] ?? item.status} · ${readinessText(item)}` })]),
+        item.status === "ready" && item.updateTemplate?.id && item.readiness?.status !== "blocked"
+          ? el("button", { type: "button", className: "ghost-button", text: "用于本次更新", onClick: () => context.navigate(`${updateUiPath(context)}?material=${encodeURIComponent(item.id)}`) })
+          : null
+      ]));
+      root.replaceChildren(el("div", { className: "project-update-flow" }, [
+        updateFlowSteps("materials"),
+        el("section", { className: "project-update-intake" }, [
+          el("header", { className: "project-update-intake-header" }, [
+            el("div", {}, [
+              el("span", { className: "eyebrow", text: "START PROJECT UPDATE" }),
+              el("h2", { text: "先提交本次更新材料" }),
+              el("p", { text: "材料处理完成后生成模拟路线图，再进入人工审核和发布。不会直接修改项目草稿或发布版本。" })
+            ]),
+            upload
+          ]),
+          el("div", { className: "project-update-intake-actions" }, [
+            templateDownloadControl({ className: "update-start-template-download" }),
+            generate
+          ]),
+          trackedCard,
+          recentMaterials.length ? el("details", { className: "update-existing-materials" }, [
+            el("summary", { text: "也可使用已归档材料" }),
+            el("ul", {}, recentMaterials)
+          ]) : null,
+          pending ? el("aside", { className: "update-resume-card" }, [
+            el("div", {}, [
+              el("span", { className: "eyebrow", text: "未完成更新" }),
+              el("strong", { text: "上一次模拟路线图仍待处理" }),
+              el("small", { text: "继续处理不会替代本次材料入口。" })
+            ]),
+            linkTo(context, previewHref(context, pending.proposalId), "继续上一次更新", "secondary-button")
+          ]) : null
+        ])
+      ]));
+      if (processing) setTimeout(() => {
+        if (root.isConnected && location.pathname === updateUiPath(context)) void load();
+      }, 1200);
+    } catch (error) {
+      if (error.message === "AUTHENTICATION_REQUIRED") return;
+      root.replaceChildren(el("section", { className: "module-error error-panel", role: "alert" }, [
+        el("h2", { text: "无法加载项目更新" }),
+        el("p", { text: generationErrorMessage(error) }),
+        el("button", { type: "button", className: "primary-button", text: "重新加载", onClick: load })
+      ]));
+    } finally {
+      root.setAttribute("aria-busy", "false");
+    }
+  };
+  void load();
+}
+
 function renderProposalWorkspace(context, root) {
-  const campaign = context.presentation.kind === "campaign";
-  const load = async () => { root.setAttribute("aria-busy","true"); try {
-    const [proposalResponse, taskResponse, envelope] = await Promise.all([context.api(proposalPath(context)),context.api(generationPath(context)),context.api(generationPath(context,"/capabilities"))]);
-    const proposals=proposalResponse.items??[],tasks=taskResponse.items??[],caps=envelope.capabilities??{};
-    const create=caps.create?el("button",{type:"button",className:"primary-button",text:campaign?"生成作战更新建议":"生成项目更新建议",onClick:event=>openGenerationSheet(context,null,event.currentTarget)}):null;
-    // 一键全部生成按钮：当有创建权限时显示
-    const batchBtn=caps.create?el("button",{type:"button",className:"secondary-button",text:campaign?"一键全部生成":"一键全部生成",title:"自动发现所有符合条件的材料，按模板分组批量生成",onClick:event=>openBatchSheet(context,event.currentTarget)}):null;
-    const running=tasks.filter(item=>!["succeeded","failed_retryable","failed_terminal","stale"].includes(item.state)).length;
-    const retryable=tasks.filter(item=>item.state==="failed_retryable").length;
-    const stale=tasks.filter(item=>item.state==="stale").length;
-    const proposalCards=proposals.map(item=>el("article",{className:"proposal-row"},[
-      el("div",{},[el("span",{className:"eyebrow",text:"VALIDATED CHANGE PROPOSAL"}),el("h3",{text:`提案 ${item.proposalId}`}),el("p",{text:item.summary})]),
-      definitionList([["基准版本",item.baseVersionLabel??item.baseVersionId],["模板",`${item.template?.id??"—"} · ${item.template?.version??"—"}`],["建议变更",`${item.changes?.length??0} 项`],["状态",proposalStatusLabels[item.status]??item.status]]),
-      linkTo(context,proposalHref(context,item.proposalId),"查看更新建议","secondary-button")
-    ]));
-    const taskCards=tasks.map(item=>{const usage=generationUsage(item);return el("article",{className:"generation-task-row"},[
-      el("div",{},[el("strong",{text:`任务 ${item.id}`}),el("span",{className:`generation-state state-${item.state}`,text:generationStateLabels[item.state]??item.state}),el("small",{text:`${item.template?.id??"—"} · ${item.baseVersionLabel??item.baseVersionId} · ${uiDate(item.createdAt)}`})]),
-      el("div",{className:"generation-usage",text:`${usage.attempts} 次调用 · ${usage.tokens} Token · ${usage.cost}`}),linkTo(context,taskHref(context,item.id),"查看任务","secondary-button")]);});
-    root.replaceChildren(el("section",{className:"materials-workspace-card proposal-workspace"},[
-      el("header",{className:"proposal-workspace-header"},[el("div",{},[el("span",{className:"eyebrow",text:campaign?"作战更新建议":"项目更新建议"}),el("h2",{text:campaign?"作战更新建议":"项目更新建议"}),el("p",{text:"这些是经过服务端校验的更新建议，尚未应用到草稿，也未发布。"})]),el("div",{className:"proposal-workspace-actions"},[create,batchBtn])]),
-      el("div",{className:"material-summary-grid"},[summaryCard("更新建议",proposals.length,"仅已通过校验"),summaryCard("处理中任务",running,"不会阻塞项目浏览"),summaryCard("可重试失败",retryable,"保留原任务记录"),summaryCard("基准已过期",stale,"不会自动改用新版本")]),
-      el("p",{className:"material-boundary",text:"AI 只生成带来源的更新建议；不会修改项目草稿或发布版本。"}),
-      el("section",{className:"proposal-list"},[el("h3",{text:"更新建议"}),...(proposalCards.length?proposalCards:[el("div",{className:"module-empty"},[el("h3",{text:"尚未生成结构化更新建议"}),el("p",{text:campaign?"从已就绪材料生成带来源的作战增量；不会修改草稿或发布状态。":"从已就绪材料生成带来源的项目增量；不会修改草稿或发布状态。"})])])]),
-      el("section",{className:"generation-task-list"},[el("h3",{text:"生成任务"}),...(taskCards.length?taskCards:[el("p",{className:"empty-source",text:"尚无生成任务。"})])])
-    ]));
-  }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h2",{text:"无法加载更新建议"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"primary-button",text:"重新加载提案",onClick:load})]));}finally{root.setAttribute("aria-busy","false");}};void load();
+  if (context.previewProposalId) {
+    root.replaceChildren(renderNodePreviewRoadmap(context, context.previewProposalId));
+    root.setAttribute("aria-busy", "false");
+    return;
+  }
+  renderUpdateStartWorkspace(context, root);
 }
 
 function renderGenerationTaskDetail(context, root) {
   const load=async()=>{root.setAttribute("aria-busy","true");try{const response=await context.api(generationPath(context,`/${encodeURIComponent(context.generationTaskId)}`));const task=response.task,usage=generationUsage(task);const steps=["queued","retrieving_evidence","generating","repairing","validating","succeeded"];const reached=steps.indexOf(task.state);const timeline=el("ol",{className:"generation-timeline"},steps.map((state,index)=>el("li",{className:index<=reached?"complete":""},[el("strong",{text:generationStateLabels[state]}),el("span",{text:index<reached||task.state==="succeeded"?"已完成":index===reached?"当前步骤":"等待"})])));
       const attempts=(task.attempts??[]).map(item=>el("tr",{},[el("td",{text:String(item.attemptNumber)}),el("td",{text:item.kind}),el("td",{text:item.outcome}),el("td",{text:`${item.inputTokens+item.outputTokens}`}),el("td",{text:item.costStatus==="priced"?`${item.currency??""} ${(Number(item.costMicros)/1_000_000).toFixed(6)}`:"未配置单价，仅记录 Token"}),el("td",{text:item.resultCode??"—"})]));
-      const actions=[];if(task.proposalId)actions.push(linkTo(context,proposalHref(context,task.proposalId),"查看更新建议","primary-button"));if(response.capabilities?.retry&&["failed_retryable","stale"].includes(task.state))actions.push(el("button",{type:"button",className:"secondary-button",text:task.state==="stale"?"基于当前版本创建新任务":"重试生成",onClick:async()=>{const result=await context.api(generationPath(context,`/${encodeURIComponent(task.id)}/retry`),{method:"POST",mutation:true,body:{idempotencyKey:crypto.randomUUID()}});context.navigate(taskHref(context,result.task.id));}}));if(response.capabilities?.create&&task.state==="failed_terminal")actions.push(el("button",{type:"button",className:"primary-button",text:"重新生成建议",onClick:event=>openGenerationSheet(context,null,event.currentTarget)}));
-      root.replaceChildren(linkTo(context,materialsUiPath(context,"?view=proposals"),"← 返回更新建议","back-link"),el("section",{className:"materials-detail-card generation-task-detail"},[
+      const actions=[];if(task.proposalId)actions.push(linkTo(context,previewHref(context,task.proposalId),"查看模拟路线图","primary-button"));if(response.capabilities?.retry&&["failed_retryable","stale"].includes(task.state))actions.push(el("button",{type:"button",className:"secondary-button",text:task.state==="stale"?"基于当前版本创建新任务":"重试生成",onClick:async()=>{const result=await context.api(generationPath(context,`/${encodeURIComponent(task.id)}/retry`),{method:"POST",mutation:true,body:{idempotencyKey:crypto.randomUUID()}});context.navigate(taskHref(context,result.task.id));}}));if(response.capabilities?.create&&task.state==="failed_terminal")actions.push(el("button",{type:"button",className:"primary-button",text:"重新生成预览",onClick:event=>openGenerationSheet(context,null,event.currentTarget)}));
+      root.replaceChildren(updateFlowSteps("generation"),linkTo(context,updateUiPath(context),"← 返回本次更新","back-link"),el("section",{className:"materials-detail-card generation-task-detail"},[
         el("header",{className:"material-detail-heading"},[el("div",{},[el("span",{className:"eyebrow",text:"GENERATION TASK"}),el("h1",{text:`生成任务 ${task.id}`})]),el("span",{className:`generation-state state-${task.state}`,text:generationStateLabels[task.state]??task.state})]),
-        el("p",{className:"material-boundary",text:task.state==="stale"?"发布版本已变化；此任务不会自动改用新版本。":"更新生成只创建更新建议，不会修改项目草稿或发布版本。"}),
+        el("p",{className:"material-boundary",text:task.state==="stale"?"发布版本已变化；此任务不会自动改用新版本。":"生成任务只创建节点预览，不会修改项目草稿或发布版本。"}),
         el("div",{className:"generation-detail-layout"},[el("section",{},[el("h2",{text:"任务进程"}),timeline]),el("aside",{className:"generation-context-card"},[el("h2",{text:"锁定上下文"}),definitionList([["项目",task.projectId],["发布基准",`${task.baseVersionLabel} · ${task.baseVersionId}`],["模板",`${task.template.id} · ${task.template.version}`],["Schema",task.schemaVersion],["材料",`${task.materials.length} 份`],["证据",`${task.evidence.length} 块`],["Token",usage.tokens],["成本",usage.cost]])])]),
-        task.errorCode?el("div",{className:"generation-error-detail"},[el("p",{className:"form-error",role:"alert",text:task.state==="failed_retryable"?"更新生成暂时失败，未影响项目数据。可以重试。":"模型输出未通过结构校验，未创建提案。"}),task.validation?.details?el("p",{className:"validation-detail",text:`具体原因：${task.validation.code}${task.validation.details.changeId?`（变更项 ${task.validation.details.changeId}）`:""}${task.validation.details.field?`，字段 ${task.validation.details.field}`:""}`}):null]):null,
+        task.errorCode?el("div",{className:"generation-error-detail"},[el("p",{className:"form-error",role:"alert",text:task.state==="failed_retryable"?"节点预览生成暂时失败，未影响项目数据。可以重试。":"模型输出未通过结构校验，未创建预览。"}),task.validation?.details?el("p",{className:"validation-detail",text:`具体原因：${task.validation.code}${task.validation.details.changeId?`（变更项 ${task.validation.details.changeId}）`:""}${task.validation.details.field?`，字段 ${task.validation.details.field}`:""}`}):null]):null,
         actions.length?el("div",{className:"material-detail-controls"},actions):null,
         attempts.length?el("div",{className:"table-scroll",tabIndex:0,role:"region",ariaLabel:"生成尝试与用量"},[el("table",{className:"module-table generation-attempt-table"},[el("caption",{text:"生成尝试、Token 与成本"}),el("thead",{},[el("tr",{},["次数","类型","结果","Token","成本","结果码"].map(label=>el("th",{scope:"col",text:label})))]),el("tbody",{},attempts)])]):null
       ]));
-    }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h1",{text:error.status===404?"生成任务不存在或你无权访问":"无法加载生成任务"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"secondary-button",text:"返回更新建议",onClick:()=>context.navigate(materialsUiPath(context,"?view=proposals"))})]));}finally{root.setAttribute("aria-busy","false");}};void load();
+    }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h1",{text:error.status===404?"生成任务不存在或你无权访问":"无法加载生成任务"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"secondary-button",text:"返回项目更新",onClick:()=>context.navigate(updateUiPath(context))})]));}finally{root.setAttribute("aria-busy","false");}};void load();
 }
 
 function valueText(value){
@@ -2117,6 +2593,68 @@ function patchRows(value,prefix=""){
     else rows.push([path,item]);
   }
   return rows;
+}
+
+const proposalModuleLabels = Object.freeze({
+  overview: "项目总览",
+  roadmap: "项目路线图",
+  "task-network": "任务",
+  units: "团队与作战单元",
+  gantt: "排期",
+  risks: "风险",
+  metrics: "指标",
+  outcomes: "成果"
+});
+
+const proposalFieldLabels = Object.freeze({
+  title: "名称",
+  name: "名称",
+  objective: "目标",
+  summary: "说明",
+  description: "说明",
+  unitId: "所属团队",
+  groupId: "所属团队",
+  owner: "负责人",
+  state: "状态",
+  status: "状态",
+  health: "健康度",
+  progress: "完成率",
+  startDate: "开始日期",
+  endDate: "结束日期",
+  dueDate: "截止日期",
+  dependsOn: "前置任务",
+  parentId: "上级任务",
+  acceptanceCriteria: "验收标准",
+  expectedOutput: "预期产出",
+  source: "来源",
+  severity: "严重程度",
+  mitigation: "缓解措施",
+  effectiveDate: "生效日期",
+  lifecycleReason: "变更原因"
+});
+
+function proposalFieldLabel(path) {
+  const key = String(path).split(".").at(-1);
+  return proposalFieldLabels[key] ?? key;
+}
+
+function proposalChangeTitle(change) {
+  return safeText(
+    change.review?.editedPatch?.title ??
+    change.review?.editedPatch?.name ??
+    change.patch?.title ??
+    change.patch?.name ??
+    change.original?.title ??
+    change.original?.name,
+    `${proposalModuleLabels[change.module] ?? "项目内容"} ${operationLabels[change.operation] ?? "变更"}`
+  );
+}
+
+function proposalImpactText(change) {
+  if (change.operation === "delete") return "删除会影响当前发布内容，需逐项确认。";
+  if (["status", "state", "endDate", "dueDate", "effectiveDate"].some(key => Object.hasOwn(change.patch ?? {}, key))) return "涉及状态或关键日期，发布前需重点核对。";
+  if (change.semanticType === "fact") return "将把材料中的事实写入下一版项目草稿。";
+  return "将更新下一版项目草稿，不会直接改变已发布版本。";
 }
 
 function setPatchValue(target,path,value){
@@ -2142,7 +2680,7 @@ function openReviewEditor(context,change,onSaved,returnFocus){
       else if(String(path).toLowerCase().includes("date"))input=el("input",{id,type:"date",value:String(value??"")});
       else if(String(value??"").length>80)input=el("textarea",{id,rows:3,value:String(value??""),required:true});
       else input=el("input",{id,type:"text",value:Array.isArray(value)?value.join(", "):String(value??""),required:true});
-      inputs.set(path,{input,original:value});return el("div",{className:"field"},[el("label",{htmlFor:id,text:path}),input,Array.isArray(value)?el("small",{text:"多个值请用英文逗号分隔"}):null]);
+      inputs.set(path,{input,original:value});return el("div",{className:"field"},[el("label",{htmlFor:id,text:proposalFieldLabel(path)}),input,el("small",{text:Array.isArray(value)?"多个值请用英文逗号分隔":`字段：${path}`})]);
     });
     const note=el("textarea",{id:"review-note",rows:3,maxLength:500,placeholder:"可选：记录修改原因"});
     const error=el("p",{className:"form-error",role:"alert"}),submit=el("button",{type:"submit",className:"primary-button",text:"校验并接受"});
@@ -2156,92 +2694,65 @@ function renderProposalDetail(context, root) {
     const [detail,reviewResponse]=await Promise.all([context.api(proposalPath(context,`/${encodeURIComponent(context.proposalId)}`)),context.api(proposalPath(context,`/${encodeURIComponent(context.proposalId)}/review`))]);
     const proposal=reviewResponse.proposal,evidenceByChange=new Map((detail.proposal.changes??[]).map(item=>[item.changeId,item.evidence??[]]));
     const selectedId=context.query.get("change"),selected=proposal.changes.find(item=>item.changeId===selectedId)??proposal.changes[0];
-    const index=el("nav",{className:"proposal-change-index",ariaLabel:"建议变更索引"},proposal.changes.map(item=>linkTo(context,proposalHref(context,proposal.proposalId,item.changeId),`${reviewLabels[item.review?.decision??"pending"]} · ${operationLabels[item.operation]} · ${item.targetId}`,item.changeId===selected.changeId?"selected":"")));
+    const selectedTitle=proposalChangeTitle(selected);
+    const index=el("nav",{className:"proposal-change-index",ariaLabel:"建议变更索引"},proposal.changes.map(item=>linkTo(context,proposalHref(context,proposal.proposalId,item.changeId),`${reviewLabels[item.review?.decision??"pending"]} · ${operationLabels[item.operation]} · ${proposalChangeTitle(item)}`,item.changeId===selected.changeId?"selected":"")));
     const effectivePatch=selected.review?.editedPatch??selected.patch,originalRows=patchRows(selected.original??{}),suggestedRows=patchRows(effectivePatch),evidence=evidenceByChange.get(selected.changeId)??[];
     const evidenceList=evidence.length?el("ol",{className:"proposal-evidence-list"},evidence.map(item=>{const href=materialsUiPath(context,`/${encodeURIComponent(item.materialId)}?evidence=${encodeURIComponent(item.evidenceId)}`);return el("li",{},[linkTo(context,href,`${item.materialName??item.materialId} · ${locatorLabel(item)}`),el("small",{text:item.claim??item.evidenceId})]);})):el("p",{className:"form-error",text:"该项没有直接证据引用。"});
     const decide=async decision=>{try{await context.api(proposalPath(context,`/${encodeURIComponent(proposal.proposalId)}/review/${encodeURIComponent(selected.changeId)}`),{method:"PATCH",mutation:true,body:{decision}});context.showToast(decision==="accepted"?"该项已接受":"该项已驳回");await load();}catch(error){context.showToast(error.message);}};
     const modules=[...new Set(proposal.changes.map(item=>item.module))],actions=[];
     if(reviewResponse.capabilities.review){actions.push(el("button",{type:"button",className:"primary-button",text:"接受此项",onClick:()=>void decide("accepted")}),el("button",{type:"button",className:"danger-button",text:"驳回此项",onClick:()=>void decide("rejected")}),el("button",{type:"button",className:"secondary-button",text:"编辑后接受",onClick:event=>openReviewEditor(context,selected,load,event.currentTarget)}));}
     const acceptAll=reviewResponse.capabilities.review&&reviewResponse.capabilities.pending>0?el("button",{type:"button",className:"primary-button",text:"全部接受",onClick:async()=>{try{for(const module of modules){await context.api(proposalPath(context,`/${encodeURIComponent(proposal.proposalId)}/review/modules/${encodeURIComponent(module)}`),{method:"POST",mutation:true});}context.showToast("全部变更项已接受");await load();}catch(error){context.showToast(error.message);}}}):null;
-    const moduleActions=reviewResponse.capabilities.review?el("div",{className:"module-review-actions"},[acceptAll,...modules.map(module=>el("button",{type:"button",className:"ghost-button",text:`接受 ${module} 模块`,onClick:async()=>{try{await context.api(proposalPath(context,`/${encodeURIComponent(proposal.proposalId)}/review/modules/${encodeURIComponent(module)}`),{method:"POST",mutation:true});context.showToast(`${module} 模块已接受`);await load();}catch(error){context.showToast(error.message);}}}))]):null;
+    const moduleActions=reviewResponse.capabilities.review?el("div",{className:"module-review-actions"},[acceptAll,...modules.map(module=>el("button",{type:"button",className:"ghost-button",text:`接受全部${proposalModuleLabels[module]??module}变更`,onClick:async()=>{try{await context.api(proposalPath(context,`/${encodeURIComponent(proposal.proposalId)}/review/modules/${encodeURIComponent(module)}`),{method:"POST",mutation:true});context.showToast(`${proposalModuleLabels[module]??module}变更已接受`);await load();}catch(error){context.showToast(error.message);}}}))]):null;
     const merge=reviewResponse.capabilities.merge?el("button",{type:"button",className:"primary-button",text:"应用到草稿",onClick:async()=>{try{const result=await context.api(proposalPath(context,`/${encodeURIComponent(proposal.proposalId)}/merge`),{method:"POST",mutation:true,body:{}});context.showToast(`已生成独立草稿 ${result.draft.versionLabel}`);await load();}catch(error){context.showToast(error.message);}}}):null;
+    const continueToRelease=reviewResponse.merged?linkTo(context,updateUiPath(context,"/release"),"继续：预览并发布","primary-button"):null;
     const warnings=[...(proposal.warnings??[]),...(selected.warnings??[])];
-    // 路线图预览区：可折叠
-    const previewToggle=el("button",{type:"button",className:"secondary-button roadmap-preview-toggle",text:"查看路线图预览 ▸",onClick:async event=>{
-      const btn=event.currentTarget,container=btn.nextElementSibling;
-      if(container.children.length){container.replaceChildren();btn.textContent="查看路线图预览 ▸";return;}
-      btn.textContent="加载中…";btn.disabled=true;
-      try{
-        const previewData=await context.api(proposalPath(context,`/${encodeURIComponent(proposal.proposalId)}/preview/modules/roadmap`));
-        const cm=previewData.changeMarkers??{},data=previewData.data??{};
-        const tasks=data.tasks??[],stages=data.stages??[],units=data.units??[];
-        const addedSet=new Set(cm.added??[]),modifiedSet=new Set(cm.modified??[]),removedSet=new Set(cm.removed??[]);
-        const taskMarkers=new Map();
-        for(const id of addedSet)taskMarkers.set(id,"added");
-        for(const id of modifiedSet)taskMarkers.set(id,"modified");
-        // 渲染预览卡片（简化版路线图）
-        const stageColumns=stages.map(stage=>{
-          const stageTasks=tasks.filter(t=>t.unitId&&units.some(u=>u.id===t.unitId)).filter(t=>true); // 暂用全部任务
-          return el("div",{className:"roadmap-preview-column"},[
-            el("h4",{text:stage.title||stage.id}),
-            el("small",{text:stage.dateLabel||""}),
-            el("div",{className:"roadmap-preview-tasks"},tasks.filter(t=>true).slice(0,20).map(t=>{
-              const marker=taskMarkers.get(t.id);
-              return el("div",{className:`roadmap-preview-task${marker?" marker-"+marker:""}`},[
-                el("strong",{text:t.title||t.id}),
-                el("small",{text:`${t.owner?t.owner+" · ":""}${t.state||""} ${t.progress!=null?Math.round(t.progress)+"%":""}`}),
-                marker==="added"?el("span",{className:"task-marker marker-added",text:"新增"}):null,
-                marker==="modified"?el("span",{className:"task-marker marker-modified",text:"变更"}):null
-              ]);
-            }))
-          ]);
-        });
-        const summary=el("div",{className:"roadmap-preview-summary"},[
-          el("span",{text:`预览版本：${previewData.version||""}`}),
-          el("span",{text:`${cm.added?.length||0} 新增 · ${cm.modified?.length||0} 变更 · ${cm.removed?.length||0} 删除`}),
-          previewData.pendingCount>0?el("span",{className:"roadmap-preview-notice",text:`（${previewData.pendingCount} 项待审核，预览包含全部建议）`}):null
-        ]);
-        container.replaceChildren(el("section",{className:"roadmap-preview-container"},[
-          el("h4",{text:"路线图预览（投影后效果）"}),
-          summary,
-          el("div",{className:"roadmap-preview-legend"},[
-            el("span",{className:"task-marker marker-added",text:"新增"}),
-            el("span",{className:"task-marker marker-modified",text:"变更"})
-          ]),
-          el("div",{className:"roadmap-preview-board"},stageColumns.length?stageColumns:[el("p",{text:"暂无阶段数据"})])
-        ]));
-        btn.textContent="收起路线图预览 ▾";btn.disabled=false;
-      }catch(error){btn.textContent="查看路线图预览 ▸";btn.disabled=false;container.replaceChildren(el("p",{className:"form-error",text:`无法加载预览：${error.message}`}));
-      }
-    }});
-    const previewContainer=el("div",{className:"roadmap-preview-wrapper"});
-    root.replaceChildren(linkTo(context,materialsUiPath(context,"?view=proposals"),"← 返回更新建议","back-link"),el("section",{className:"materials-detail-card proposal-detail review-detail"},[
-      el("header",{className:"material-detail-heading"},[el("div",{},[el("span",{className:"eyebrow",text:"人工审核 · 变更建议"}),el("h1",{text:`审核提案 ${proposal.proposalId}`})]),el("span",{className:`review-state review-${selected.review?.decision??"pending"}`,text:reviewLabels[selected.review?.decision??"pending"]})]),
-      el("p",{className:"material-boundary",text:`基准为发布版本 ${proposal.baseVersionLabel??proposal.baseVersionId}。接受只记录审核决定；只有“事务合并到草稿”才会创建新的草稿版本。`}),
-      el("p",{className:"validation-pass",text:"服务端校验结果：Schema、项目归属、证据、日期与依赖检查均已通过；审核编辑会再次校验。"}),
-      el("div",{className:"review-summary-grid"},[summaryCard("待决定",reviewResponse.capabilities.pending,"必须逐项完成"),summaryCard("已接受",reviewResponse.capabilities.accepted,"等待事务合并"),summaryCard("已驳回",reviewResponse.capabilities.rejected,"保留审核记录"),summaryCard("应用到草稿",reviewResponse.merged?"已完成":"未执行","不会直接发布")]),
-      moduleActions,
-      previewToggle,previewContainer,
+    const roadmapPreview=renderNodePreviewRoadmap(context,proposal.proposalId,{
+      selectedTargetId:selected.targetId,
+      showReviewAction:false,
+      showSteps:false
+    });
+    root.replaceChildren(updateFlowSteps("review"),linkTo(context,previewHref(context,proposal.proposalId),"← 返回模拟路线图","back-link"),el("section",{className:"materials-detail-card proposal-detail review-detail"},[
+      el("header",{className:"material-detail-heading"},[el("div",{},[el("span",{className:"eyebrow",text:"人工审核 · 节点预览"}),el("h1",{text:safeText(proposal.summary,`${proposal.changes.length} 项节点变化`)})]),el("span",{className:`review-state review-${selected.review?.decision??"pending"}`,text:reviewLabels[selected.review?.decision??"pending"]})]),
+      el("section",{className:"review-focus-summary"},[
+        el("span",{className:"eyebrow",text:`第 ${proposal.changes.indexOf(selected)+1} 项，共 ${proposal.changes.length} 项`}),
+        el("h2",{text:selectedTitle}),
+        el("p",{text:`${operationLabels[selected.operation]}${proposalModuleLabels[selected.module]??"项目内容"}。${proposalImpactText(selected)}`})
+      ]),
       el("div",{className:"proposal-detail-layout"},[index,el("article",{className:"proposal-change-card",ariaLive:"polite"},[
-        el("header",{},[el("span",{className:"eyebrow",text:selected.module}),el("h2",{text:`${operationLabels[selected.operation]} · ${selected.targetId}`})]),
-        definitionList([["changeId",selected.changeId],["语义类型",semanticLabels[selected.semanticType]??selected.semanticType],["置信度",`${selected.confidence>=.8?"高":selected.confidence>=.6?"中":"低"}（${Number(selected.confidence).toFixed(2)}）`],["审核人",selected.review?.reviewedByName??"待审核"]]),
-        el("h3",{text:"变更字段差异"}),
-        el("div",{className:"review-diff-grid"},[el("section",{},[el("h3",{text:"原值"}),selected.operation==="create"?el("p",{className:"empty-source",text:"新增项没有原值"}):el("dl",{className:"proposal-patch-fields"},originalRows.flatMap(([key,value])=>[el("dt",{text:key}),el("dd",{text:valueText(value)})]))]),el("section",{},[el("h3",{text:selected.review?.editedPatch?"审核编辑值":"建议值"}),el("dl",{className:"proposal-patch-fields"},suggestedRows.flatMap(([key,value])=>[el("dt",{text:key}),el("dd",{text:valueText(value)})]))])]),
-        el("h3",{text:"引用内容"}),evidenceList,
+        el("header",{},[el("span",{className:"eyebrow",text:proposalModuleLabels[selected.module]??selected.module}),el("h2",{text:`${operationLabels[selected.operation]}：${selectedTitle}`})]),
+        definitionList([["内容性质",semanticLabels[selected.semanticType]??selected.semanticType],["可信程度",selected.confidence>=.8?"高":selected.confidence>=.6?"中":"低"],["当前决定",reviewLabels[selected.review?.decision??"pending"]],["审核人",selected.review?.reviewedByName??"待审核"]]),
+        el("h3",{text:selected.operation==="create"?"建议内容":"变化对比"}),
+        el("div",{className:`review-diff-grid${selected.operation==="create"?" create":""}`},[
+          selected.operation==="create"?null:el("section",{},[el("h3",{text:"当前值"}),el("dl",{className:"proposal-patch-fields"},originalRows.flatMap(([key,value])=>[el("dt",{text:proposalFieldLabel(key)}),el("dd",{text:valueText(value)})]))]),
+          el("section",{},[el("h3",{text:selected.review?.editedPatch?"审核后的建议值":"建议值"}),el("dl",{className:"proposal-patch-fields"},suggestedRows.flatMap(([key,value])=>[el("dt",{text:proposalFieldLabel(key)}),el("dd",{text:valueText(value)})]))])
+        ]),
+        el("h3",{text:"原因与影响"}),
+        definitionList([["预览说明",safeText(proposal.summary,"根据已归档材料生成节点预览。")],["发布影响",proposalImpactText(selected)]]),
+        el("h3",{text:"证据来源"}),evidenceList,
         warnings.length?el("section",{className:"proposal-warnings"},[el("h3",{text:"警告"}),el("ul",{},[...new Set(warnings)].map(code=>el("li",{text:code})))]):el("p",{className:"validation-pass",text:"该项没有额外警告。"}),
         actions.length?el("div",{className:"review-actions"},actions):null
       ])]),
-      merge?el("footer",{className:"merge-bar"},[el("div",{},[el("strong",{text:"所有变更已完成审核"}),el("p",{text:"合并会以当前草稿为源创建新草稿；任一校验失败将整体回滚。"})]),merge]):null
+      el("div",{className:"review-summary-grid"},[summaryCard("待决定",reviewResponse.capabilities.pending,"必须逐项完成"),summaryCard("已接受",reviewResponse.capabilities.accepted,"等待应用到草稿"),summaryCard("已驳回",reviewResponse.capabilities.rejected,"保留审核记录"),summaryCard("应用到草稿",reviewResponse.merged?"已完成":"未执行","不会直接发布")]),
+      moduleActions,
+      roadmapPreview,
+      el("details",{className:"technical-details review-technical-details"},[
+        el("summary",{text:"版本与校验详情"}),
+        el("p",{className:"material-boundary",text:`基准为发布版本 ${proposal.baseVersionLabel??proposal.baseVersionId}。接受只记录审核决定；应用到草稿才会创建新的草稿版本。`}),
+        el("p",{className:"validation-pass",text:"服务端已完成 Schema、项目归属、证据、日期与依赖检查；审核编辑会再次校验。"}),
+        definitionList([["预览记录 ID",proposal.proposalId],["变更 ID",selected.changeId],["目标 ID",selected.targetId],["模块字段",selected.module]])
+      ]),
+      merge?el("footer",{className:"merge-bar"},[el("div",{},[el("strong",{text:"所有变更已完成审核"}),el("p",{text:"应用会以当前草稿为源创建新草稿；任一校验失败将整体回滚。"})]),merge])
+        :continueToRelease?el("footer",{className:"merge-bar"},[el("div",{},[el("strong",{text:"节点预览已应用到草稿"}),el("p",{text:"下一步先预览差异并完成发布检查，再进行最终发布确认。"})]),continueToRelease]):null
     ]));
-  }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h1",{text:error.status===404?"更新建议不存在或你无权访问":"无法加载更新建议"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"secondary-button",text:"返回更新建议",onClick:()=>context.navigate(materialsUiPath(context,"?view=proposals"))})]));}finally{root.setAttribute("aria-busy","false");}};void load();
+  }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h1",{text:error.status===404?"项目更新不存在或你无权访问":"无法加载项目更新"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"secondary-button",text:"返回项目更新",onClick:()=>context.navigate(updateUiPath(context))})]));}finally{root.setAttribute("aria-busy","false");}};void load();
 }
 
 function renderReleaseCenter(context,root){
   const campaign=context.presentation.kind==="campaign",load=async()=>{root.setAttribute("aria-busy","true");try{
     const [preview,history,members,audit]=await Promise.all([context.api(releasePath(context,"/preview")),context.api(releasePath(context,"/history")),context.api(`/api/projects/${encodeURIComponent(context.project.id)}/members`).catch(()=>({items:[]})),context.api(releasePath(context,"/audit")).catch(()=>({items:[]}))]);
-    const publish=preview.capabilities.publish?el("form",{className:"release-form",onSubmit:async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector("button");button.disabled=true;try{const result=await context.api(releasePath(context,"/publish"),{method:"POST",mutation:true,body:{previewToken:preview.previewToken,versionLabel:form.elements.versionLabel.value.trim(),acknowledged:form.elements.acknowledged.checked}});context.showToast(`已发布 ${result.versionLabel}`);context.navigate(materialsUiPath(context,"?view=release"));}catch(error){context.showToast(error.message);button.disabled=false;}}},[el("div",{className:"field"},[el("label",{htmlFor:"release-version-label",text:"发布版本标签"}),el("input",{id:"release-version-label",name:"versionLabel",required:true,pattern:"[A-Za-z0-9][A-Za-z0-9._-]{0,79}",placeholder:"例如：v1.1.0"})]),el("label",{className:"release-ack"},[el("input",{type:"checkbox",name:"acknowledged",required:true}),el("span",{text:"我已核对草稿差异、结构校验和待审核项"})]),el("button",{type:"submit",className:"primary-button",text:campaign?"发布当前作战版本":"发布当前项目版本"})]):el("p",{className:"empty-source",text:preview.changes.count?"当前角色只能预览，发布需要项目管理员权限。":"草稿与发布版本一致，暂无可发布差异。"});
-    const rollback=preview.capabilities.rollback?el("button",{type:"button",className:"danger-button",text:"回滚到直接上一发布版本",onClick:async event=>{event.currentTarget.disabled=true;try{await context.api(releasePath(context,"/rollback"),{method:"POST",mutation:true,body:{confirmed:true,targetVersionId:preview.rollbackTarget.versionId}});context.showToast("已回滚并创建新的草稿基线");context.navigate(materialsUiPath(context,"?view=release"));}catch(error){context.showToast(error.message);event.currentTarget.disabled=false;}}}):null;
-    const checklist=[["草稿结构校验",preview.checklist.graphValid],["存在待发布差异",preview.checklist.hasChanges],["没有未决定审核项",preview.checklist.unresolvedReviewItems===0],["提案不能直达发布",preview.checklist.proposalToPublishedDirectPath===false]];
+    const publish=preview.capabilities.publish?el("form",{className:"release-form",onSubmit:async event=>{event.preventDefault();const form=event.currentTarget,button=form.querySelector("button");button.disabled=true;try{const result=await context.api(releasePath(context,"/publish"),{method:"POST",mutation:true,body:{previewToken:preview.previewToken,versionLabel:form.elements.versionLabel.value.trim(),acknowledged:form.elements.acknowledged.checked}});context.showToast(`已发布 ${result.versionLabel}`);context.navigate(updateUiPath(context,"/release"));}catch(error){context.showToast(error.message);button.disabled=false;}}},[el("div",{className:"field"},[el("label",{htmlFor:"release-version-label",text:"发布版本标签"}),el("input",{id:"release-version-label",name:"versionLabel",required:true,pattern:"[A-Za-z0-9][A-Za-z0-9._-]{0,79}",placeholder:"例如：v1.1.0"})]),el("label",{className:"release-ack"},[el("input",{type:"checkbox",name:"acknowledged",required:true}),el("span",{text:"我已核对草稿差异、结构校验和待审核项"})]),el("button",{type:"submit",className:"primary-button",text:campaign?"发布当前作战版本":"发布当前项目版本"})]):el("p",{className:"empty-source",text:preview.changes.count?"当前角色只能预览，发布需要项目管理员权限。":"草稿与发布版本一致，暂无可发布差异。"});
+    const rollback=preview.capabilities.rollback?el("button",{type:"button",className:"danger-button",text:"回滚到直接上一发布版本",onClick:async event=>{event.currentTarget.disabled=true;try{await context.api(releasePath(context,"/rollback"),{method:"POST",mutation:true,body:{confirmed:true,targetVersionId:preview.rollbackTarget.versionId}});context.showToast("已回滚并创建新的草稿基线");context.navigate(updateUiPath(context,"/release"));}catch(error){context.showToast(error.message);event.currentTarget.disabled=false;}}}):null;
+    const checklist=[["草稿结构校验",preview.checklist.graphValid],["存在待发布差异",preview.checklist.hasChanges],["没有未决定审核项",preview.checklist.unresolvedReviewItems===0],["AI 预览不能直达发布",preview.checklist.proposalToPublishedDirectPath===false]];
     const checklistNode=el("ul",{className:"release-checklist"},checklist.map(([label,passed])=>el("li",{className:passed?"passed":"blocked"},[el("strong",{text:passed?"通过":"阻止"}),el("span",{text:label})])));
     const moduleCounts=preview.changes.count
       ? el("div",{className:"release-module-counts"},Object.entries(preview.changes.byModule).map(([module,count])=>el("span",{className:"count-pill",text:`${module} · ${count}`})))
@@ -2265,7 +2776,7 @@ function renderReleaseCenter(context,root){
       el("summary",{text:`审计日志（${audit.items.length}）`}),
       el("ol",{},audit.items.map(item=>el("li",{},[el("strong",{text:item.action}),el("span",{text:`${item.userName??"系统"} · ${uiDate(item.createdAt)}`})])))
     ]):null;
-    root.replaceChildren(el("section",{className:"materials-workspace-card release-center"},[
+    root.replaceChildren(updateFlowSteps("review"),el("section",{className:"materials-workspace-card release-center"},[
       el("header",{className:"proposal-workspace-header"},[el("div",{},[el("span",{className:"eyebrow",text:campaign?"审核与发布中心":"审核与发布中心"}),el("h2",{text:campaign?"审核与发布":"审核发布中心"}),el("p",{text:"固定渲染器提供草稿预览、检查清单、发布和直接前驱回滚；AI 无法执行这些动作。"})])]),
       el("div",{className:"release-version-grid"},[summaryCard("当前发布",preview.published.versionLabel,`${preview.published.tasks} ${context.presentation.task}`),summaryCard("当前草稿",preview.draft.versionLabel,`${preview.draft.tasks} ${context.presentation.task}`),summaryCard("待发布差异",preview.changes.count,"按模块确定性计算"),summaryCard("未决定审核",preview.checklist.unresolvedReviewItems,"发布前必须人工核对")]),
       el("div",{className:"release-layout"},[previewCard,actionCard]),
@@ -2329,8 +2840,8 @@ export function renderMaterials(context) {
   if (context.generationTaskId) renderGenerationTaskDetail(context, root);
   else if (context.proposalId) renderProposalDetail(context, root);
   else if (context.materialId) renderMaterialDetail(context, root);
-  else if (context.query.get("view") === "proposals") renderProposalWorkspace(context, root);
-  else if (context.query.get("view") === "release") renderReleaseCenter(context, root);
+  else if (context.updateWorkspace && context.updateView === "release") renderReleaseCenter(context, root);
+  else if (context.updateWorkspace) renderProposalWorkspace(context, root);
   else if (context.query.get("view") === "operations") renderOperationsCenter(context, root);
   else renderLedger(context, root);
   return root;

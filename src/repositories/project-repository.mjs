@@ -167,11 +167,11 @@ export function createProjectRepository(database) {
           break;
         case "stage":
           stages.push({ ...attrs, id: row.id, title: row.title, state: stateVal,
-                        dateLabel: attrs.dateLabel ?? "", startDate: row.startDate, endDate: row.endDate });
+                        dateLabel: attrs.dateLabel ?? attrs.date ?? row.startDate ?? "", startDate: row.startDate, endDate: row.endDate });
           break;
         case "outcome":
           closures.push({ ...attrs, id: row.id, title: row.title, state: stateVal,
-                          dateLabel: attrs.dateLabel ?? "", description: attrs.description ?? "",
+                          dateLabel: attrs.dateLabel ?? attrs.date ?? row.startDate ?? "", description: attrs.description ?? "",
                           result: attrs.result ?? "", source: attrs.source ?? "",
                           between: attrs.between ?? [], previewAssets: attrs.previewImages ?? [] });
           break;

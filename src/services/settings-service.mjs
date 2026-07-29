@@ -1,5 +1,6 @@
 import { withTransaction } from "../db/database.mjs";
 import { upsert } from "../db/sql-dialect.mjs";
+import { createGenerationProviderFromEnv, createProviderFromEnv } from "../ai/provider-factory.mjs";
 
 const KEYS = Object.freeze({
   chatProvider: "ai_chat",
@@ -58,7 +59,7 @@ function sanitizeVisionProviderConfig(input) {
   return result;
 }
 
-export function createSettingsService(database) {
+export function createSettingsService(database, options = {}) {
   function getAiChatConfig() {
     return readSetting(database, KEYS.chatProvider);
   }
@@ -162,11 +163,63 @@ export function createSettingsService(database) {
     return env;
   }
 
+  async function testConnection(principal, scope) {
+    if (!principal?.isPlatformAdmin) {
+      const error = new Error("仅平台管理员可测试 AI 连接");
+      error.status = 403;
+      error.code = "FORBIDDEN";
+      throw error;
+    }
+    if (!["chat", "generation", "vision"].includes(scope)) {
+      const error = new Error("未知的 AI 服务类型");
+      error.status = 400;
+      error.code = "INVALID_AI_SCOPE";
+      throw error;
+    }
+    const environment = buildProviderEnvironment(scope);
+    const startedAt = Date.now();
+    try {
+      const provider = scope === "generation"
+        ? (options.createGenerationProvider ?? createGenerationProviderFromEnv)(environment)
+        : scope === "vision"
+          ? (options.createChatProvider ?? createProviderFromEnv)({
+              ...environment,
+              AI_CHAT_PROVIDER: environment.AI_VISION_PROVIDER,
+              AI_CHAT_BASE_URL: environment.AI_VISION_BASE_URL,
+              AI_CHAT_API_KEY: environment.AI_VISION_API_KEY,
+              AI_CHAT_MODEL: environment.AI_VISION_MODEL,
+              AI_CHAT_ALLOWED_HOSTS: environment.AI_VISION_ALLOWED_HOSTS,
+              AI_CHAT_TIMEOUT_MS: environment.AI_VISION_TIMEOUT_MS
+            })
+          : (options.createChatProvider ?? createProviderFromEnv)(environment);
+      const result = await provider.generate({
+        messages: [
+          { role: "system", content: "You are a connection health check. Reply with OK." },
+          { role: "user", content: "OK" }
+        ]
+      });
+      return {
+        ok: true,
+        scope,
+        providerLabel: result.providerLabel ?? provider.safeLabel ?? "openai-compatible",
+        latencyMs: Math.max(0, Date.now() - startedAt)
+      };
+    } catch (cause) {
+      if (Number.isInteger(cause?.status) && typeof cause?.code === "string") throw cause;
+      const error = new Error("AI 连接配置无效，请检查地址、允许域名、模型和密钥");
+      error.status = 400;
+      error.code = "AI_CONNECTION_CONFIG_INVALID";
+      error.cause = cause;
+      throw error;
+    }
+  }
+
   return Object.freeze({
     getAllSettings,
     updateAiChatConfig,
     updateAiGenerationConfig,
     updateAiVisionConfig,
+    testConnection,
     buildProviderEnvironment,
     getAiChatConfig,
     getAiGenerationConfig,

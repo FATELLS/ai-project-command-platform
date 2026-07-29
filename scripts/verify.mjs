@@ -148,13 +148,18 @@ const required = [
   "scripts/run-phase6-browser-fixture.mjs",
   "scripts/backup-database.mjs",
   "scripts/restore-database.mjs",
+  "scripts/manage-server.mjs",
   "scripts/verify-browser-evidence.mjs",
   "public/index.html",
   "public/styles.css",
   "public/app.js",
+  "public/material-template-downloads.js",
   "public/modules/registry.js",
   "public/modules/shared.js",
   "public/modules/renderers.js",
+  "playwright.abnormal.config.mjs",
+  "test/material-template-downloads.test.mjs",
+  "test/e2e/06-abnormal-material-inputs.spec.mjs",
   "test/template-catalog.test.mjs",
   "test/db-foundation.test.mjs",
   "test/project-migration.test.mjs",
@@ -306,8 +311,11 @@ for (const file of [
   "scripts/run-phase6-browser-fixture.mjs",
   "scripts/backup-database.mjs",
   "scripts/restore-database.mjs",
+  "scripts/manage-server.mjs",
   "scripts/verify-browser-evidence.mjs",
+  "playwright.abnormal.config.mjs",
   "public/app.js",
+  "public/material-template-downloads.js",
   "public/modules/registry.js",
   "public/modules/shared.js",
   "public/modules/renderers.js"
@@ -317,6 +325,10 @@ run(process.execPath, ["--test", "test/*.test.mjs"]); // 显式 glob：避免 no
 // 受限沙盒如禁止端口监听会报 EPERM；在可监听环境中必须通过。
 const e2ePort = await findFreePort();
 run("npx", ["playwright", "test", "--reporter=list"], { env: { ...process.env, E2E_PORT: String(e2ePort) } });
+const abnormalE2ePort = await findFreePort();
+run("npx", ["playwright", "test", "--config=playwright.abnormal.config.mjs", "--reporter=list"], {
+  env: { ...process.env, E2E_ABNORMAL_PORT: String(abnormalE2ePort) }
+});
 run(process.execPath, ["scripts/verify-browser-evidence.mjs", ".planning/evidence/phase3-browser-matrix.json"]);
 
 const phase4BrowserMatrix = join(root, ".planning/evidence/phase4-browser-matrix.json");
@@ -362,7 +374,18 @@ const runtimeDir = await mkdtemp(join(tmpdir(), "platform-verify-"));
 const database = openDatabase(join(runtimeDir, "platform.sqlite"));
 let server;
 try {
-  assert.deepEqual(applyMigrations(database), ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql", "004_materials_evidence.sql", "005_structured_change_proposals.sql", "006_review_publish_operations.sql", "007_release_hardening_readiness_observability.sql"]);
+  assert.deepEqual(applyMigrations(database), [
+    "001_initial.sql",
+    "002_auth_project_access.sql",
+    "003_module_registry_templates.sql",
+    "004_materials_evidence.sql",
+    "005_structured_change_proposals.sql",
+    "006_review_publish_operations.sql",
+    "007_release_hardening_readiness_observability.sql",
+    "008_password_reset.sql",
+    "009_platform_settings.sql",
+    "010_unified_cards.sql"
+  ]);
   assert.deepEqual(applyMigrations(database), []);
   const imported = importLegacyProject(database, fixture, {
     projectId: "xugu-agentic-group",

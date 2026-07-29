@@ -50,7 +50,7 @@ const commonTaskFields = [...cardColumnFields, ...cardAttrsFields];
 const fields = Object.freeze({
   overview: ["title", "summary", "status"],
   units: ["name", "description", "owner", "status", "effectiveDate", "lifecycleReason", "source"],
-  roadmap: ["title", "date", "description", "state"],
+  roadmap: ["title", "date", "description", "state", "expectedOutput"],
   "task-network": commonTaskFields,
   gantt: commonTaskFields,
   outcomes: ["title", "date", "state", "description", "result", "source"],
@@ -77,7 +77,7 @@ export const proposalTemplates = Object.freeze([
   template("metrics-data", "指标数据", ["metrics"], { metrics: ["create", "update"] }),
   template("outcome-archive", "成果归档", ["outcomes"], { outcomes: ["create", "update"] }),
   template("new-project-material", "新项目材料", ["overview", "units", "roadmap", "task-network", "risks", "metrics"], { overview: ["update"], units: ["create"], roadmap: ["create"], "task-network": ["create"], risks: ["create"], metrics: ["create"] }),
-  template("interaction", "交互提案", ["task-network", "units", "roadmap", "gantt"], { "task-network": ["create", "update"], units: ["create", "update"], roadmap: ["create", "update"], gantt: ["create", "update"] })
+  template("interaction", "交互提案", ["task-network", "units", "roadmap", "gantt"], { "task-network": ["create", "update", "delete"], units: ["create", "update"], roadmap: ["create", "update", "delete"], gantt: ["create", "update", "delete"] })
 ]);
 
 // 卡片元素分级——提取端（prompt-builder）和输入端（上传引导）共用。

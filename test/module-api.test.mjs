@@ -17,7 +17,7 @@ import { createAuthService } from "../src/services/auth-service.mjs";
 const xuguFixture = JSON.parse(readFileSync(new URL("../fixtures/projects/xugu-agentic-group.json", import.meta.url), "utf8"));
 const standardFixture = JSON.parse(readFileSync(new URL("../fixtures/projects/standard-project-sample.json", import.meta.url), "utf8"));
 const password = "module-api-test-password";
-const expectedTypes = ["overview", "roadmap", "units", "task-network", "gantt", "outcomes", "risks", "metrics", "materials"];
+const expectedTypes = ["overview", "roadmap", "units", "gantt", "outcomes", "risks", "metrics", "materials"];
 
 function addUser(database, { id, loginName, role, projectIds = [] }) {
   const at = "2026-07-18T00:00:00.000Z";
@@ -144,7 +144,7 @@ test("service draft update is complete-list, atomic, draft-only, reorderable, an
     const publishedBefore = serializedRows(publishedVersion.id);
     const factsBefore = database.prepare("SELECT count(*) AS count FROM project_tasks WHERE version_id = ?").get(draftVersion.id).count;
     const manifest = service.listModules(principal, "xugu-agentic-group", "draft");
-    const order = ["overview", "units", "roadmap", "task-network", "gantt", "outcomes", "risks", "metrics", "materials"];
+    const order = ["overview", "units", "roadmap", "gantt", "outcomes", "risks", "metrics", "materials"];
     const input = configurationFromManifest(manifest, order);
     input.modules.find(module => module.type === "metrics").enabled = false;
     const updated = service.updateDraftModules(principal, "xugu-agentic-group", input);
@@ -232,12 +232,13 @@ test("populated standard module API is data-driven and compatibility public snap
   try {
     const editor = await login(context, "editor");
     const roadmap = await request(context, "/api/projects/standard-project-sample/public/modules/roadmap", { session: editor });
-    const network = await request(context, "/api/projects/standard-project-sample/public/modules/task-network", { session: editor });
     const gantt = await request(context, "/api/projects/standard-project-sample/public/modules/gantt", { session: editor });
     assert.deepEqual([roadmap.payload.module.viewVariant, roadmap.payload.data.stages.length], ["linear-roadmap", 4]);
-    assert.deepEqual([network.payload.module.viewVariant, network.payload.data.units.length, network.payload.data.nodes.length], ["dependency-list", 3, 7]);
     assert.deepEqual([gantt.payload.module.viewVariant, gantt.payload.data.range.end], ["lanes", "2027-04-23"]);
-    const payloadText = JSON.stringify({ roadmap: roadmap.payload, network: network.payload, gantt: gantt.payload });
+    // task-network 已从公开 API 隐藏
+    const hiddenNetwork = await request(context, "/api/projects/standard-project-sample/public/modules/task-network", { session: editor });
+    assert.equal(hiddenNetwork.response.status, 404);
+    const payloadText = JSON.stringify({ roadmap: roadmap.payload, gantt: gantt.payload });
     for (const value of ["rendererKey", "dataJson", "componentPath", "<script", "javascript:", "SELECT "]) assert.equal(payloadText.includes(value), false);
     const admin = await login(context, "admin");
     assert.deepEqual((await request(context, "/api/public", { session: admin })).payload, xuguFixture.published);

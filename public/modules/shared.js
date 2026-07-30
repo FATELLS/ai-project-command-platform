@@ -165,7 +165,7 @@ export function unsupportedState(retry) {
 }
 
 export function moduleSkeleton(type) {
-  const visualTypes = new Set(["roadmap", "task-network"]);
+  const visualTypes = new Set(["roadmap"]);
   const laneTypes = new Set(["gantt"]);
   const rowTypes = new Set(["risks"]);
   const className = visualTypes.has(type) ? "skeleton-diagram" : laneTypes.has(type) ? "skeleton-lanes" : rowTypes.has(type) ? "skeleton-rows" : "skeleton-cards";

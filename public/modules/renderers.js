@@ -96,7 +96,6 @@ function taskInlineDetail(context, task, unitName = "") {
     el("span", { className: "eyebrow", text: `${unitName ? `${unitName} · ` : ""}${context.presentation.task}` }),
     el("h4", { text: task.title }),
     definitionList(rows),
-    el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/roadmap?view=network&task=${encodeURIComponent(task.id)}`, text: "在依赖网络中查看" })
   ]);
 }
 
@@ -126,7 +125,6 @@ function unitRouteDetail(context, unit) {
       ])))
     ]))) : el("p", { className: "empty-source", text: `当前发布数据还没有能按时间窗口归入${unit.name}的路线任务。` }),
     el("div", { className: "detail-actions" }, [
-      el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/roadmap?view=network&unit=${encodeURIComponent(unit.id)}`, text: "查看依赖网络" }),
       el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/gantt?unit=${encodeURIComponent(unit.id)}`, text: "查看甘特" })
     ])
   ]);
@@ -222,19 +220,18 @@ export function renderUnits(context) {
 }
 
 export function renderRoadmap(context) {
-  // 项目路线图是主视图；旧 board/timeline 深链与未知 view 均回落到路线图。
+  // 项目路线图是主视图；旧 board/timeline/network 深链与未知 view 均回落到路线图。
   const requestedView = context.query.get("view");
-  const activeView = ["units", "network"].includes(requestedView) ? requestedView : "swimlane";
+  const activeView = requestedView === "units" ? "units" : "swimlane";
   if (activeView === "units") return renderRoadmapUnits(context);
-  if (activeView === "network") return renderRoadmapNetwork(context);
   return renderRoadmapSwimlane(context);
 }
 
-// 路线图主视图 + 两个辅助投影。view 与 stage/unit/task 深链正交。
+// 路线图主视图 + 辅助投影。view 与 stage/unit/task 深链正交。
 function roadmapViewSwitcher(context) {
   const requestedView = context.query.get("view");
-  const current = ["units", "network"].includes(requestedView) ? requestedView : "swimlane";
-  const views = [["swimlane", "项目路线图"], ["units", `${context.presentation.unit}进度`], ["network", "依赖网络"]];
+  const current = requestedView === "units" ? "units" : "swimlane";
+  const views = [["swimlane", "项目路线图"], ["units", `${context.presentation.unit}进度`]];
   return el("nav", { className: "roadmap-view-switcher", ariaLabel: "路线图视图" }, views.map(([value, label]) => {
     const params = new URLSearchParams(context.query.toString());
     if (value === "swimlane") params.delete("view"); else params.set("view", value);
@@ -520,27 +517,6 @@ function renderRoadmapUnits(context) {
       roadmapViewSwitcher(context),
       cardHeading(`${context.presentation.unit.toUpperCase()} PROGRESS`, context.module.title, `以${context.presentation.unit}为入口，查看覆盖${context.presentation.stage}、${context.presentation.task}与完成度。`),
       cards.length ? el("div", { className: "unit-progress-grid" }, cards) : emptyState(context.module.emptyState)
-    ])
-  ]);
-}
-
-// 依赖网络视图：复用 task-network 数据，作为跨单元跨阶段阻塞关系入口
-function renderRoadmapNetwork(context) {
-  const tasks = Array.isArray(context.data.tasks) ? context.data.tasks : [];
-  const edges = context.data.edges ?? [];
-  const units = context.data.units ?? [];
-  const selectedTaskId = context.query.get("task");
-  const selectedUnit = context.query.get("unit");
-  const visible = selectedUnit ? tasks.filter(t => t.unitId === selectedUnit) : tasks;
-  const unitSelector = el("select", { ariaLabel: `筛选${context.presentation.unit}` }, [el("option", { value: "", text: `全部${context.presentation.unit}` }), ...units.map(unit => el("option", { value: unit.id, text: unit.name }))]);
-  unitSelector.value = selectedUnit;
-  unitSelector.addEventListener("change", () => setQuery(context.navigate, { unit: unitSelector.value, task: "" }));
-  return el("div", {}, [
-    el("section", { className: "module-primary-card roadmap-workbench roadmap-network" }, [
-      roadmapViewSwitcher(context),
-      cardHeading("DEPENDENCY NETWORK", context.module.title, `跨${context.presentation.unit}、跨${context.presentation.stage}的阻塞关系；点击${context.presentation.task}查看前置与后续。`),
-      el("div", { className: "visual-controls" }, [unitSelector]),
-      dependencyList(context, visible, selectedTaskId)
     ])
   ]);
 }
@@ -1307,79 +1283,6 @@ function renderRoadmapSwimlane(context) {
     });
   }
   return section;
-}
-
-function taskDetails(context, node) {
-  const snapshotTask = (context.snapshot?.tasks ?? []).find(task => task.id === node.id) ?? {};
-  const predecessors = (context.data.edges ?? []).filter(edge => edge.to === node.id).map(edge => context.data.nodes.find(item => item.id === edge.from)?.title ?? edge.from);
-  const dependents = (context.data.edges ?? []).filter(edge => edge.from === node.id).map(edge => context.data.nodes.find(item => item.id === edge.to)?.title ?? edge.to);
-  return el("aside", { className: "selection-detail" }, [
-    el("h3", { text: node.title }),
-    definitionList([["负责人", node.owner], ["状态", node.state], ["上级任务", context.data.nodes.find(item => item.id === node.parentId)?.title], ["前置任务", predecessors.join("、") || "无"], ["后续任务", dependents.join("、") || "无"], ["开始", snapshotTask.startDate], ["结束", snapshotTask.endDate], ["预期产出", snapshotTask.expectedOutput], ["来源", snapshotTask.source]])
-  ]);
-}
-
-function dependencyList(context, nodes, selectedId) {
-  const nodeById = new Map(nodes.map(node => [node.id, node]));
-  return el("div", { className: "dependency-list" }, nodes.map(node => {
-    const dependencies = (context.data.edges ?? []).filter(edge => edge.to === node.id).map(edge => nodeById.get(edge.from)?.title ?? edge.from);
-    return el("button", { type: "button", className: `dependency-row${node.id === selectedId ? " selected" : ""}`, onClick: () => setQuery(context.navigate, { task: node.id }) }, [
-      el("span", { className: "task-state", text: statusText(node.state) }),
-      el("strong", { text: node.title }), el("span", { text: safeText(node.owner, "负责人待确认") }),
-      el("small", { text: dependencies.length ? `依赖：${dependencies.join("、")}` : "无前置依赖" })
-    ]);
-  }));
-}
-
-function networkSvg(context, nodes) {
-  const width = Math.max(820, Math.ceil(nodes.length / 4) * 190 + 100);
-  const height = Math.max(420, Math.min(900, Math.ceil(nodes.length / 4) * 115 + 100));
-  const positions = new Map(nodes.map((node, index) => [node.id, { x: 90 + (index % 4) * 190, y: 75 + Math.floor(index / 4) * 115 }]));
-  const svg = svgEl("svg", { class: "network-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `${nodes.length} 个${context.presentation.task}的依赖网络；完整列表位于图后` });
-  for (const edge of context.data.edges ?? []) {
-    const from = positions.get(edge.from), to = positions.get(edge.to);
-    if (from && to) svg.append(svgEl("line", { x1: from.x, y1: from.y, x2: to.x, y2: to.y, class: "dependency-edge" }));
-  }
-  nodes.forEach(node => {
-    const position = positions.get(node.id);
-    const group = svgEl("g", { class: "task-node", tabindex: "0", role: "button", "data-task-id": node.id, "aria-label": `${node.title}，${safeText(node.owner, "负责人待确认")}，${statusText(node.state)}` });
-    group.append(svgEl("rect", { x: position.x - 72, y: position.y - 28, width: 144, height: 56, rx: 12 }));
-    const title = svgEl("text", { x: position.x, y: position.y - 2, "text-anchor": "middle" }); title.textContent = node.title.length > 10 ? `${node.title.slice(0, 10)}…` : node.title;
-    const owner = svgEl("text", { x: position.x, y: position.y + 17, "text-anchor": "middle", class: "task-node-owner" }); owner.textContent = safeText(node.owner, "待确认");
-    group.append(title, owner); svg.append(group);
-  });
-  const select = event => {
-    const id = event.target.closest?.("[data-task-id]")?.dataset.taskId;
-    if (id) setQuery(context.navigate, { task: id });
-  };
-  svg.addEventListener("click", select);
-  svg.addEventListener("keydown", event => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); select(event); } });
-  return svg;
-}
-
-export function renderTaskNetwork(context) {
-  const allNodes = Array.isArray(context.data.nodes) ? context.data.nodes : [];
-  if (!allNodes.length) return emptyState(context.module.emptyState);
-  const requestedUnit = context.query.get("unit");
-  const units = context.data.units ?? [];
-  const activeUnit = units.some(unit => unit.id === requestedUnit) ? requestedUnit : "";
-  const nodes = activeUnit ? allNodes.filter(node => node.unitId === activeUnit) : allNodes;
-  const selectedId = context.query.get("task");
-  const selected = allNodes.find(node => node.id === selectedId);
-  const selector = el("select", { ariaLabel: `筛选${context.presentation.unit}` }, [el("option", { value: "", text: `全部${context.presentation.unit}` }), ...units.map(unit => el("option", { value: unit.id, text: unit.name }))]);
-  selector.value = activeUnit;
-  selector.addEventListener("change", () => setQuery(context.navigate, { unit: selector.value, task: "" }));
-  const useList = context.module.viewVariant === "dependency-list" || matchMedia("(max-width: 767px)").matches;
-  const displayNodes = nodes.length > 40 && !activeUnit ? [] : nodes;
-  return el("section", { className: "module-primary-card" }, [
-    cardHeading("TASK DEPENDENCIES", context.module.title, `${allNodes.length} 个${context.presentation.task}；层级与依赖使用不同文本说明。`),
-    el("div", { className: "visual-controls" }, [selector, el("span", { className: "legend hierarchy", text: "层级关系" }), el("span", { className: "legend dependency", text: "依赖关系" })]),
-    nodes.length > 40 && !activeUnit ? emptyState("任务较多，请先选择一个分组", "超过 40 个可见节点时按组查看，避免生成不可读的缩略网络。") :
-      useList ? dependencyList(context, displayNodes, selectedId) : localScroller("任务依赖网络，可水平滚动", networkSvg(context, displayNodes)),
-    useList ? null : el("h3", { className: "alternative-heading", text: "依赖文本列表" }),
-    useList ? null : dependencyList(context, displayNodes, selectedId),
-    selected ? taskDetails(context, selected) : null
-  ]);
 }
 
 function dayNumber(value) { return Math.floor(new Date(`${value}T00:00:00Z`).valueOf() / 86_400_000); }

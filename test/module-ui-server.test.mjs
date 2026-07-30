@@ -8,9 +8,9 @@ const registry = readFileSync(new URL("../public/modules/registry.js", import.me
 const shared = readFileSync(new URL("../public/modules/shared.js", import.meta.url), "utf8");
 const renderers = readFileSync(new URL("../public/modules/renderers.js", import.meta.url), "utf8");
 
-const expectedTypes = ["overview", "roadmap", "units", "task-network", "gantt", "outcomes", "risks", "metrics", "materials"];
+const expectedTypes = ["overview", "roadmap", "units", "gantt", "outcomes", "risks", "metrics", "materials"];
 
-test("client registry contains exactly nine fixed safe renderer types and canonical routes", () => {
+test("client registry contains exactly eight fixed safe renderer types and canonical routes", () => {
   for (const type of expectedTypes) assert.match(registry, new RegExp(`\\[?\\?*?"${type.replace("-", "\\-")}"`));
   assert.match(registry, /Object\.freeze/);
   assert.match(registry, /canonicalModulePath/);
@@ -33,11 +33,11 @@ test("route and envelope state contract fails closed without mixing stale module
   assert.match(app, /replaceChildren/);
 });
 
-test("project navigation groups nine safe modules into six user-facing work areas", () => {
+test("project navigation groups eight safe modules into six user-facing work areas", () => {
   for (const copy of ["项目路线图", "排期甘特", "项目健康", "项目资料", "项目材料", "项目更新"]) {
     assert.match(app, new RegExp(copy));
   }
-  assert.match(app, /types: \["roadmap", "task-network"\]/);
+  assert.match(app, /types: \["roadmap"\]/);
   assert.match(app, /types: \["risks", "metrics"\]/);
   assert.match(app, /types: \["outcomes", "materials"\]/);
   assert.match(app, /moduleSectionNavigation/);
@@ -60,15 +60,14 @@ test("safe DOM and SVG renderers never accept project markup or executable URLs"
   assert.doesNotMatch(renderers, /srcdoc|data:text\/html/);
 });
 
-test("overview, units, roadmap, network, gantt and outcomes are DTO-driven with honest states", () => {
-  for (const name of ["renderOverview", "renderUnits", "renderRoadmap", "renderTaskNetwork", "renderGantt", "renderOutcomes"]) {
+test("overview, units, roadmap, gantt and outcomes are DTO-driven with honest states", () => {
+  for (const name of ["renderOverview", "renderUnits", "renderRoadmap", "renderGantt", "renderOutcomes"]) {
     assert.match(renderers, new RegExp(`export function ${name}`));
   }
   for (const copy of [
-    "暂无正式完成率", "负责人待确认", "日期待确认", "层级关系", "依赖关系", "待排期",
+    "暂无正式完成率", "负责人待确认", "日期待确认",
     "未排期任务单列", "无本地预览"
   ]) assert.match(renderers, new RegExp(copy));
-  assert.match(renderers, /Math\.max\(820/);
   assert.match(renderers, /dayNumber/);
   assert.match(renderers, /previewAssets/);
   assert.match(renderers, /dataset: \{ stageId/);

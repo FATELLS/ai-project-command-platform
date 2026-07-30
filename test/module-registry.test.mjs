@@ -7,7 +7,7 @@ import { openDatabase } from "../src/db/database.mjs";
 import { applyMigrations } from "../src/db/migrate.mjs";
 import { importLegacyProject } from "../src/migration/legacy-project.mjs";
 import { createModuleService } from "../src/modules/module-service.mjs";
-import { listModuleDefinitions, moduleRegistry, moduleTypes } from "../src/modules/registry.mjs";
+import { getModuleDefinition, listModuleDefinitions, moduleRegistry, moduleTypes } from "../src/modules/registry.mjs";
 import { ModuleValidationError, validateVersionGraph } from "../src/modules/schemas.mjs";
 import { createProjectRepository } from "../src/repositories/project-repository.mjs";
 import { createProjectService } from "../src/services/project-service.mjs";
@@ -15,6 +15,7 @@ import { createProjectService } from "../src/services/project-service.mjs";
 const xuguFixture = JSON.parse(readFileSync(new URL("../fixtures/projects/xugu-agentic-group.json", import.meta.url), "utf8"));
 const standardFixture = JSON.parse(readFileSync(new URL("../fixtures/projects/standard-project-sample.json", import.meta.url), "utf8"));
 const expectedTypes = ["overview", "roadmap", "units", "task-network", "gantt", "outcomes", "risks", "metrics", "materials"];
+const visibleExpectedTypes = expectedTypes.filter(type => type !== "task-network");
 
 function database() {
   const directory = mkdtempSync(join(tmpdir(), "module-registry-"));
@@ -60,8 +61,8 @@ test("loaders create stable same-version envelopes for all Xugu and standard mod
       ["standard-project-sample", "standard-project-v1", "v1.3"]
     ]) {
       const manifest = service.listModules(platformAdmin, projectId, "public");
-      assert.deepEqual(manifest.modules.map(module => module.type), expectedTypes);
-      for (const type of expectedTypes) {
+      assert.deepEqual(manifest.modules.map(module => module.type), visibleExpectedTypes);
+      for (const type of visibleExpectedTypes) {
         const envelope = service.getModule(platformAdmin, projectId, "public", type);
         assert.equal(envelope.projectId, projectId);
         assert.equal(envelope.layer, "published");
@@ -85,18 +86,21 @@ test("standard fixture drives arbitrary linear, dependency-list, and lane DTOs w
   try {
     const service = createModuleService(db);
     const roadmap = service.getModule(platformAdmin, "standard-project-sample", "public", "roadmap");
-    const network = service.getModule(platformAdmin, "standard-project-sample", "public", "task-network");
     const gantt = service.getModule(platformAdmin, "standard-project-sample", "public", "gantt");
     assert.equal(roadmap.module.viewVariant, "linear-roadmap");
-    assert.equal(network.module.viewVariant, "dependency-list");
     assert.equal(gantt.module.viewVariant, "lanes");
-    assert.deepEqual([roadmap.data.stages.length, network.data.units.length, network.data.nodes.length], [4, 3, 7]);
+    // task-network 已从公开 API 隐藏，但后端 loader 仍可用（proposal 预览等内部路径使用）
+    const repo = createProjectRepository(db);
+    const graph = repo.getModuleVersionGraph("standard-project-sample", "published");
+    const networkDefinition = getModuleDefinition("task-network");
+    const networkData = networkDefinition.loader(graph);
+    assert.deepEqual([roadmap.data.stages.length, networkData.units.length, networkData.nodes.length], [4, 3, 7]);
     assert.deepEqual(gantt.data.range, { start: "2027-01-06", end: "2027-04-23" });
     assert.deepEqual(gantt.data.unscheduledIds, ["delivery-runbook"]);
-    assert.deepEqual(network.data.edges.find(edge => edge.to === "engineering-orders"), {
+    assert.deepEqual(networkData.edges.find(edge => edge.to === "engineering-orders"), {
       from: "engineering-identity", to: "engineering-orders", kind: "depends-on"
     });
-    for (const term of ["虚谷", "作战单元", "战役", "战果"]) assert.equal(JSON.stringify({ roadmap, network, gantt }).includes(term), false);
+    for (const term of ["虚谷", "作战单元", "战役", "战果"]) assert.equal(JSON.stringify({ roadmap, networkData, gantt }).includes(term), false);
   } finally { db.close(); }
 });
 

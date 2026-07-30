@@ -5,49 +5,25 @@ const BASE = `http://127.0.0.1:${process.env.E2E_PORT || 4191}`;
 const ROADMAP = "/projects/xugu-agentic-group/modules/roadmap";
 
 test.describe("Phase 8 路线图可视化工作台", () => {
-  test("项目路线图与三个辅助视图可互跳", async ({ page }) => {
+  test("项目路线图与作战单元进度视图可互跳", async ({ page }) => {
     await page.goto(ROADMAP);
     await expect(page.locator(".roadmap-view-switcher")).toBeVisible();
     const tabs = page.locator(".roadmap-view-switcher a");
-    await expect(tabs).toHaveCount(4);
-    await expect(page.locator(".roadmap-view-switcher a", { hasText: "活动路线图" })).toHaveCount(0);
-
-    // 切换到卡片板
-    await page.locator(".roadmap-view-switcher a", { hasText: "阶段卡片板" }).click();
-    await expect(page).toHaveURL(/view=board/);
-    await expect(page.locator(".roadmap-board")).toBeVisible();
+    await expect(tabs).toHaveCount(2);
 
     // 切换到作战单元进度
     await page.locator(".roadmap-view-switcher a", { hasText: "作战单元进度" }).click();
     await expect(page).toHaveURL(/view=units/);
     await expect(page.locator(".roadmap-units")).toBeVisible();
 
-    // 切换到依赖网络
-    await page.locator(".roadmap-view-switcher a", { hasText: "依赖网络" }).click();
-    await expect(page).toHaveURL(/view=network/);
-    await expect(page.locator(".roadmap-network")).toBeVisible();
-
     // 切回项目路线图
     await page.locator(".roadmap-view-switcher a", { hasText: "项目路线图" }).click();
     await expect(page.locator(".roadmap-card-swimlane")).toBeVisible();
   });
 
-  test("深链 view=board 直接恢复卡片板", async ({ page }) => {
+  test("深链 view=board 回落到项目路线图", async ({ page }) => {
     await page.goto(`${ROADMAP}?view=board`);
-    await expect(page.locator(".roadmap-board")).toBeVisible();
-    await expect(page.locator(".board-lanes .board-lane").first()).toBeVisible();
-  });
-
-  test("卡片板按状态泳道展示任务卡", async ({ page }) => {
-    await page.goto(`${ROADMAP}?view=board`);
-    // 至少有 4 个泳道（待确认/进行中/待审核/已完成）
-    await expect(page.locator(".board-lane")).toHaveCount(4);
-    // 任务卡存在并可点击
-    const card = page.locator(".board-card").first();
-    if (await card.count() > 0) {
-      await card.click();
-      await expect(page).toHaveURL(/task=/);
-    }
+    await expect(page.locator(".roadmap-card-swimlane")).toBeVisible();
   });
 
   test("拖拽卡片创建受控提案而非直写草稿", async ({ page }) => {
@@ -61,10 +37,10 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     const evidence = await api(BASE, `/api/projects/xugu-agentic-group/materials/${materialId}/evidence`, h);
     const evidenceId = evidence.payload.items[0].id;
     // 确保没有 pending 提案残留（避免配额/状态干扰）
-    await page.goto(`${ROADMAP}?view=board`);
-    await expect(page.locator(".roadmap-board")).toBeVisible();
-    // 拿到第一张卡片和它的 data-state
-    const card = page.locator(".board-card").first();
+    await page.goto(`${ROADMAP}?view=swimlane&stage=launch`);
+    await expect(page.locator(".roadmap-card-swimlane")).toBeVisible();
+    // 拿到第一张卡片和它的 data-task-id
+    const card = page.locator(".swimlane-task-card-shell[data-task-id]").first();
     await expect(card).toBeVisible();
     const taskId = await card.getAttribute("data-task-id");
     expect(taskId).toBeTruthy();
@@ -116,12 +92,6 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     const unit = page.locator(".unit-progress-card").first();
     await unit.click();
     await expect(page).toHaveURL(/unit=/);
-  });
-
-  test("依赖网络视图显示任务列表", async ({ page }) => {
-    await page.goto(`${ROADMAP}?view=network`);
-    await expect(page.locator(".roadmap-network")).toBeVisible();
-    await expect(page.locator(".dependency-list")).toBeVisible();
   });
 
   test("项目泳道默认只呈现主任务时间线，点击主任务才展开副任务", async ({ page }) => {

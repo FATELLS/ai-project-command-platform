@@ -6,7 +6,6 @@ import {
   renderOutcomes,
   renderRisks,
   renderRoadmap,
-  renderTaskNetwork,
   renderUnits
 } from "./renderers.js";
 
@@ -14,7 +13,6 @@ const definitions = [
   ["overview", ["mission-status"], renderOverview],
   ["roadmap", ["campaign-network", "linear-roadmap"], renderRoadmap],
   ["units", ["campaign-cards", "team-cards"], renderUnits],
-  ["task-network", ["branching-network", "dependency-list"], renderTaskNetwork],
   ["gantt", ["branching", "lanes"], renderGantt],
   ["outcomes", ["closure-detail", "archive-grid"], renderOutcomes],
   ["risks", ["risk-register"], renderRisks],

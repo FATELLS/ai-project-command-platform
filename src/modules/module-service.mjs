@@ -33,6 +33,12 @@ function sameMembers(values, expected) {
   return values.length === expected.length && expected.every(value => values.includes(value));
 }
 
+// task-network 已从前端 UI 移除（依赖网络视图下线），但后端 proposal 路由、
+// version-apply 和 review-service 仍使用该 module type。这里在 manifest 层面过滤，
+// 使客户端只看到 8 个模块，同时保留后端内部使用。
+const hiddenModuleTypes = new Set(["task-network"]);
+const visibleModuleTypes = Object.freeze(moduleTypes.filter(type => !hiddenModuleTypes.has(type)));
+
 export function createModuleService(database) {
   const projects = createProjectRepository(database);
 
@@ -89,11 +95,12 @@ export function createModuleService(database) {
 
   function listModules(principal, projectId, layer) {
     const { graph } = authorizedGraph(principal, projectId, layer);
-    const modules = resolvedModules(graph);
+    const modules = resolvedModules(graph).filter(module => !hiddenModuleTypes.has(module.type));
     return manifest(graph, layer === "draft" ? modules : modules.filter(module => module.enabled));
   }
 
   function getModule(principal, projectId, layer, moduleType) {
+    if (hiddenModuleTypes.has(moduleType)) notFound();
     const { graph } = authorizedGraph(principal, projectId, layer);
     const modules = resolvedModules(graph);
     const module = modules.find(candidate => candidate.type === moduleType);
@@ -113,9 +120,9 @@ export function createModuleService(database) {
     if (!plainObject(input) || Object.keys(input).some(key => key !== "modules") || !Array.isArray(input.modules)) {
       invalid("模块配置必须包含完整的 modules 数组");
     }
-    if (input.modules.length !== moduleTypes.length) invalid("模块配置必须包含全部九类模块");
+    if (input.modules.length !== visibleModuleTypes.length) invalid(`模块配置必须包含全部 ${visibleModuleTypes.length} 类模块`);
     const types = input.modules.map(module => module?.type);
-    if (new Set(types).size !== types.length || !sameMembers(types, moduleTypes)) invalid("模块类型必须完整且不得重复");
+    if (new Set(types).size !== types.length || !sameMembers(types, visibleModuleTypes)) invalid("模块类型必须完整且不得重复");
     const normalized = input.modules.map((module, position) => {
       const definition = getModuleDefinition(module.type);
       try {
@@ -134,10 +141,15 @@ export function createModuleService(database) {
   function updateDraftModules(principal, projectId, input) {
     const { graph } = authorizedGraph(principal, projectId, "draft");
     const normalized = validateDraftInput(graph, input);
-    const updated = projects.replaceDraftModuleConfigurations(projectId, normalized);
+    // 保留被隐藏模块（task-network）的现有配置，客户端不再发送它们。
+    const existingHidden = graph.modules
+      .filter(stored => hiddenModuleTypes.has(stored.type))
+      .map(stored => ({ type: stored.type, schemaVersion: stored.configuration.schemaVersion, position: -1, enabled: stored.enabled, viewVariant: stored.configuration.viewVariant }));
+    const merged = [...normalized, ...existingHidden];
+    const updated = projects.replaceDraftModuleConfigurations(projectId, merged);
     if (!updated) notFound();
     validateVersionGraph(updated);
-    return manifest(updated, resolvedModules(updated));
+    return manifest(updated, resolvedModules(updated).filter(module => !hiddenModuleTypes.has(module.type)));
   }
 
   return { listModules, getModule, updateDraftModules };

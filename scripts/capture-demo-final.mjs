@@ -58,9 +58,7 @@ try {
   await snap(page, "05-roadmap-expanded", "项目路线图 · 主任务展开态");
 } catch { console.log("  (展开态跳过)"); }
 
-await nav(`/projects/${PID}/modules/roadmap?view=board`, "06-roadmap-board", "阶段卡片板");
 await nav(`/projects/${PID}/modules/roadmap?view=units`, "07-roadmap-units", "作战单元进度");
-await nav(`/projects/${PID}/modules/roadmap?view=network`, "08-roadmap-network", "依赖网络");
 await nav(`/projects/${PID}/modules/gantt`, "09-gantt", "排期甘特");
 await nav(`/projects/${PID}/modules/units`, "10-units", "作战单元 / 团队");
 await nav(`/projects/${PID}/modules/materials`, "11-materials", "项目材料工作区");

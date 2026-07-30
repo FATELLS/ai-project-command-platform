@@ -96,7 +96,7 @@ function safeIntendedPath(pathname = location.pathname) {
   const project = "[a-z0-9][a-z0-9._-]{2,63}";
   const object = "[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}";
   const projectRoute = new RegExp(`^/projects(?:/${project})?$`);
-  const moduleRoute = new RegExp(`^/projects/${project}/modules/(?:overview|roadmap|units|task-network|gantt|outcomes|risks|metrics|materials)(?:/(?:${object}|(?:generation-tasks|proposals)/${object}))?$`);
+  const moduleRoute = new RegExp(`^/projects/${project}/modules/(?:overview|roadmap|units|gantt|outcomes|risks|metrics|materials)(?:/(?:${object}|(?:generation-tasks|proposals)/${object}))?$`);
   const updateRoute = new RegExp(`^/projects/${project}/updates(?:/release|/(?:preview|proposals|generation-tasks)/${object})?$`);
   return [projectRoute, moduleRoute, updateRoute].some(pattern => pattern.test(pathname)) ? `${pathname}${location.search}` : "/projects";
 }
@@ -574,7 +574,7 @@ function moduleNavigation(project, manifest, activeType, activeWorkspace = "") {
   const modules = new Map(manifest.modules.map(module => [module.type, module]));
   const groups = [
     { types: ["overview"], title: modules.get("overview")?.title },
-    { types: ["roadmap", "task-network"], title: "项目路线图" },
+    { types: ["roadmap"], title: "项目路线图" },
     { types: ["units"], title: modules.get("units")?.title },
     { types: ["gantt"], title: "排期甘特" },
     { types: ["risks", "metrics"], title: "项目健康" },
@@ -890,7 +890,7 @@ async function openModuleConfiguration(project, presentation, returnFocus) {
     sheet.replaceChildren(
       element("header", { className: "sheet-header" }, [element("div", {}, [element("span", { className: "eyebrow", text: "草稿配置" }), element("h2", { id: "module-config-title", text: "模块配置" })]), closeButton]),
       element("p", { className: "draft-banner", text: "正在配置草稿模块；当前发布页面不会立即变化。" }),
-      element("p", { className: "sheet-copy", text: `配置 ${project.name} 的九个固定模块。禁用不会删除${presentation.task}或其他事实。` }),
+      element("p", { className: "sheet-copy", text: `配置 ${project.name} 的八个固定模块。禁用不会删除${presentation.task}或其他事实。` }),
       list, error, element("footer", { className: "sheet-actions" }, [cancel, save])
     );
     closeButton.focus();

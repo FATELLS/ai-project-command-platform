@@ -1,15 +1,24 @@
 {
   "name": "ai-project-command-platform",
   "version": "0.9.0",
-  "private": true,
   "type": "module",
   "description": "多项目、模板化、AI 辅助更新的项目作战管理平台",
   "engines": {
     "node": ">=22.0"
   },
   "bin": {
-    "ai-platform": "./server.mjs"
+    "ai-platform": "./server.mjs",
+    "ai-project-command-platform": "./server.mjs"
   },
+  "files": [
+    "server.mjs",
+    "src/",
+    "public/",
+    "fixtures/",
+    "scripts/",
+    ".env.example",
+    "README.md"
+  ],
   "pkg": {
     "assets": [
       "public/**/*",
@@ -50,7 +59,8 @@
     "build:xugu:rpm": "node scripts/build-packages.mjs rpm --with-xugu",
     "build:xugu:macos": "node scripts/build-packages.mjs macos --with-xugu",
     "build:xugu:win": "node scripts/build-packages.mjs win --with-xugu",
-    "build:xugu:all": "node scripts/build-packages.mjs all --with-xugu"
+    "build:xugu:all": "node scripts/build-packages.mjs all --with-xugu",
+    "prepublishOnly": "node --test \"test/*.test.mjs\" && node scripts/verify.mjs"
   },
   "dependencies": {
     "file-type": "22.0.1",

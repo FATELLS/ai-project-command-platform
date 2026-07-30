@@ -13,8 +13,8 @@ const target = argumentsMap.get("--target");
 const runtimeDirectory = argumentsMap.get("--runtime");
 const outputDirectory = argumentsMap.get("--output");
 const skipInstall = argumentsMap.has("--skip-install");
-if (!["windows-x64", "linux-x64"].includes(target) || !runtimeDirectory || !outputDirectory) {
-  throw new Error("usage: node scripts/assemble-release.mjs --target windows-x64|linux-x64 --runtime <directory> --output <directory> [--skip-install true]");
+if (!["windows-x64", "linux-x64", "macos-x64", "macos-arm64"].includes(target) || !runtimeDirectory || !outputDirectory) {
+  throw new Error("usage: node scripts/assemble-release.mjs --target windows-x64|linux-x64|macos-x64|macos-arm64 --runtime <directory> --output <directory> [--skip-install true]");
 }
 
 const output = resolve(outputDirectory);
@@ -35,6 +35,13 @@ if (target === "windows-x64") {
   await cp(join(root, "packaging", "windows", "Start.ps1"), join(output, "Start.ps1"));
   await cp(join(root, "packaging", "windows", "Stop.ps1"), join(output, "Stop.ps1"));
   await cp(join(root, "packaging", "windows", "README-WINDOWS.txt"), join(output, "README-WINDOWS.txt"));
+} else if (target.startsWith("macos-")) {
+  await cp(join(root, "packaging", "macos", "start.sh"), join(output, "start.sh"));
+  await cp(join(root, "packaging", "macos", "stop.sh"), join(output, "stop.sh"));
+  await cp(join(root, "packaging", "macos", "README-MACOS.txt"), join(output, "README-MACOS.txt"));
+  await chmod(join(output, "start.sh"), 0o755);
+  await chmod(join(output, "stop.sh"), 0o755);
+  await chmod(join(output, "runtime", "bin", "node"), 0o755);
 } else {
   await cp(join(root, "packaging", "linux", "start.sh"), join(output, "start.sh"));
   await cp(join(root, "packaging", "linux", "stop.sh"), join(output, "stop.sh"));

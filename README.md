@@ -43,45 +43,37 @@ sudo cat /var/lib/ai-project-command-platform/bootstrap-credentials.txt
 
 默认地址为 <http://127.0.0.1:4173>。RPM 首次安装会创建独立系统用户、空数据目录、管理员随机密码和 systemd 服务，并自动启动。首次登录后请立即修改密码并删除凭据文件。
 
-### Windows
+### Windows 一行安装并启动
 
 ```powershell
-gh release download v0.9.0 -R FATELLS/ai-project-command-platform -p "*windows-x64.zip"
-Expand-Archive .\ai-project-command-platform-0.9.0-windows-x64.zip
-Set-ExecutionPolicy -Scope Process Bypass
-.\ai-project-command-platform-0.9.0-windows-x64\Start.ps1
+gh release download v0.9.0 -R FATELLS/ai-project-command-platform -p "*windows-x64.zip"; Expand-Archive .\ai-project-command-platform-0.9.0-windows-x64.zip; Set-ExecutionPolicy -Scope Process Bypass; .\ai-project-command-platform-0.9.0-windows-x64\Start.ps1
 ```
 
 首次管理员凭据会显示在窗口中，并写入 `first-run-credentials.txt`。使用同目录的 `Stop.ps1` 停止服务。
 
-### macOS
+### macOS 一行安装并启动
+
+Apple Silicon (M1/M2/M3/M4)：
 
 ```bash
-# Apple Silicon (M1/M2/M3/M4)
-gh release download v0.9.0 -R FATELLS/ai-project-command-platform -p '*macos-arm64.tar.gz'
-
-# Intel
-gh release download v0.9.0 -R FATELLS/ai-project-command-platform -p '*macos-x64.tar.gz'
+tmp="$(mktemp -d)" && gh release download v0.9.0 -R FATELLS/ai-project-command-platform -p '*macos-arm64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.0-macos-arm64/start.sh
 ```
 
-解压后运行：
+Intel：
 
 ```bash
-tar -xzf ai-project-command-platform-0.9.0-macos-arm64.tar.gz
-./ai-project-command-platform-0.9.0-macos-arm64/start.sh
+tmp="$(mktemp -d)" && gh release download v0.9.0 -R FATELLS/ai-project-command-platform -p '*macos-x64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.0-macos-x64/start.sh
 ```
 
-使用 `./stop.sh` 停止。运行数据位于解压目录的 `data/`。
+使用 `stop.sh` 停止。运行数据位于解压目录的 `data/`。
 
-### Linux 通用版
+### Linux 通用版一行安装并启动
 
 ```bash
-gh release download v0.9.0 -R FATELLS/ai-project-command-platform -p '*linux-x64.tar.gz'
-tar -xzf ai-project-command-platform-0.9.0-linux-x64.tar.gz
-./ai-project-command-platform-0.9.0-linux-x64/start.sh
+tmp="$(mktemp -d)" && gh release download v0.9.0 -R FATELLS/ai-project-command-platform -p '*linux-x64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.0-linux-x64/start.sh
 ```
 
-使用 `./stop.sh` 停止。运行数据位于解压目录的 `data/`。
+使用 `stop.sh` 停止。运行数据位于解压目录的 `data/`。
 
 ## 源码运行
 

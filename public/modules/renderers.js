@@ -1550,6 +1550,15 @@ function generationErrorMessage(error, resetTime = "配额重置") {
   const copy = {
     AI_PROVIDER_DISABLED: "更新生成当前未启用；材料和已有建议仍可查看。",
     GENERATION_PROVIDER_DISABLED: "更新生成当前未启用；材料和已有建议仍可查看。",
+    AI_PROVIDER_HOST_NOT_ALLOWED: "AI 服务地址域名未加入白名单。请在「设置」页填写或重新保存 AI 配置，系统会自动补全。",
+    AI_PROVIDER_CONFIG_INCOMPLETE: "AI 配置不完整。请在「设置」页检查 API 地址、密钥和模型是否都已填写。",
+    AI_PROVIDER_CONFIG_INVALID: "AI 配置有误。请在「设置」页检查 provider 类型和推理强度等参数。",
+    AI_PROVIDER_CONFIG_INVALID_URL: "AI 服务地址格式有误。请填写完整的 HTTPS 地址（例如 open.bigmodel.cn），包含协议前缀。",
+    AI_PROVIDER_NETWORK_ERROR: "无法连接 AI 服务，请检查网络或代理设置后重试。",
+    AI_PROVIDER_TIMEOUT: "AI 服务响应超时，请稍后重试或增加超时时间。",
+    AI_PROVIDER_HTTP_401: "AI 密钥无效或已过期，请在「设置」页更新密钥。",
+    AI_PROVIDER_HTTP_403: "AI 密钥无权访问该模型，请检查密钥权限或更换模型。",
+    AI_PROVIDER_HTTP_429: "AI 服务请求频率超限，请稍后重试。",
     base_version_conflict: "发布版本已变化，请核对新版本后重新创建任务。",
     BASE_VERSION_CONFLICT: "发布版本已变化，请核对新版本后重新创建任务。",
     GENERATION_QUOTA_EXHAUSTED: `本项目更新生成配额已用完，可在 ${resetTime} 后重试。`,
@@ -2473,7 +2482,7 @@ function renderGenerationTaskDetail(context, root) {
         el("header",{className:"material-detail-heading"},[el("div",{},[el("span",{className:"eyebrow",text:"GENERATION TASK"}),el("h1",{text:`生成任务 ${task.id}`})]),el("span",{className:`generation-state state-${task.state}`,text:generationStateLabels[task.state]??task.state})]),
         el("p",{className:"material-boundary",text:task.state==="stale"?"发布版本已变化；此任务不会自动改用新版本。":"生成任务只创建节点预览，不会修改项目草稿或发布版本。"}),
         el("div",{className:"generation-detail-layout"},[el("section",{},[el("h2",{text:"任务进程"}),timeline]),el("aside",{className:"generation-context-card"},[el("h2",{text:"锁定上下文"}),definitionList([["项目",task.projectId],["发布基准",`${task.baseVersionLabel} · ${task.baseVersionId}`],["模板",`${task.template.id} · ${task.template.version}`],["Schema",task.schemaVersion],["材料",`${task.materials.length} 份`],["证据",`${task.evidence.length} 块`],["Token",usage.tokens],["成本",usage.cost]])])]),
-        task.errorCode?el("div",{className:"generation-error-detail"},[el("p",{className:"form-error",role:"alert",text:task.state==="failed_retryable"?"节点预览生成暂时失败，未影响项目数据。可以重试。":"模型输出未通过结构校验，未创建预览。"}),task.validation?.details?el("p",{className:"validation-detail",text:`具体原因：${task.validation.code}${task.validation.details.changeId?`（变更项 ${task.validation.details.changeId}）`:""}${task.validation.details.field?`，字段 ${task.validation.details.field}`:""}`}):null]):null,
+        task.errorCode?el("div",{className:"generation-error-detail"},[el("p",{className:"form-error",role:"alert",text:task.state==="failed_retryable"?"节点预览生成暂时失败，未影响项目数据。可以重试。":generationErrorMessage({code:task.errorCode})}),task.validation?.details?el("p",{className:"validation-detail",text:`具体原因：${task.validation.code}${task.validation.details.changeId?`（变更项 ${task.validation.details.changeId}）`:""}${task.validation.details.field?`，字段 ${task.validation.details.field}`:""}`}):null,["AI_PROVIDER_HOST_NOT_ALLOWED","AI_PROVIDER_CONFIG_INCOMPLETE","AI_PROVIDER_CONFIG_INVALID","AI_PROVIDER_CONFIG_INVALID_URL","AI_PROVIDER_HTTP_401","AI_PROVIDER_HTTP_403"].includes(task.errorCode)?el("a",{href:"#/settings",className:"secondary-button",text:"前往设置页修改 AI 配置",onClick:event=>{event.preventDefault();context.navigate("/settings");}}):null]):null,
         actions.length?el("div",{className:"material-detail-controls"},actions):null,
         attempts.length?el("div",{className:"table-scroll",tabIndex:0,role:"region",ariaLabel:"生成尝试与用量"},[el("table",{className:"module-table generation-attempt-table"},[el("caption",{text:"生成尝试、Token 与成本"}),el("thead",{},[el("tr",{},["次数","类型","结果","Token","成本","结果码"].map(label=>el("th",{scope:"col",text:label})))]),el("tbody",{},attempts)])]):null
       ]));

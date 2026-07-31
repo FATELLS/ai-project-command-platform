@@ -1,5 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
-import { safeProviderError } from "../errors.mjs";
+import { safeProviderError, AiServiceError } from "../errors.mjs";
 
 const retryStatuses = new Set([408, 429, 500, 502, 503, 504]);
 async function boundedBody(response, maximum) {
@@ -9,12 +9,14 @@ async function boundedBody(response, maximum) {
 }
 
 export function validateProviderConfig(config) {
-  const url = new URL(config.baseUrl);
-  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new TypeError("AI provider base URL must be a clean HTTPS URL");
+  if (!config.baseUrl) throw new AiServiceError("AI_PROVIDER_CONFIG_INCOMPLETE", "AI provider base URL is required", 400);
+  let url;
+  try { url = new URL(config.baseUrl); } catch { throw new AiServiceError("AI_PROVIDER_CONFIG_INVALID_URL", "AI provider base URL is not a valid URL", 400); }
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new AiServiceError("AI_PROVIDER_CONFIG_INVALID_URL", "AI provider base URL must be a clean HTTPS URL (no path, query, or credentials)", 400);
   const allowed = new Set(config.allowedHosts ?? []);
-  if (!allowed.has(url.hostname)) throw new TypeError("AI provider hostname is not allowlisted");
-  if (!config.apiKey || !config.model) throw new TypeError("AI provider key and model are required");
-  if (config.reasoningEffort && !new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max"]).has(config.reasoningEffort)) throw new TypeError("AI provider reasoning effort is invalid");
+  if (!allowed.has(url.hostname)) throw new AiServiceError("AI_PROVIDER_HOST_NOT_ALLOWED", `AI provider hostname "${url.hostname}" is not in the allowlist. Add it in Settings → Allowed Hosts, or it will be auto-added on next save.`, 400, { cause: { hostname: url.hostname, allowedHosts: [...allowed] } });
+  if (!config.apiKey || !config.model) throw new AiServiceError("AI_PROVIDER_CONFIG_INCOMPLETE", "AI provider API key and model are both required", 400);
+  if (config.reasoningEffort && !new Set(["none", "minimal", "low", "medium", "high", "xhigh", "max"]).has(config.reasoningEffort)) throw new AiServiceError("AI_PROVIDER_CONFIG_INVALID", "AI provider reasoning effort is invalid", 400);
   return url;
 }
 

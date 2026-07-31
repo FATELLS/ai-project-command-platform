@@ -25,13 +25,28 @@ function writeSetting(database, key, value, userId) {
   });
 }
 
+/**
+ * 从 baseUrl 中提取 hostname，自动补入 allowedHosts。
+ * 解决用户配了地址但忘了加白名单导致"hostname is not allowlisted"的问题。
+ * 已有的 allowedHosts 不会丢失，只是合并。
+ */
+function autoMergeAllowedHosts(baseUrl, currentHosts) {
+  const existing = String(currentHosts ?? "").split(",").map(h => h.trim()).filter(Boolean);
+  if (!baseUrl) return existing.join(",");
+  try {
+    const hostname = new URL(baseUrl).hostname;
+    if (hostname && !existing.includes(hostname)) existing.unshift(hostname);
+  } catch { /* baseUrl 无效时不阻塞保存，让 validateProviderConfig 后续报错 */ }
+  return existing.join(",");
+}
+
 function sanitizeProviderConfig(input) {
   const result = {};
   const provider = String(input.provider ?? "disabled");
   result.provider = provider === "openai-compatible" ? "openai-compatible" : "disabled";
   result.baseUrl = String(input.baseUrl ?? "").trim();
   result.model = String(input.model ?? "").trim();
-  result.allowedHosts = String(input.allowedHosts ?? "").trim();
+  result.allowedHosts = autoMergeAllowedHosts(result.baseUrl, input.allowedHosts);
   result.reasoningEffort = String(input.reasoningEffort ?? "").trim() || undefined;
   result.providerLabel = String(input.providerLabel ?? "").trim() || undefined;
   result.timeoutMs = Math.max(1_000, Math.min(600_000, Number(input.timeoutMs) || 60_000));
@@ -51,7 +66,7 @@ function sanitizeVisionProviderConfig(input) {
   result.provider = provider === "openai-compatible" ? "openai-compatible" : "disabled";
   result.baseUrl = String(input.baseUrl ?? "").trim();
   result.model = String(input.model ?? "").trim();
-  result.allowedHosts = String(input.allowedHosts ?? "").trim();
+  result.allowedHosts = autoMergeAllowedHosts(result.baseUrl, input.allowedHosts);
   result.providerLabel = String(input.providerLabel ?? "").trim() || undefined;
   result.timeoutMs = Math.max(1_000, Math.min(600_000, Number(input.timeoutMs) || 120_000));
   result.maxOutputTokens = Math.max(100, Math.min(16_000, Number(input.maxOutputTokens) || 4_000));

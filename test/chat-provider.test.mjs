@@ -15,7 +15,7 @@ test("OpenAI-compatible adapter uses an allowlisted HTTPS endpoint and never sen
   let captured; const provider = createOpenAiCompatibleProvider(config, { fetchImpl: async (url, init) => { captured = { url, init, body: JSON.parse(init.body) }; return new Response(JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "{}" } }], usage: { prompt_tokens: 2, completion_tokens: 1 } }), { status: 200 }); } });
   const result = await provider.generate(request); assert.equal(captured.url, "https://api.example.test/v1/chat/completions"); assert.equal("tools" in captured.body, false); assert.equal(captured.body.max_tokens, 1200); assert.equal(result.usage.output, 1);
   assert.throws(() => createOpenAiCompatibleProvider({ ...config, baseUrl: "http://api.example.test" }), /HTTPS/);
-  assert.throws(() => createOpenAiCompatibleProvider({ ...config, allowedHosts: ["other.test"] }), /allowlisted/);
+  assert.throws(() => createOpenAiCompatibleProvider({ ...config, allowedHosts: ["other.test"] }), /allowlist/);
 });
 
 test("transient errors retry once while invalid, tool-call, truncated and oversized outputs fail safely", async () => {

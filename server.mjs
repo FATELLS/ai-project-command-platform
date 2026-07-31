@@ -11,10 +11,12 @@ import { createAuthService } from "./src/services/auth-service.mjs";
 import { createSettingsService } from "./src/services/settings-service.mjs";
 import { createMaterialProcessingService } from "./src/materials/processing-service.mjs";
 import { startMaterialProcessingWorker } from "./src/materials/worker.mjs";
+import { validateProviderConfig } from "./src/ai/providers/openai-compatible-provider.mjs";
 
 const host = process.env.HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 4173);
-const database = openDatabase(defaultDatabasePath());
+const dbPath = defaultDatabasePath();
+const database = openDatabase(dbPath);
 let server;
 let materialWorker;
 
@@ -53,6 +55,28 @@ try {
   const settingsService = createSettingsService(database);
   const visionEnv = settingsService.buildProviderEnvironment("vision");
   const genEnv = settingsService.buildProviderEnvironment("generation");
+  const chatEnv = settingsService.buildProviderEnvironment("chat");
+
+  // 启动时 AI 配置健康检查——提前暴露"配了但调不通"的问题
+  for (const [scope, env] of [["chat", chatEnv], ["generation", genEnv], ["vision", visionEnv]]) {
+    const prefix = scope === "generation" ? "AI_GENERATION" : scope === "vision" ? "AI_VISION" : "AI_CHAT";
+    const provider = env[`${prefix}_PROVIDER`];
+    if (provider && provider !== "disabled" && env[`${prefix}_API_KEY`]) {
+      try {
+        validateProviderConfig({
+          baseUrl: env[`${prefix}_BASE_URL`],
+          apiKey: env[`${prefix}_API_KEY`],
+          model: env[`${prefix}_MODEL`],
+          allowedHosts: String(env[`${prefix}_ALLOWED_HOSTS`] ?? "").split(",").map(v => v.trim()).filter(Boolean),
+          reasoningEffort: env[`${prefix}_REASONING_EFFORT`] || undefined
+        });
+        console.log(`  AI ${scope}: ${provider} / ${env[`${prefix}_MODEL`]} — 配置校验通过`);
+      } catch (configError) {
+        console.warn(`  ⚠ AI ${scope} 配置有误: ${configError.message}`);
+        console.warn(`    请在设置页（/settings）检查并重新保存 AI ${scope} 配置，保存时系统会自动补全白名单。`);
+      }
+    }
+  }
   const visionConfig = {
     baseUrl: visionEnv.AI_VISION_BASE_URL || process.env.AI_VISION_BASE_URL || genEnv.AI_GENERATION_BASE_URL || "",
     apiKey: visionEnv.AI_VISION_API_KEY || process.env.AI_VISION_API_KEY || genEnv.AI_GENERATION_API_KEY || "",
@@ -73,6 +97,8 @@ try {
   }));
   server.listen(port, host, () => {
     console.log(`AI Project Command Platform listening on http://${host}:${port}`);
+    console.log(`  数据目录: ${dbPath}`);
+    console.log(`  配置入口: 平台设置 → AI 配置（首次使用请在网页后台填写 provider/baseUrl/apiKey/model）`);
   });
 } catch (error) {
   database.close?.();

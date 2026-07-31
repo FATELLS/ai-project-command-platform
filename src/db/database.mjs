@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -12,10 +13,24 @@ function findRoot() {
 
 const root = findRoot();
 
+/**
+ * 检测是否在 npx 缓存目录中运行。
+ * npx 会把包解压到 ~/.npm/_npx/<hash>/node_modules/<pkg>，
+ * 清缓存或 hash 变化会导致数据丢失。
+ * 检测到时 fallback 到用户主目录下的稳定路径。
+ */
+function isNpxCache() {
+  return root.includes("_npx") || root.includes(join("npm", "_npx")) || root.includes(".npm/_npx");
+}
+
+function stableUserDataDir() {
+  return join(homedir(), ".ai-project-command-platform", "data");
+}
+
 export function defaultDataDir() {
-  return process.env.PLATFORM_DATA_DIR
-    ? resolve(process.env.PLATFORM_DATA_DIR)
-    : join(root, "data");
+  if (process.env.PLATFORM_DATA_DIR) return resolve(process.env.PLATFORM_DATA_DIR);
+  if (isNpxCache()) return stableUserDataDir();
+  return join(root, "data");
 }
 
 export function defaultDatabasePath() {

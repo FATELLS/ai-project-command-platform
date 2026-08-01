@@ -2,6 +2,12 @@
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
+import { loadLocalConfigToEnv } from "./src/config/local-config.mjs";
+
+// 最先加载本地 API 配置文件（.api-keys.local.json），注入 process.env
+// 环境变量优先于配置文件，这样 Docker/systemd 部署仍可覆盖
+loadLocalConfigToEnv();
+
 import { defaultDatabasePath, openDatabase } from "./src/db/database.mjs";
 import { applyMigrations } from "./src/db/migrate.mjs";
 import { createApp } from "./src/http/app.mjs";

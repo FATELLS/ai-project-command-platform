@@ -17,6 +17,7 @@
     "fixtures/",
     "scripts/",
     ".env.example",
+    "api-config.example.json",
     "README.md"
   ],
   "pkg": {

@@ -21,6 +21,10 @@ data/*
 .env
 .env.*
 !.env.example
+
+# 本地 API 配置文件（含密钥，不提交）
+.api-keys.local.json
+.api-keys.*.local.json
 first-run-credentials.txt
 bootstrap-credentials.txt
 server.pid

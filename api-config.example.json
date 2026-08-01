@@ -1,0 +1,27 @@
+{
+  "_comment": "复制为 .api-keys.local.json 并填入真实 API 密���。该文件被 .gitignore 排除。",
+  "_comment2": "provider: disabled 或 openai-compatible",
+  "aiGeneration": {
+    "provider": "openai-compatible",
+    "baseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
+    "apiKey": "YOUR_API_KEY_HERE",
+    "model": "glm-4.6",
+    "allowedHosts": "open.bigmodel.cn",
+    "reasoningEffort": "",
+    "providerLabel": ""
+  },
+  "aiChat": {
+    "provider": "disabled",
+    "baseUrl": "",
+    "apiKey": "",
+    "model": "",
+    "allowedHosts": ""
+  },
+  "aiVision": {
+    "provider": "disabled",
+    "baseUrl": "",
+    "apiKey": "",
+    "model": "glm-4.6v",
+    "allowedHosts": ""
+  }
+}

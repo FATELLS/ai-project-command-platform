@@ -60,7 +60,10 @@ export function declaredMaterialType(filename, mime) {
 export async function validateMagic(probe, declared) {
   if (declared.detected === null) {
     if (probe.includes(0)) throw new MaterialGateError("magic_mismatch", "文本材料包含二进制内容");
-    try { new TextDecoder("utf-8", { fatal: true }).decode(probe); }
+    // probe 在 8192 字节处硬截取，可能截断 UTF-8 多字节字符（最大 4 字节）
+    // 截断到最后一个完整字符的边界，避免边界截断导致的误报
+    const safeLen = utf8SafeTruncate(probe);
+    try { new TextDecoder("utf-8", { fatal: true }).decode(probe.subarray(0, safeLen)); }
     catch { throw new MaterialGateError("invalid_encoding", "文本材料必须是 UTF-8 编码"); }
     return;
   }
@@ -68,6 +71,30 @@ export async function validateMagic(probe, declared) {
   if (!detected || detected.ext !== declared.detected) {
     throw new MaterialGateError("magic_mismatch", "文件内容与声明的类型不匹配");
   }
+}
+
+/**
+ * Truncate a byte array to the last valid UTF-8 character boundary.
+ * Needed because probe is a fixed-size window (8192 bytes) that may split a multi-byte char.
+ */
+function utf8SafeTruncate(buf) {
+  if (buf.length === 0) return 0;
+  // Scan from the end to find the last position where all preceding bytes form valid complete characters
+  for (let i = buf.length - 1; i >= 0 && i >= buf.length - 4; i--) {
+    const byte = buf[i];
+    if (byte < 0x80 || byte >= 0xC0) {
+      // This is a single-byte char (0xxxxxxx) or the start of a multi-byte sequence (11xxxxxx)
+      // Check if the full sequence fits within buf
+      let charLen;
+      if (byte < 0x80) charLen = 1;
+      else if (byte >= 0xF0) charLen = 4;
+      else if (byte >= 0xE0) charLen = 3;
+      else charLen = 2;
+      if (i + charLen <= buf.length) return buf.length; // Last char is complete
+      return i; // Truncate before the incomplete char
+    }
+  }
+  return buf.length > 4 ? buf.length - 4 : 0;
 }
 
 export function mergeMaterialLimits(overrides = {}) {

@@ -2017,7 +2017,8 @@ function openUploadSheet(context, ledger, refresh, returnFocus, options = {}) {
         for (let index = 0; index < files.length; index += 1) {
           const file = files[index], row = rows[index]; row.querySelector(".status-label").textContent = "上传中";
           row.append(el("progress", { max: 1, value: 0, ariaLabel: `${file.name} 上传进度` }));
-          const receipt = await context.api(materialPath(context, "/upload"), { method: "POST", mutation: true, rawBody: file, headers: { "content-type": file.type || "application/octet-stream", "x-file-name": encodeURIComponent(file.name) } });
+          const mimeFromName = file.name.match(/\.(md|markdown|txt|csv|json|yaml|yml)$/i) ? { ".md": "text/markdown", ".markdown": "text/markdown", ".txt": "text/plain", ".csv": "text/csv", ".json": "application/json", ".yaml": "application/yaml", ".yml": "application/yaml" }["." + file.name.split(".").pop().toLowerCase()] : null;
+          const receipt = await context.api(materialPath(context, "/upload"), { method: "POST", mutation: true, rawBody: file, headers: { "content-type": file.type || mimeFromName || "application/octet-stream", "x-file-name": encodeURIComponent(file.name) } });
           row.querySelector("progress").value = 1; row.querySelector(".status-label").textContent = "材料已归档，正在提取内容";
           if (receipt?.material?.id) {
             uploadedMaterialIds.push(receipt.material.id);

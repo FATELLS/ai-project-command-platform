@@ -1,13 +1,12 @@
 {
   "name": "ai-project-command-platform",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "type": "module",
   "description": "多项目、模板化、AI 辅助更新的项目作战管理平台",
   "engines": {
     "node": ">=22.0"
   },
   "bin": {
-    "ai-platform": "./server.mjs",
     "ai-project-command-platform": "./server.mjs"
   },
   "files": [

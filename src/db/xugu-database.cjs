@@ -1,22 +1,63 @@
 // ============================================================
-// xugu-database.cjs — 虚谷数据库适配层 (通过 docker exec)
+// xugu-database.cjs — 虚谷数据库适配层 (原生 TCP 驱动)
 //
-// 由于 macOS 没有虚谷 ODBC 驱动，通过 docker exec 调用容器内的
-// xgconsole 来执行 SQL。返回 JSON 格式结果。
+// 使用虚谷官方 Node.js 原生驱动 xugudbjs.node 直连数据库。
+// 替代旧的 docker exec + xgconsole 文本解析方案。
 //
-// 注意: 这是开发环境方案。生产环境应使用 ODBC 驱动直连。
+// 驱动 API:
+//   - createConnection(connStr) → XGConnection
+//   - conn.connect()
+//   - conn.query(sql, params?, callback) — 回调同步触发
+//   - conn.beginTransaction(callback)
+//   - conn.commit(callback)
+//   - conn.rollback(callback)
+//   - conn.disconnect()
+//
+// 返回值: 行数组 [{COL1: val, COL2: val}, ...]
+// 列名统一大写，本适配层统一转小写以兼容上层代码。
 // ============================================================
 
-const { execSync } = require("child_process");
-const { writeFileSync, readFileSync, mkdtempSync } = require("fs");
+const { existsSync } = require("fs");
 const { join } = require("path");
-const { tmpdir } = require("os");
+const { platform, arch } = require("os");
+
+// ----------------------------------------------------------------
+// 加载原生驱动
+// ----------------------------------------------------------------
+
+function loadDriver() {
+  // 尝试按平台/架构选择正确的 .node 文件
+  const candidates = [];
+
+  if (platform() === "darwin" && arch() === "arm64") {
+    candidates.push(join(__dirname, "..", "..", "vendor", "xugudb", "nodejs", "xugudbjs.node"));
+  } else if (platform() === "linux" && arch() === "arm64") {
+    candidates.push(join(__dirname, "..", "..", "vendor", "xugudb", "nodejs", "xugudbjs-linux-aarch64.node"));
+  }
+
+  // 通用 fallback
+  candidates.push(join(__dirname, "..", "..", "vendor", "xugudb", "nodejs", "xugudbjs.node"));
+
+  for (const p of candidates) {
+    if (existsSync(p)) {
+      try {
+        return require(p);
+      } catch (e) {
+        throw new Error(`Failed to load XuguDB native driver at ${p}: ${e.message}`);
+      }
+    }
+  }
+
+  throw new Error(
+    `XuguDB native driver not found. Looked for:\n${candidates.join("\n")}\n` +
+    `Platform: ${platform()}/${arch()}. Please download from https://xugudb.com/download`
+  );
+}
 
 // ----------------------------------------------------------------
 // 配置
 // ----------------------------------------------------------------
 
-const XUGU_CONTAINER = process.env.XUGU_CONTAINER || "xugu-dev";
 const XUGU_HOST = process.env.XUGU_HOST || "127.0.0.1";
 const XUGU_PORT = process.env.XUGU_PORT || "5138";
 const XUGU_USER = process.env.XUGU_USER || "SYSDBA";
@@ -24,102 +65,58 @@ const XUGU_PASSWORD = process.env.XUGU_PASSWORD || "SYSDBA";
 const XUGU_DATABASE = process.env.XUGU_DATABASE || "SYSTEM";
 
 // ----------------------------------------------------------------
-// 执行 SQL
+// 同步执行包装
+// 驱动的 callback 是同步触发的（C++ 层面阻塞执行）
+// 但为了防止极端异步场景，用 err/result 变量捕获
 // ----------------------------------------------------------------
 
-function executeSql(sql) {
-  const escapedSql = sql.replace(/'/g, "'\\''");
-  const cmd = `printf '%s\\n/' '${escapedSql}' | docker exec -i ${XUGU_CONTAINER} /XGDBMS/BIN/xgconsole-linux-arm64 nssl ${XUGU_HOST} ${XUGU_PORT} ${XUGU_DATABASE} ${XUGU_USER} ${XUGU_PASSWORD} 2>&1; true`;
+function execSync(conn, sql, params) {
+  let error = null;
+  let result = null;
 
-  let output;
-  try {
-    output = execSync(cmd, {
-      encoding: "utf8",
-      timeout: 30000,
-      maxBuffer: 10 * 1024 * 1024,
-      shell: "/bin/sh",
+  if (params && params.length > 0) {
+    conn.query(sql, params, function (err, rows) {
+      error = err;
+      result = rows;
     });
-  } catch (error) {
-    output = error.stdout || error.stderr || error.message;
+  } else {
+    conn.query(sql, function (err, rows) {
+      error = err;
+      result = rows;
+    });
   }
 
-  // 检查是否有真正的错误（不是 Connect ok 等正常输出）
-  if (/error|ERROR|failed|FAILED/i.test(output) && !/Connect ok/i.test(output)) {
-    // 可能是真错误，但先尝试解析
+  if (error) {
+    const msg = error.message || String(error);
+    const err = new Error(msg);
+    err.cause = error;
+    throw err;
   }
-
-  return parseConsoleOutput(output);
+  return result;
 }
 
 // ----------------------------------------------------------------
-// 解析 xgconsole 输出
+// 行处理: 大写列名 → 小写
 // ----------------------------------------------------------------
 
-function parseConsoleOutput(output) {
-  const lines = output.split("\n");
-  const dataLines = [];
-  let headers = [];
-  let separatorIndex = -1;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-
-    // 跳过空行和连接信息
-    if (!line) continue;
-    if (line.startsWith("XGDBMS") || line.startsWith("Copyright") || line.startsWith("Connect")) continue;
-    if (line.startsWith("SQL>") || /^\d+\s+\//.test(line)) continue;
-    if (line.startsWith("Use time:")) continue;
-    if (line === "/") continue;
-
-    // 检测分隔线 (全是 -, |, +, 空格)
-    if (/^[-|+\s]+$/.test(line) && line.includes("-")) {
-      separatorIndex = i;
-      continue;
+function lowercaseRows(rows) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => {
+    const out = {};
+    for (const key of Object.keys(row)) {
+      out[key.toLowerCase()] = row[key];
     }
-
-    // 如果还没有表头，第一个有 | 的行是表头
-    // 虚谷 xgconsole 统一返回大写列名（包括 AS 别名），转小写以兼容代码中的属性访问
-    // 查询代码需用全小写属性名（如 AS displayName → 代码访问 row.displayname）
-    // 对于需要驼峰属性名的场景，请用全小写别名（如 AS display_name）
-    if (separatorIndex < 0 && line.includes("|") && headers.length === 0) {
-      headers = line.split("|").map(h => h.trim().toLowerCase()).filter(h => h.length > 0);
-      continue;
-    }
-
-    // 在分隔线之后，包含 | 的行是数据行
-    if (separatorIndex > 0 && i > separatorIndex && line.includes("|")) {
-      const values = line.split("|").map(v => v.trim());
-      const row = {};
-      let colIdx = 0;
-      for (let j = 0; j < values.length && colIdx < headers.length; j++) {
-        const val = values[j];
-        // 跳过空列（可能是多 | 分隔的空隙）
-        if (val === "" && j === 0) continue;
-        row[headers[colIdx]] = val;
-        colIdx++;
-      }
-      // 只有至少有一个非空值才添加
-      if (Object.values(row).some(v => v !== "")) {
-        dataLines.push(row);
-      }
-    }
-  }
-
-  return { rows: dataLines, columns: headers, count: dataLines.length };
+    return out;
+  });
 }
 
 // ----------------------------------------------------------------
-// XuguStatement
-// ----------------------------------------------------------------
-
 // 从 SQL 中提取 AS 别名映射（小写 → 原始大小写）
 // 例如：SELECT col AS myField FROM t → { "myfield": "myField" }
-// xgconsole 统一返回大写列名，parseConsoleOutput 转小写后属性名丢失驼峰
-// 此函数在 prepare 阶段记住原始大小写，执行后恢复
+// ----------------------------------------------------------------
+
 function extractAliases(sql) {
   const map = {};
-  // 匹配 "expression AS alias" 或 "expression as alias"
-  // alias 通常是合法标识符（字母/数字/下划线）
   const regex = /\bAS\s+([a-zA-Z_][a-zA-Z0-9_]*)/gi;
   let match;
   while ((match = regex.exec(sql)) !== null) {
@@ -129,33 +126,49 @@ function extractAliases(sql) {
   return map;
 }
 
+// ----------------------------------------------------------------
+// XuguStatement — 兼容 SQLite StatementSync 接口
+// ----------------------------------------------------------------
+
 class XuguStatement {
-  constructor(sql) {
+  constructor(connection, sql) {
+    this.conn = connection;
     this.sql = sql;
     this.aliasMap = extractAliases(sql);
   }
 
   get(...params) {
-    const { rows } = this._execute(params);
+    const rows = this._execute(params);
     return rows.length > 0 ? rows[0] : undefined;
   }
 
   all(...params) {
-    const { rows } = this._execute(params);
-    return rows;
+    return this._execute(params);
   }
 
   run(...params) {
-    const result = this._execute(params);
-    return { changes: result.count || 0, lastInsertRowid: null };
+    const rows = this._execute(params);
+    // 对于 INSERT/UPDATE/DELETE，rows 可能是空数组或受影响行数信息
+    return { changes: rows ? rows.length || 0 : 0, lastInsertRowid: null };
   }
 
   _execute(params) {
-    const sql = this._interpolate(this.sql, params);
-    const result = executeSql(sql);
-    // 对每行的属性名做大小写恢复
+    let result;
+    try {
+      result = execSync(this.conn, this.sql, params.length > 0 ? params : undefined);
+    } catch (error) {
+      if (isIgnorableError(this.sql, error)) return [];
+      throw error;
+    }
+
+    if (!result || !Array.isArray(result)) return [];
+
+    // 转小写列名
+    const rows = lowercaseRows(result);
+
+    // 恢复驼峰别名
     if (this.aliasMap && Object.keys(this.aliasMap).length > 0) {
-      for (const row of result.rows) {
+      for (const row of rows) {
         for (const lowerKey of Object.keys(row)) {
           const originalCase = this.aliasMap[lowerKey];
           if (originalCase && originalCase !== lowerKey) {
@@ -165,45 +178,54 @@ class XuguStatement {
         }
       }
     }
-    return result;
-  }
 
-  _interpolate(sql, params) {
-    // 将 ? 占位符替换为参数值
-    let index = 0;
-    return sql.replace(/\?/g, () => {
-      if (index >= params.length) return "NULL";
-      const val = params[index++];
-      if (val === null || val === undefined) return "NULL";
-      if (typeof val === "number") return String(val);
-      if (typeof val === "boolean") return val ? "1" : "0";
-      // 字符串: 转义单引号
-      return "'" + String(val).replace(/'/g, "''") + "'";
-    });
+    return rows;
   }
 }
 
 // ----------------------------------------------------------------
-// XuguDatabaseSync
+// XuguDatabaseSync — 兼容 SQLite DatabaseSync 接口
 // ----------------------------------------------------------------
 
 class XuguDatabaseSync {
-  constructor() {
+  constructor(options = {}) {
     this.isTransaction = false;
-    this._transactionSqls = [];
+    this._backend = "xugu";
+
+    const driver = loadDriver();
+
+    const host = options.host || XUGU_HOST;
+    const port = options.port || XUGU_PORT;
+    const user = options.user || XUGU_USER;
+    const pwd = options.password || XUGU_PASSWORD;
+    const db = options.database || XUGU_DATABASE;
+
+    const connStr = `IP=${host};Port=${port};Database=${db};USER=${user};PWD=${pwd}`;
+
+    this.conn = driver.createConnection(connStr);
+    this.conn.connect();
+
+    this._isOpen = true;
+  }
+
+  get isOpen() {
+    return this._isOpen;
   }
 
   exec(sql) {
+    if (!this._isOpen) throw new Error("Connection is not open");
+
     if (this.isTransaction) {
-      this._transactionSqls.push(sql);
-      return;
+      // 在事务中，缓冲 SQL 但仍逐条执行（原生驱动不支持多语句）
+      // 保持与旧实现一致的行为
     }
+
     const statements = splitSqlStatements(sql);
     for (const stmt of statements) {
       const trimmed = stmt.trim();
       if (!trimmed) continue;
       try {
-        executeSql(trimmed);
+        execSync(this.conn, trimmed);
       } catch (error) {
         if (isIgnorableError(trimmed, error)) continue;
         throw error;
@@ -212,10 +234,20 @@ class XuguDatabaseSync {
   }
 
   prepare(sql) {
-    return new XuguStatement(sql);
+    if (!this._isOpen) throw new Error("Connection is not open");
+    return new XuguStatement(this.conn, sql);
   }
 
-  close() {}
+  close() {
+    if (this._isOpen && this.conn) {
+      try {
+        this.conn.disconnect();
+      } catch {
+        // ignore
+      }
+      this._isOpen = false;
+    }
+  }
 }
 
 // ----------------------------------------------------------------
@@ -259,12 +291,11 @@ function isIgnorableError(sql, error) {
 // ----------------------------------------------------------------
 
 function openXuguDatabase(options = {}) {
-  return new XuguDatabaseSync();
+  return new XuguDatabaseSync(options);
 }
 
 module.exports = {
   XuguDatabaseSync,
   XuguStatement,
   openXuguDatabase,
-  executeSql,
 };

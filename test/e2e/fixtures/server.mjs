@@ -93,7 +93,7 @@ const server = createServer(createApp({
   materialOptions: { storageRoot },
   // 放宽生成配额：E2E 多 spec 反复生成提案，避免 4 次/分钟限流误报。
   // 配额行为本身由后台测试覆盖。
-  proposalOptions: { provider, quotaOptions: { perMinute: 1000, daily: 10000, maxConcurrency: 8 } }
+  proposalOptions: { provider, syncProcess: true, quotaOptions: { perMinute: 1000, daily: 10000, maxConcurrency: 8 } }
 }));
 
 server.listen(port, host, () => {

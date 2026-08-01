@@ -45,16 +45,26 @@ export function createProposalService(database, options = {}) {
       updateTemplate: row.updateTemplateId ? { id: row.updateTemplateId, version: row.updateTemplateVersion, label: proposalTemplates.find(item=>item.id===row.updateTemplateId)?.label ?? "更新模板不可用" } : null,
       readiness: row.updateTemplateId ? readiness.compute({ projectId, materialId: row.id, extractionVersion: row.extractionVersion, templateId: row.updateTemplateId, templateVersion: row.updateTemplateVersion }) : null
     }));
-    return { role: access.role, capabilities: { read: access.read, create: access.create, createTask: access.create, retry: access.create, manageGeneration: access.admin }, provider: { enabled: Boolean(generation.provider.configured) }, baseVersionId: project.baseVersionId, baseVersion: project.baseVersion, schemaVersion: "change-proposal-v1@1.0.0", limits: { maxMaterialsPerTask: 8, maxEvidenceBlocks: 48, maxPublishedBytes: 32*1024, maxEvidenceBytes: 64*1024, maxOutputBytes: 128*1024, maxChanges: 100, perMinute: 4, perDay: 100 }, usage: { today: used, remainingToday: Math.max(0,100-used) }, templates: proposalTemplates, eligibleMaterials };
+    return { role: access.role, capabilities: { read: access.read, create: access.create, createTask: access.create, retry: access.create, manageGeneration: access.admin }, provider: { enabled: Boolean(generation.provider.configured) }, baseVersionId: project.baseVersionId, baseVersion: project.baseVersion, schemaVersion: "change-proposal-v1@1.0.0", limits: { maxMaterialsPerTask: 8, maxEvidenceBlocks: 48, maxPublishedBytes: 32*1024, maxEvidenceBytes: 64*1024, maxOutputBytes: 128*1024, maxChanges: 100, perMinute: 20, perDay: 100000 }, usage: { today: used, remainingToday: Math.max(0,100000-used) }, templates: proposalTemplates, eligibleMaterials };
   }
 
   async function createJob(principal, projectId, input) {
     const access = permission(principal, projectId); if (!access.create) throw proposalError("GENERATION_JOB_NOT_FOUND", "生成任务不存在或你无权访问", 404);
     const job = generation.createJob(principal, { projectId, materialIds: input.materialIds, baseVersionId: input.baseVersionId, idempotencyKey: input.idempotencyKey });
     audit(principal,"generation.created",projectId,"generation_job",job.id,{template:job.template,baseVersionId:job.baseVersionId,materials:job.materials.length});
-    const result = options.autoProcess === false ? job : await generation.processJob(projectId, job.id);
-    if (result.state !== job.state) audit(principal,"generation.completed",projectId,"generation_job",job.id,{state:result.state,errorCode:result.errorCode,proposalId:result.proposalId});
-    return { task: result };
+    if (options.syncProcess) {
+      // 测试模式：同步处理
+      const result = await generation.processJob(projectId, job.id);
+      if (result.state !== job.state) audit(principal,"generation.completed",projectId,"generation_job",job.id,{state:result.state,errorCode:result.errorCode,proposalId:result.proposalId});
+      return { task: result };
+    }
+    // 异步模式：立即返回 queued 状态，后台执行 processJob
+    setImmediate(() => {
+      generation.processJob(projectId, job.id)
+        .then(result => { if (result.state !== job.state) audit(principal,"generation.completed",projectId,"generation_job",job.id,{state:result.state,errorCode:result.errorCode,proposalId:result.proposalId}); })
+        .catch(error => { console.error(`[generation] processJob failed for ${job.id}:`, error?.message ?? error); });
+    });
+    return { task: job };
   }
 
   // 一键全部生成：自动发现所有符合条件的材料，按模板分组，每组创建一个生成任务。
@@ -83,19 +93,32 @@ export function createProposalService(database, options = {}) {
         const idempotencyKey = `batch-${safeKey}-${i}-${randomUUID()}`;
         const job = generation.createJob(principal, { projectId, materialIds: batch, idempotencyKey });
         audit(principal, "generation.batch_created", projectId, "generation_job", job.id, { template: key, materials: batch.length, batch: true });
-        const result = options.autoProcess === false ? job : await generation.processJob(projectId, job.id);
-        if (result.state !== job.state) audit(principal, "generation.batch_completed", projectId, "generation_job", job.id, { state: result.state, errorCode: result.errorCode, proposalId: result.proposalId, batch: true });
-        results.push(result);
+        if (options.syncProcess) {
+          const result = await generation.processJob(projectId, job.id);
+          if (result.state !== job.state) audit(principal,"generation.batch_completed",projectId,"generation_job",job.id,{state:result.state,errorCode:result.errorCode,proposalId:result.proposalId,batch:true});
+          results.push(result);
+        } else {
+          setImmediate(() => {
+            generation.processJob(projectId, job.id)
+              .then(result => { if (result.state !== job.state) audit(principal,"generation.batch_completed",projectId,"generation_job",job.id,{state:result.state,errorCode:result.errorCode,proposalId:result.proposalId,batch:true}); })
+              .catch(error => { console.error(`[generation] batch processJob failed for ${job.id}:`, error?.message ?? error); });
+          });
+          results.push(job);
+        }
       }
     }
-    const succeeded = results.filter(r => r.state === "succeeded").length;
-    const failed = results.filter(r => ["failed_terminal", "failed_retryable", "stale"].includes(r.state)).length;
-    return { tasks: results, summary: { total: results.length, succeeded, failed, groups: groups.size } };
+    if (options.syncProcess) {
+      const succeeded = results.filter(r => r.state === "succeeded").length;
+      const failed = results.filter(r => ["failed_terminal", "failed_retryable", "stale"].includes(r.state)).length;
+      return { tasks: results, summary: { total: results.length, succeeded, failed, groups: groups.size } };
+    }
+    const pending = results.length;
+    return { tasks: results, summary: { total: results.length, pending, groups: groups.size } };
   }
 
   function listJobs(principal,projectId){permission(principal,projectId);return {items:generation.repository.listJobs(projectId),capabilities:capabilityEnvelope(principal,projectId).capabilities};}
   function getJob(principal,projectId,id){permission(principal,projectId);const task=generation.repository.getJob(projectId,id);if(!task)throw proposalError("GENERATION_JOB_NOT_FOUND","生成任务不存在或你无权访问",404);return {task,capabilities:capabilityEnvelope(principal,projectId).capabilities};}
-  async function retryJob(principal,projectId,id,input){const access=permission(principal,projectId);if(!access.create)throw proposalError("GENERATION_JOB_NOT_FOUND","生成任务不存在或你无权访问",404);const task=generation.retryJob(principal,projectId,id,input.idempotencyKey);audit(principal,"generation.retried",projectId,"generation_job",task.id,{retryOf:id});const result=options.autoProcess===false?task:await generation.processJob(projectId,task.id);return {task:result};}
+  async function retryJob(principal,projectId,id,input){const access=permission(principal,projectId);if(!access.create)throw proposalError("GENERATION_JOB_NOT_FOUND","生成任务不存在或你无权访问",404);const task=generation.retryJob(principal,projectId,id,input.idempotencyKey);audit(principal,"generation.retried",projectId,"generation_job",task.id,{retryOf:id});if(options.syncProcess){const result=await generation.processJob(projectId,task.id);return {task:result};}setImmediate(()=>{generation.processJob(projectId,task.id).catch(error=>{console.error(`[generation] retry processJob failed for ${task.id}:`,error?.message??error);});});return {task};}
   function enrichProposal(projectId, proposal) { if (!proposal) return proposal; return { ...proposal, changes: proposal.changes.map(change => ({ ...change, evidence: change.evidenceIds.map(id => { const row=database.prepare(`SELECT e.external_id AS evidenceId,e.material_id AS materialId,e.ordinal,e.kind,e.location_json AS locationJson,m.display_name AS materialName FROM evidence_blocks e JOIN project_materials m ON m.project_id=e.project_id AND m.id=e.material_id WHERE e.project_id=? AND e.external_id=?`).get(projectId,id); return row ? {...row,location:JSON.parse(row.locationJson)} : {evidenceId:id}; }) })) }; }
   function listProposals(principal,projectId){permission(principal,projectId);return {items:generation.repository.listProposals(projectId).map(item=>enrichProposal(projectId,item)),capabilities:capabilityEnvelope(principal,projectId).capabilities};}
   function getProposal(principal,projectId,id){permission(principal,projectId);const proposal=enrichProposal(projectId,generation.repository.getProposal(projectId,id));if(!proposal)throw proposalError("CHANGE_PROPOSAL_NOT_FOUND","更新提案不存在或你无权访问",404);return {proposal,capabilities:capabilityEnvelope(principal,projectId).capabilities};}

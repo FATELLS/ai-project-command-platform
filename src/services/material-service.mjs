@@ -83,8 +83,8 @@ export function createMaterialService(database, options = {}) {
     const dayStart = new Date(now()); dayStart.setUTCHours(0,0,0,0);
     const chatUsed = database.prepare("SELECT count(*) AS count FROM ai_usage_events WHERE project_id=? AND capability='chat' AND status IN ('reserved','succeeded','failed') AND created_at>=?").get(projectId, dayStart.toISOString()).count;
     return { role: permission.role, capabilities: { list: true, viewEvidence: true, ask: true, upload: permission.editor, manual: permission.editor, retry: permission.editor, selectUpdateTemplate: permission.editor, manageQa: permission.admin, createGenerationTask: permission.editor, manageGeneration: permission.admin },
-      limits: { maxFileBytes: materialLimits.maxFileBytes, maxMaterials: materialLimits.maxMaterialsPerProject, maxProjectBytes: materialLimits.maxProjectArtifactBytes, maxUploadsPerMinute: materialLimits.maxUploadsPerMinute, maxConcurrentUploads: 1, maxZipEntries: materialLimits.maxZipEntries, maxZipExpandedBytes: materialLimits.maxZipExpandedBytes, maxQuestionCharacters: 1000, maxChatPerMinute: 12, maxChatPerDay: 300 },
-      usage: { materials: usage.count, materialBytes: artifactBytes, chatToday: chatUsed, chatRemainingToday: Math.max(0, 300-chatUsed) }, updateTemplates };
+      limits: { maxFileBytes: materialLimits.maxFileBytes, maxMaterials: materialLimits.maxMaterialsPerProject, maxProjectBytes: materialLimits.maxProjectArtifactBytes, maxUploadsPerMinute: materialLimits.maxUploadsPerMinute, maxConcurrentUploads: 1, maxZipEntries: materialLimits.maxZipEntries, maxZipExpandedBytes: materialLimits.maxZipExpandedBytes, maxQuestionCharacters: 1000, maxChatPerMinute: 30, maxChatPerDay: 100000 },
+      usage: { materials: usage.count, materialBytes: artifactBytes, chatToday: chatUsed, chatRemainingToday: Math.max(0, 100000-chatUsed) }, updateTemplates };
   }
   function list(principal, projectId) {
     const permission = access(principal, projectId);

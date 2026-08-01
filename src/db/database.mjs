@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { isPackaged, appRoot } from "../paths.mjs";
 import { createRequire } from "node:module";
+import { execSync } from "node:child_process";
 
 function findRoot() {
   if (isPackaged) return appRoot;
@@ -39,10 +40,25 @@ export function defaultDatabasePath() {
 
 // ----------------------------------------------------------------
 // 数据库后端选择
-// DB_BACKEND=sqlite (默认) | DB_BACKEND=xugu
+// 优先级：DB_BACKEND 环境变量 > 默认 SQLite
+// 生产部署用 DB_BACKEND=xugu 或 AUTO_DETECT_XUGU=1 启用自动检测
 // ----------------------------------------------------------------
 
-const DB_BACKEND = process.env.DB_BACKEND || process.env.PLATFORM_DB_BACKEND || "sqlite";
+function detectXuguContainer() {
+  if (process.env.AUTO_DETECT_XUGU !== "1" && !process.env.PLATFORM_AUTO_DETECT_XUGU) return false;
+  const container = process.env.XUGU_CONTAINER || "xugu-dev";
+  try {
+    execSync(`docker inspect ${container} --format '{{.State.Running}}'`, { stdio: "pipe", timeout: 3000 });
+    return true;
+  } catch { return false; }
+}
+
+const DB_BACKEND = (() => {
+  const explicit = process.env.DB_BACKEND || process.env.PLATFORM_DB_BACKEND;
+  if (explicit) return explicit;
+  if (detectXuguContainer()) return "xugu";
+  return "sqlite";
+})();
 
 export function isXuguBackend() {
   return DB_BACKEND === "xugu";

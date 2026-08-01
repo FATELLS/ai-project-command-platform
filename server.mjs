@@ -2,7 +2,9 @@
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
-import { defaultDatabasePath, openDatabase } from "./src/db/database.mjs";
+// 启动时自动检测虚谷容器：如果存在则优先使用虚谷数据库
+if (!process.env.DB_BACKEND && !process.env.PLATFORM_DB_BACKEND) process.env.AUTO_DETECT_XUGU = "1";
+import { defaultDatabasePath, openDatabase, isXuguBackend } from "./src/db/database.mjs";
 import { applyMigrations } from "./src/db/migrate.mjs";
 import { createApp } from "./src/http/app.mjs";
 import { importLegacyProject } from "./src/migration/legacy-project.mjs";
@@ -96,7 +98,9 @@ try {
     secureCookies: ["1", "true"].includes(String(process.env.PLATFORM_COOKIE_SECURE).toLowerCase())
   }));
   server.listen(port, host, () => {
+    const backendLabel = isXuguBackend() ? "虚谷数据库 (XuGu)" : "SQLite";
     console.log(`AI Project Command Platform listening on http://${host}:${port}`);
+    console.log(`  数据库后端: ${backendLabel}`);
     console.log(`  数据目录: ${dbPath}`);
     console.log(`  配置入口: 平台设置 → AI 配置（首次使用请在网页后台填写 provider/baseUrl/apiKey/model）`);
   });

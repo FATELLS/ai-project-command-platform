@@ -16,7 +16,7 @@ function authorize(database, principal, projectId) {
 
 export function createChatService(database, options = {}) {
   const provider = options.provider ?? createProviderFromEnv(options.environment);
-  const quota = options.quota ?? createAiQuota(database, options.quotaOptions);
+  const quota = options.quota ?? createAiQuota(database, { perMinute: 30, daily: 100000, maxConcurrency: 4, ...(options.quotaOptions ?? {}) });
   const retriever = options.retriever ?? createEvidenceRetriever(database);
 
   async function answer(principal, { projectId, question }, context = {}) {

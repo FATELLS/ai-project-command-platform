@@ -168,6 +168,31 @@ async function api(path, options = {}) {
   return payload;
 }
 
+// 带 XHR 上传进度的请求函数
+function uploadWithProgress(path, options = {}) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(options.method ?? "POST", path);
+    xhr.withCredentials = true;
+    xhr.responseType = "json";
+    const headers = { accept: "application/json", ...(options.headers ?? {}) };
+    if (options.mutation && state.session?.csrfToken) headers["x-csrf-token"] = state.session.csrfToken;
+    for (const [key, value] of Object.entries(headers)) xhr.setRequestHeader(key, value);
+    if (options.onProgress) xhr.upload.addEventListener("progress", event => {
+      if (event.lengthComputable) options.onProgress(event.loaded / event.total);
+    });
+    xhr.addEventListener("load", () => {
+      if (xhr.status === 401) { handleExpired(); reject(new Error("AUTHENTICATION_REQUIRED")); return; }
+      const payload = xhr.response ?? { error: "服务器返回了无法识别的响应" };
+      if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
+      else { const error = new Error(payload.error ?? "上传失败"); error.status = xhr.status; error.code = payload.code; reject(error); }
+    });
+    xhr.addEventListener("error", () => reject(new Error("网络错误，上传失败")));
+    xhr.addEventListener("abort", () => reject(new Error("上传已取消")));
+    xhr.send(options.rawBody);
+  });
+}
+
 function renderLogin() {
   document.title = "登录 · AI 项目作战管理平台";
   const loginName = element("input", { id: "login-name", name: "loginName", autocomplete: "username", required: true, placeholder: "例如：admin" });
@@ -773,7 +798,7 @@ async function renderProject(projectId, requestedType = "overview", materialId =
           materialId, generationTaskId: materialRoute.generationTaskId ?? "", proposalId: materialRoute.proposalId ?? "",
           previewProposalId: materialRoute.previewProposalId ?? "",
           updateWorkspace: activeWorkspace === "update", updateView: materialRoute.updateView ?? "",
-          api, showToast, session: state.session
+          api, uploadWithProgress, showToast, session: state.session
         });
         slot.replaceChildren(rendered);
         document.title = `${project.name} · ${displayModule.title}`;

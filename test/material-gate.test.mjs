@@ -102,7 +102,9 @@ test("rate and concurrency reservations are server-side, persistent and independ
     const first = repository.reserveUpload({ projectId: "project-a", userId: "owner" });
     assert.throws(() => repository.reserveUpload({ projectId: "project-a", userId: "owner" }), error => error.code === "upload_concurrency_limited");
     repository.finishUpload(first.attemptId, "aborted", "test");
-    for (let index = 0; index < 4; index += 1) {
+    // maxUploadsPerMinute is 20; first + 1 rejected concurrency attempt = 2 attempts so far
+    // fill remaining window: 20 - 2 = 18 more successful attempts
+    for (let index = 0; index < 18; index += 1) {
       const slot = repository.reserveUpload({ projectId: "project-a", userId: "owner" });
       repository.finishUpload(slot.attemptId, "aborted", "test");
     }

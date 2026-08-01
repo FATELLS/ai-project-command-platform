@@ -5,9 +5,9 @@ export const MiB = 1024 * 1024;
 
 export const materialLimits = Object.freeze({
   maxFileBytes: 200 * MiB,
-  maxMaterialsPerProject: 100,
-  maxProjectArtifactBytes: 300 * MiB,
-  maxUploadsPerMinute: 6,
+  maxMaterialsPerProject: 10000,
+  maxProjectArtifactBytes: 1024 * MiB,
+  maxUploadsPerMinute: 20,
   uploadLeaseMs: 15 * 60_000,
   maxZipEntries: 2_000,
   maxZipExpandedBytes: 80 * MiB,

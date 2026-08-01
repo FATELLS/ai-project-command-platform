@@ -1635,7 +1635,7 @@ function openGenerationSheet(context, originatingMaterial, returnFocus) {
               ["更新模板", template ? updateTemplateLabel(template) : "选择首份材料后锁定"],
               ["预览结构版本", capabilityEnvelope.schemaVersion ?? "change-proposal-v1@1.0.0"],
               ["内容片段", `${Math.min(evidenceCount, maxEvidence)}/${maxEvidence}`],
-              ["今日剩余", `${usage.remainingToday ?? usage.generationRemainingToday ?? "—"} 次`],
+              ["今日剩余", `${usage.remainingToday ?? usage.generationRemainingToday ?? "不限"} 次`],
               ["重置时间", uiDate(usage.resetTime ?? capabilityEnvelope.resetTime)]
             ].flatMap(([term, value]) => [el("dt", { text: term }), el("dd", { text: String(value) })]));
             // The server safely locks at most maxEvidence blocks. A material may
@@ -1647,7 +1647,7 @@ function openGenerationSheet(context, originatingMaterial, returnFocus) {
             event.preventDefault();
             const materialIds = [...selected];
             if (!materialIds.length) { error.textContent = "请至少选择一份可用于生成的材料。"; return; }
-            error.textContent = ""; controls.setCommitting(true); create.disabled = cancel.disabled = true; create.textContent = "正在创建生成任务…";
+            error.textContent = ""; controls.setCommitting(true); create.disabled = cancel.disabled = true; create.textContent = "正在提交生成任务…";
             try {
               const response = await context.api(generationPath(context), {
                 method: "POST", mutation: true,
@@ -1749,12 +1749,12 @@ function openBatchSheet(context, returnFocus) {
             return;
           }
           submit.onclick = async () => {
-            error.textContent = ""; controls.setCommitting(true); submit.disabled = cancel.disabled = true; submit.textContent = "正在批量生成…";
+            error.textContent = ""; controls.setCommitting(true); submit.disabled = cancel.disabled = true; submit.textContent = "正在提交批量任务…";
             try {
               const result = await context.api(generationPath(context, "/batch"), { method: "POST", mutation: true });
               const summary = result.summary ?? {};
               controls.setCommitting(false); controls.close();
-              const msg = `批量生成完成：${summary.succeeded ?? 0} 成功 / ${summary.failed ?? 0} 失败 / 共 ${summary.total ?? 0} 个任务`;
+              const msg = `已创建 ${summary.pending ?? summary.total ?? 0} 个生成任务，正在后台处理…`;
               context.showToast(msg);
               context.navigate(updateUiPath(context));
             } catch (requestError) {
@@ -2013,19 +2013,43 @@ function openUploadSheet(context, ledger, refresh, returnFocus, options = {}) {
       controls.setCommitting(true); submit.disabled = true; submit.textContent = "正在上传…";
       const rows = [...queue.children];
       const uploadedMaterialIds = [];
+      const mimeFromExt = { ".md": "text/markdown", ".markdown": "text/markdown", ".txt": "text/plain", ".csv": "text/csv", ".json": "application/json", ".yaml": "application/yaml", ".yml": "application/yaml" };
       try {
-        for (let index = 0; index < files.length; index += 1) {
-          const file = files[index], row = rows[index]; row.querySelector(".status-label").textContent = "上传中";
-          row.append(el("progress", { max: 1, value: 0, ariaLabel: `${file.name} 上传进度` }));
-          const mimeFromName = file.name.match(/\.(md|markdown|txt|csv|json|yaml|yml)$/i) ? { ".md": "text/markdown", ".markdown": "text/markdown", ".txt": "text/plain", ".csv": "text/csv", ".json": "application/json", ".yaml": "application/yaml", ".yml": "application/yaml" }["." + file.name.split(".").pop().toLowerCase()] : null;
-          const receipt = await context.api(materialPath(context, "/upload"), { method: "POST", mutation: true, rawBody: file, headers: { "content-type": file.type || mimeFromName || "application/octet-stream", "x-file-name": encodeURIComponent(file.name) } });
-          row.querySelector("progress").value = 1; row.querySelector(".status-label").textContent = "材料已归档，正在提取内容";
-          if (receipt?.material?.id) {
-            uploadedMaterialIds.push(receipt.material.id);
-            await context.api(materialPath(context, `/${encodeURIComponent(receipt.material.id)}/update-template`), { method: "PATCH", mutation: true, body: { id: template.value, version: "1.0.0" } });
-            row.append(el("a", { href: `/projects/${encodeURIComponent(context.project.id)}/modules/materials/${encodeURIComponent(receipt.material.id)}`, text: "查看已归档材料" }));
+        // 并行上传（最多 3 个同时），每个文件使用 XHR 进度条
+        const maxConcurrent = 3;
+        let nextIndex = 0;
+        const uploadOne = async () => {
+          while (nextIndex < files.length) {
+            const index = nextIndex++;
+            const file = files[index], row = rows[index];
+            row.querySelector(".status-label").textContent = "上传中";
+            const progressBar = el("progress", { max: 100, value: 0, ariaLabel: `${file.name} 上传进度` });
+            const percentLabel = el("span", { className: "upload-percent", text: "0%" });
+            row.append(progressBar, percentLabel);
+            const ext = "." + file.name.split(".").pop().toLowerCase();
+            const mimeFromName = mimeFromExt[ext] ?? null;
+            try {
+              const receipt = await context.uploadWithProgress(materialPath(context, "/upload"), {
+                method: "POST", mutation: true, rawBody: file,
+                headers: { "content-type": file.type || mimeFromName || "application/octet-stream", "x-file-name": encodeURIComponent(file.name) },
+                onProgress: ratio => { progressBar.value = Math.round(ratio * 100); percentLabel.textContent = `${Math.round(ratio * 100)}%`; }
+              });
+              progressBar.value = 100; percentLabel.textContent = "100%";
+              row.querySelector(".status-label").textContent = "材料已归档，正在提取内容";
+              if (receipt?.material?.id) {
+                uploadedMaterialIds.push(receipt.material.id);
+                await context.api(materialPath(context, `/${encodeURIComponent(receipt.material.id)}/update-template`), { method: "PATCH", mutation: true, body: { id: template.value, version: "1.0.0" } });
+              }
+            } catch (uploadError) {
+              row.querySelector(".status-label").textContent = `上传失败：${uploadError.message}`;
+              row.querySelector("progress")?.remove();
+              row.querySelector(".upload-percent")?.remove();
+              throw uploadError;
+            }
           }
-        }
+        };
+        const workers = Array.from({ length: Math.min(maxConcurrent, files.length) }, () => uploadOne());
+        await Promise.all(workers);
         context.showToast("材料已归档，正在提取内容");
         input.value = "";
         queue.replaceChildren();
@@ -2476,18 +2500,60 @@ function renderProposalWorkspace(context, root) {
 }
 
 function renderGenerationTaskDetail(context, root) {
-  const load=async()=>{root.setAttribute("aria-busy","true");try{const response=await context.api(generationPath(context,`/${encodeURIComponent(context.generationTaskId)}`));const task=response.task,usage=generationUsage(task);const steps=["queued","retrieving_evidence","generating","repairing","validating","succeeded"];const reached=steps.indexOf(task.state);const timeline=el("ol",{className:"generation-timeline"},steps.map((state,index)=>el("li",{className:index<=reached?"complete":""},[el("strong",{text:generationStateLabels[state]}),el("span",{text:index<reached||task.state==="succeeded"?"已完成":index===reached?"当前步骤":"等待"})])));
+  const activeStates = new Set(["queued","retrieving_evidence","generating","repairing","validating"]);
+  let pollTimer = null;
+  const load=async()=>{
+    root.setAttribute("aria-busy","true");
+    try{
+      const response=await context.api(generationPath(context,`/${encodeURIComponent(context.generationTaskId)}`));
+      const task=response.task,usage=generationUsage(task);
+      const steps=["queued","retrieving_evidence","generating","repairing","validating","succeeded"];
+      const reached=steps.indexOf(task.state);
+      const inProgress = reached >= 0 && reached < steps.length - 1;
+      const timeline=el("ol",{className:"generation-timeline"},steps.map((state,index)=>{
+        const isCurrent = index === reached && task.state !== "succeeded" && activeStates.has(task.state);
+        const isComplete = index < reached || task.state === "succeeded";
+        return el("li",{
+          className: isComplete ? "complete" : isCurrent ? "current" : ""
+        },[
+          el("strong",{text:generationStateLabels[state]}),
+          el("span",{text: isComplete ? "已完成" : isCurrent ? "进行中…" : "等待"})
+        ]);
+      }));
       const attempts=(task.attempts??[]).map(item=>el("tr",{},[el("td",{text:String(item.attemptNumber)}),el("td",{text:item.kind}),el("td",{text:item.outcome}),el("td",{text:`${item.inputTokens+item.outputTokens}`}),el("td",{text:item.costStatus==="priced"?`${item.currency??""} ${(Number(item.costMicros)/1_000_000).toFixed(6)}`:"未配置单价，仅记录 Token"}),el("td",{text:item.resultCode??"—"})]));
-      const actions=[];if(task.proposalId)actions.push(linkTo(context,previewHref(context,task.proposalId),"查看模拟路线图","primary-button"));if(response.capabilities?.retry&&["failed_retryable","stale"].includes(task.state))actions.push(el("button",{type:"button",className:"secondary-button",text:task.state==="stale"?"基于当前版本创建新任务":"重试生成",onClick:async()=>{const result=await context.api(generationPath(context,`/${encodeURIComponent(task.id)}/retry`),{method:"POST",mutation:true,body:{idempotencyKey:crypto.randomUUID()}});context.navigate(taskHref(context,result.task.id));}}));if(response.capabilities?.create&&task.state==="failed_terminal")actions.push(el("button",{type:"button",className:"primary-button",text:"重新生成预览",onClick:event=>openGenerationSheet(context,null,event.currentTarget)}));
+      const actions=[];
+      if(task.proposalId)actions.push(linkTo(context,previewHref(context,task.proposalId),"查看模拟路线图","primary-button"));
+      if(response.capabilities?.retry&&["failed_retryable","stale"].includes(task.state))actions.push(el("button",{type:"button",className:"secondary-button",text:task.state==="stale"?"基于当前版本创建新任务":"重试生成",onClick:async()=>{const result=await context.api(generationPath(context,`/${encodeURIComponent(task.id)}/retry`),{method:"POST",mutation:true,body:{idempotencyKey:crypto.randomUUID()}});context.navigate(taskHref(context,result.task.id));}}));
+      if(response.capabilities?.create&&task.state==="failed_terminal")actions.push(el("button",{type:"button",className:"primary-button",text:"重新生成预览",onClick:event=>openGenerationSheet(context,null,event.currentTarget)}));
+      // 进度提示
+      const progressHint = inProgress ? el("div",{className:"generation-progress-hint",role:"status"},[
+        el("span",{className:"generation-spinner"}),
+        el("span",{text:`${generationStateLabels[task.state] ?? "处理中"}，预计需要 30-90 秒，页面会自动更新…`})
+      ]) : null;
       root.replaceChildren(updateFlowSteps("generation"),linkTo(context,updateUiPath(context),"← 返回本次更新","back-link"),el("section",{className:"materials-detail-card generation-task-detail"},[
         el("header",{className:"material-detail-heading"},[el("div",{},[el("span",{className:"eyebrow",text:"GENERATION TASK"}),el("h1",{text:`生成任务 ${task.id}`})]),el("span",{className:`generation-state state-${task.state}`,text:generationStateLabels[task.state]??task.state})]),
+        progressHint,
         el("p",{className:"material-boundary",text:task.state==="stale"?"发布版本已变化；此任务不会自动改用新版本。":"生成任务只创建节点预览，不会修改项目草稿或发布版本。"}),
         el("div",{className:"generation-detail-layout"},[el("section",{},[el("h2",{text:"任务进程"}),timeline]),el("aside",{className:"generation-context-card"},[el("h2",{text:"锁定上下文"}),definitionList([["项目",task.projectId],["发布基准",`${task.baseVersionLabel} · ${task.baseVersionId}`],["模板",`${task.template.id} · ${task.template.version}`],["Schema",task.schemaVersion],["材料",`${task.materials.length} 份`],["证据",`${task.evidence.length} 块`],["Token",usage.tokens],["成本",usage.cost]])])]),
         task.errorCode?el("div",{className:"generation-error-detail"},[el("p",{className:"form-error",role:"alert",text:task.state==="failed_retryable"?"节点预览生成暂时失败，未影响项目数据。可以重试。":generationErrorMessage({code:task.errorCode})}),task.validation?.details?el("p",{className:"validation-detail",text:`具体原因：${task.validation.code}${task.validation.details.changeId?`（变更项 ${task.validation.details.changeId}）`:""}${task.validation.details.field?`，字段 ${task.validation.details.field}`:""}`}):null,["AI_PROVIDER_HOST_NOT_ALLOWED","AI_PROVIDER_CONFIG_INCOMPLETE","AI_PROVIDER_CONFIG_INVALID","AI_PROVIDER_CONFIG_INVALID_URL","AI_PROVIDER_HTTP_401","AI_PROVIDER_HTTP_403"].includes(task.errorCode)?el("a",{href:"#/settings",className:"secondary-button",text:"前往设置页修改 AI 配置",onClick:event=>{event.preventDefault();context.navigate("/settings");}}):null]):null,
         actions.length?el("div",{className:"material-detail-controls"},actions):null,
         attempts.length?el("div",{className:"table-scroll",tabIndex:0,role:"region",ariaLabel:"生成尝试与用量"},[el("table",{className:"module-table generation-attempt-table"},[el("caption",{text:"生成尝试、Token 与成本"}),el("thead",{},[el("tr",{},["次数","类型","结果","Token","成本","结果码"].map(label=>el("th",{scope:"col",text:label})))]),el("tbody",{},attempts)])]):null
       ]));
-    }catch(error){if(error.message==="AUTHENTICATION_REQUIRED")return;root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h1",{text:error.status===404?"生成任务不存在或你无权访问":"无法加载生成任务"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"secondary-button",text:"返回项目更新",onClick:()=>context.navigate(updateUiPath(context))})]));}finally{root.setAttribute("aria-busy","false");}};void load();
+      // 如果任务还在进行中，设置自动轮询
+      if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+      if (inProgress) {
+        pollTimer = setTimeout(() => {
+          if (root.isConnected && location.hash === `#/projects/${context.project.id}/updates/tasks/${task.id}`) void load();
+        }, 2000);
+      }
+    }catch(error){
+      if(error.message==="AUTHENTICATION_REQUIRED")return;
+      root.replaceChildren(el("section",{className:"module-error error-panel",role:"alert"},[el("h1",{text:error.status===404?"生成任务不存在或你无权访问":"无法加载生成任务"}),el("p",{text:generationErrorMessage(error)}),el("button",{type:"button",className:"secondary-button",text:"返回项目更新",onClick:()=>context.navigate(updateUiPath(context))})]));
+    }finally{
+      root.setAttribute("aria-busy","false");
+    }
+  };
+  void load();
 }
 
 function valueText(value){

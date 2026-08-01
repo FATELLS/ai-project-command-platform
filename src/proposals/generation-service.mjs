@@ -22,7 +22,7 @@ function pricedUsage(usage, pricing) {
 
 export function createGenerationService(database, options = {}) {
   const provider = options.provider ?? createGenerationProviderFromEnv(options.environment);
-  const quota = options.quota ?? createAiQuota(database, { perMinute: 4, daily: 100, maxConcurrency: 2, ...(options.quotaOptions ?? {}) });
+  const quota = options.quota ?? createAiQuota(database, { perMinute: 20, daily: 100000, maxConcurrency: 4, ...(options.quotaOptions ?? {}) });
   const repository = options.repository ?? createProposalRepository(database, { now: options.now });
   const now = options.now ?? Date.now;
 

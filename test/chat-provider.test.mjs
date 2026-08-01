@@ -24,7 +24,7 @@ test("transient errors retry once while invalid, tool-call, truncated and oversi
   for (const payload of [
     "not json",
     JSON.stringify({ choices: [{ finish_reason: "tool_calls", message: { content: "{}", tool_calls: [{}] } }] }),
-    JSON.stringify({ choices: [{ finish_reason: "length", message: { content: "{}" } }] })
+    JSON.stringify({ choices: [{ finish_reason: "content_filter", message: { content: "{}" } }] })
   ]) {
     const provider = createOpenAiCompatibleProvider(config, { fetchImpl: async () => new Response(payload, { status: 200 }) });
     await assert.rejects(provider.generate(request), error => error.code?.startsWith("AI_PROVIDER_") && !error.message.includes("secret"));

@@ -1,5 +1,3 @@
-import { isXuguBackend } from "../db/database.mjs";
-
 const stopTerms = new Set(["什么", "如何", "是否", "请问", "项目", "目前", "这个", "那个", "the", "what", "when", "where", "which", "project"]);
 
 export function buildFtsTerms(question, maxTerms = 16) {
@@ -27,7 +25,7 @@ function rowToHit(row) {
 
 export function createEvidenceRetriever(database, options = {}) {
   const topK = Math.min(options.topK ?? 8, 8);
-  const xugu = isXuguBackend();
+  const xugu = database?._backend === "xugu";
 
   function search({ projectId, question, audience = "project_member" }) {
     const terms = buildFtsTerms(question);

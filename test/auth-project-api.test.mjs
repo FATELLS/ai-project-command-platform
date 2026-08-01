@@ -285,7 +285,7 @@ async function stopChild(child) {
 
 test("bootstrap server defaults to admin/admin123 when no password is set", async () => {
   const dataDirectory = mkdtempSync(join(tmpdir(), "platform-bootstrap-server-"));
-  const baseEnv = { ...process.env, PLATFORM_DATA_DIR: dataDirectory, HOST: "127.0.0.1", PORT: "0" };
+  const baseEnv = { ...process.env, PLATFORM_DATA_DIR: dataDirectory, PLATFORM_DB_BACKEND: "sqlite", HOST: "127.0.0.1", PORT: "0" };
   const missing = spawn(process.execPath, ["server.mjs"], {
     cwd: new URL("..", import.meta.url), env: baseEnv, stdio: ["ignore", "pipe", "pipe"]
   });

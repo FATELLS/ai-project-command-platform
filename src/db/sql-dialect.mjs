@@ -1,30 +1,27 @@
 // ============================================================
-// sql-dialect.mjs — SQL 方言适配工具
+// sql-dialect.mjs — SQL 方言���配工具
 //
 // 处理 SQLite 和虚谷之间的 SQL 语法差异
+// 基于 database 实例的 _backend 标记判断后端
 // ============================================================
 
-import { isXuguBackend } from "../db/database.mjs";
-
-const xugu = isXuguBackend();
+function isXugu(database) {
+  return database?._backend === "xugu";
+}
 
 // ----------------------------------------------------------------
-// ON CONFLICT → MERGE 转换
+// ON CONFLICT → DELETE+INSERT 转换
 // ----------------------------------------------------------------
 
 /**
  * 将 SQLite 的 INSERT ... ON CONFLICT(col) DO UPDATE SET ...
  * 转换为虚谷兼容的语法
  *
- * 策略: 在虚谷后端下使用 MERGE INTO
- * 但 MERGE 语法复杂且需要在 SQL 里嵌入完整逻辑，
- * 更简单的方式是先 DELETE 再 INSERT（在事务中）
- *
- * 实际上更实用的方式是提供辅助函数
+ * 策略: 在虚谷后端下先 DELETE 冲突行，再 INSERT（在事务中）
  */
 
 export function upsert(database, table, columns, values, conflictColumns, updateColumns) {
-  if (xugu) {
+  if (isXugu(database)) {
     // 虚谷: 先尝试 DELETE 冲突行，再 INSERT
     // 在事务中执行
     const whereClause = conflictColumns.map((col, i) => `${col} = ?`).join(" AND ");
@@ -46,7 +43,7 @@ export function upsert(database, table, columns, values, conflictColumns, update
  * INSERT OR IGNORE 的方言适配
  */
 export function insertOrIgnore(database, table, columns, values, conflictColumns) {
-  if (xugu) {
+  if (isXugu(database)) {
     // 虚谷: 检查是否存在，不存在才插入
     const whereClause = conflictColumns.map(col => `${col} = ?`).join(" AND ");
     const conflictValues = conflictColumns.map(col => values[columns.indexOf(col)]);

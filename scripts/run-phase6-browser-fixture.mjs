@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
+
+// 开发测试脚本，使用 SQLite 快速路径
+process.env.NODE_ENV = "test";
+
 import { createFakeProvider } from "../src/ai/providers/fake-provider.mjs";
 import { defaultDataDir, openDatabase } from "../src/db/database.mjs";
 import { applyMigrations } from "../src/db/migrate.mjs";

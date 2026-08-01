@@ -6,6 +6,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+
+// verify 脚本用于开发/CI 验证，使用 SQLite 快速路径（生产环境走虚谷）
+process.env.NODE_ENV = "test";
+
 import { openDatabase } from "../src/db/database.mjs";
 import { applyMigrations } from "../src/db/migrate.mjs";
 import { createApp } from "../src/http/app.mjs";

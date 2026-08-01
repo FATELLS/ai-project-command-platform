@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { withTransaction, isXuguBackend } from "./database.mjs";
+import { withTransaction } from "./database.mjs";
 import { migrationsDir as packagedMigrationsDir, isPackaged } from "../paths.mjs";
 
-// 根据后端选择 migrations 目录
+// 两个 migrations 目录路径（在 applyMigrations 调用时按 database 后端选择）
 const sqliteMigrationsDir = isPackaged
   ? packagedMigrationsDir
   : fileURLToPath(new URL("./migrations", import.meta.url));
@@ -14,9 +14,10 @@ const xuguMigrationsDir = isPackaged
   ? join(packagedMigrationsDir, "..", "xugu-migrations")
   : fileURLToPath(new URL("./xugu-migrations", import.meta.url));
 
-export const defaultMigrationsDir = isXuguBackend()
-  ? xuguMigrationsDir
-  : sqliteMigrationsDir;
+// 向后兼容导出：测试代码用它来拷贝 SQLite migration 文件。
+// 生产环境通过 applyMigrations(database) 自动根据 database._backend 选择目录。
+export const defaultMigrationsDir = sqliteMigrationsDir;
+export { sqliteMigrationsDir, xuguMigrationsDir };
 
 function checksum(value) {
   return createHash("sha256").update(value).digest("hex");
@@ -29,10 +30,12 @@ function migrationFiles(directory) {
 }
 
 export function applyMigrations(database, options = {}) {
-  const directory = options.migrationsDir ?? defaultMigrationsDir;
+  // 基于 database 实例的后端标记决定 migrations 目录和语法
+  const isXugu = database._backend === "xugu";
+  const directory = options.migrationsDir ?? (isXugu ? xuguMigrationsDir : sqliteMigrationsDir);
 
   // schema_migrations 表: 虚谷用 IDENTITY，SQLite 用 INTEGER PRIMARY KEY
-  if (isXuguBackend()) {
+  if (isXugu) {
     database.exec(`
       CREATE TABLE IF NOT EXISTS schema_migrations (
         version INTEGER PRIMARY KEY,

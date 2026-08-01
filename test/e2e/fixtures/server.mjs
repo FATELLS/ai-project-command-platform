@@ -2,6 +2,10 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+// E2E fixture server 使用 SQLite 快速路径（生产环境走虚谷）
+process.env.NODE_ENV = "test";
+
 import { createFakeProvider } from "../../../src/ai/providers/fake-provider.mjs";
 import { openDatabase } from "../../../src/db/database.mjs";
 import { applyMigrations } from "../../../src/db/migrate.mjs";

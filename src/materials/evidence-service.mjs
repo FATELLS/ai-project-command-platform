@@ -1,5 +1,3 @@
-import { isXuguBackend } from "../db/database.mjs";
-
 function decode(row) {
   return {
     id: row.externalId,
@@ -15,7 +13,7 @@ function decode(row) {
 
 export function createEvidenceService(database, options = {}) {
   const maxResults = options.maxResults ?? 8;
-  const xugu = isXuguBackend();
+  const xugu = database?._backend === "xugu";
   const access = audience => (audience === "editor" ? "editor" : "project_member");
   const columns = `b.external_id AS externalId, b.material_id AS materialId, b.extraction_version AS extractionVersion,
     b.ordinal, b.kind, b.location_json AS locationJson, b.text, b.summary`;

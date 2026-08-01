@@ -37,6 +37,7 @@ test("background lifecycle starts, reports, and gracefully stops only the platfo
     ...process.env,
     PORT: String(port),
     PLATFORM_DATA_DIR: resolve(runtimeDir, "data"),
+    PLATFORM_DB_BACKEND: "sqlite",
     PLATFORM_RUNTIME_PID_FILE: resolve(runtimeDir, "server.pid"),
     PLATFORM_RUNTIME_LOG_FILE: resolve(runtimeDir, "app.log"),
     PLATFORM_BOOTSTRAP_PASSWORD: "LifecycleTest-Only-123!",

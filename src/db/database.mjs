@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import { isPackaged, appRoot } from "../paths.mjs";
 import { createRequire } from "node:module";
-import { execSync } from "node:child_process";
 
 function findRoot() {
   if (isPackaged) return appRoot;
@@ -40,55 +39,43 @@ export function defaultDatabasePath() {
 
 // ----------------------------------------------------------------
 // 数据库后端选择
-// 优先级：DB_BACKEND 环境变量 > 默认 SQLite
-// 生产部署用 DB_BACKEND=xugu 或 AUTO_DETECT_XUGU=1 启用自动检测
+// 虚谷是唯一的生产数据库后端。
+// SQLite 仅用于单元测试/集成测试。
+//
+// 判定规则（openDatabase 无参时）：
+//   - PLATFORM_DB_BACKEND=sqlite → 测试覆盖，走 SQLite
+//   - 否则 → 虚谷（生产）
+//   openDatabase(path) → 传了路径 → 始终 SQLite
 // ----------------------------------------------------------------
 
-function detectXuguContainer() {
-  if (process.env.AUTO_DETECT_XUGU !== "1" && !process.env.PLATFORM_AUTO_DETECT_XUGU) return false;
-  const container = process.env.XUGU_CONTAINER || "xugu-dev";
-  try {
-    execSync(`docker inspect ${container} --format '{{.State.Running}}'`, { stdio: "pipe", timeout: 3000 });
-    return true;
-  } catch { return false; }
+export function isXuguBackend(path) {
+  // 显式传了路径 → SQLite 测试
+  if (path !== undefined && path !== null) return false;
+  // 测试覆盖标志
+  if (process.env.PLATFORM_DB_BACKEND === "sqlite") return false;
+  // 生产环境 → 虚谷
+  return true;
 }
 
-const DB_BACKEND = (() => {
-  const explicit = process.env.DB_BACKEND || process.env.PLATFORM_DB_BACKEND;
-  if (explicit) return explicit;
-  if (detectXuguContainer()) return "xugu";
-  return "sqlite";
-})();
-
-export function isXuguBackend() {
-  return DB_BACKEND === "xugu";
-}
-
-let _xuguModule = null;
-
-async function loadXuguModule() {
-  if (!_xuguModule) {
-    // odbc 是 CJS 包，用 createRequire 加载
-    const require = createRequire(import.meta.url);
-    _xuguModule = require("./xugu-database.cjs");
-  }
-  return _xuguModule;
-}
-
-export function openDatabase(path = defaultDatabasePath(), options = {}) {
-  if (isXuguBackend()) {
-    // 虚谷后端：同步加载 CJS 模块
+export function openDatabase(path, options = {}) {
+  if (isXuguBackend(path)) {
+    // 虚谷后端（生产默认）
     const require = createRequire(import.meta.url);
     const { openXuguDatabase } = require("./xugu-database.cjs");
-    return openXuguDatabase({
+    const db = openXuguDatabase({
       host: options.host,
       port: options.port,
       user: options.user,
       password: options.password,
       database: options.database,
     });
+    db._backend = "xugu";
+    return db;
   }
-  return openSqliteBackend(path, options);
+  // SQLite 后端（测试路径）
+  const db = openSqliteBackend(path, options);
+  db._backend = "sqlite";
+  return db;
 }
 
 function openSqliteBackend(path, options) {

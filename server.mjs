@@ -2,9 +2,7 @@
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
-// 启动时自动检测虚谷容器：如果存在则优先使用虚谷数据库
-if (!process.env.DB_BACKEND && !process.env.PLATFORM_DB_BACKEND) process.env.AUTO_DETECT_XUGU = "1";
-import { defaultDatabasePath, openDatabase, isXuguBackend } from "./src/db/database.mjs";
+import { defaultDatabasePath, openDatabase } from "./src/db/database.mjs";
 import { applyMigrations } from "./src/db/migrate.mjs";
 import { createApp } from "./src/http/app.mjs";
 import { importLegacyProject } from "./src/migration/legacy-project.mjs";
@@ -17,8 +15,10 @@ import { validateProviderConfig } from "./src/ai/providers/openai-compatible-pro
 
 const host = process.env.HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 4173);
-const dbPath = defaultDatabasePath();
-const database = openDatabase(dbPath);
+// 虚谷是唯一生产后端；集成测试通过 PLATFORM_DB_BACKEND=sqlite 走 SQLite
+const database = openDatabase(
+  process.env.PLATFORM_DB_BACKEND === "sqlite" ? defaultDatabasePath() : undefined
+);
 let server;
 let materialWorker;
 
@@ -98,10 +98,8 @@ try {
     secureCookies: ["1", "true"].includes(String(process.env.PLATFORM_COOKIE_SECURE).toLowerCase())
   }));
   server.listen(port, host, () => {
-    const backendLabel = isXuguBackend() ? "虚谷数据库 (XuGu)" : "SQLite";
     console.log(`AI Project Command Platform listening on http://${host}:${port}`);
-    console.log(`  数据库后端: ${backendLabel}`);
-    console.log(`  数据目录: ${dbPath}`);
+    console.log(`  数据库后端: 虚谷数据库 (XuGu)`);
     console.log(`  配置入口: 平台设置 → AI 配置（首次使用请在网页后台填写 provider/baseUrl/apiKey/model）`);
   });
 } catch (error) {

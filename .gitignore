@@ -45,8 +45,9 @@ _capture_*.mjs
 test-results/
 playwright-report/
 
-# 测试报告和截图
-# outputs/ 和 e2e-report/ 已纳入版本控制
+# 测试报告和截图（开发期产物，不纳入版本控制）
+outputs/
+e2e-report/
 
 # WorkBuddy 工作目录
 .workbuddy/

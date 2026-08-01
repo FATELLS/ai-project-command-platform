@@ -12,7 +12,7 @@ export function createRequestId(value) {
   return /^[a-zA-Z0-9._:-]{16,80}$/.test(id) ? id : randomUUID();
 }
 
-export function redact(value) {
+function redact(value) {
   return String(value ?? "")
     .replace(secretPattern, "$1$2[REDACTED]")
     .replace(promptPattern, "$1$2[REDACTED]")

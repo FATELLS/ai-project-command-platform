@@ -14,7 +14,7 @@
 // 虚谷版前提: xugu-pkg/ 目录下有虚谷安装包解压内容
 // ============================================================
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync, cpSync, readdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execSync } from "node:child_process";
@@ -329,7 +329,7 @@ systemctl disable ai-platform || true
   // 找到生成的 rpm 并复制到 dist
   const rpmArch = join(rpmTop, "RPMS", "x86_64");
   if (existsSync(rpmArch)) {
-    for (const f of require("node:fs").readdirSync(rpmArch)) {
+    for (const f of readdirSync(rpmArch)) {
       if (f.endsWith(".rpm")) {
         cpSync(join(rpmArch, f), join(distDir, f));
         console.log(`  产出: ${join(distDir, f)}`);

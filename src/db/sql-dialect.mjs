@@ -58,10 +58,3 @@ export function insertOrIgnore(database, table, columns, values, conflictColumns
     database.prepare(`INSERT OR IGNORE INTO ${table} (${columns.join(", ")}) VALUES (${placeholders})`).run(...values);
   }
 }
-
-/**
- * 获取当前时间戳（跨方言）
- */
-export function now() {
-  return new Date().toISOString();
-}

@@ -271,7 +271,6 @@ for (const file of [
   "src/materials/extractors/ooxml.mjs",
   "src/materials/extractors/pdf.mjs",
   "src/materials/extractors/image.mjs",
-  "src/materials/extractors/subprocess.mjs",
   "src/materials/extractors/index.mjs",
   "src/ai/errors.mjs",
   "src/ai/retriever.mjs",

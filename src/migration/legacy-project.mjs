@@ -49,10 +49,9 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
     JSON.stringify({ schemaVersion: module.schemaVersion, viewVariant: module.viewVariant })
   ));
 
-  // 检测是否有 project_cards 统一表
-  const hasCardsTable = database.prepare(
-    "SELECT name FROM sqlite_master WHERE type='table' AND name='project_cards'"
-  ).get();
+  // 双写模式：同时写入旧表和 project_cards 统一表
+  // 旧表兼容部分迁移测试场景（migration 010 之前）；统一表是正式存储
+  const hasCardsTable = (() => { try { database.prepare("SELECT 1 FROM project_cards LIMIT 1").get(); return true; } catch { return false; } })();
 
   const insertUnit = database.prepare(`
     INSERT INTO project_units (version_id, external_id, position, name, data_json) VALUES (?, ?, ?, ?, ?)
@@ -99,8 +98,8 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
   `);
   const insertOutcomeCard = hasCardsTable ? database.prepare(`
     INSERT OR IGNORE INTO project_cards (
-      version_id, external_id, element_type, position, title, state, card_attrs, created_at, updated_at
-    ) VALUES (?, ?, 'outcome', ?, ?, ?, ?, ?, ?)
+      version_id, external_id, element_type, position, title, state, start_date, card_attrs, created_at, updated_at
+    ) VALUES (?, ?, 'outcome', ?, ?, ?, ?, ?, ?, ?)
   `) : null;
   (snapshot.closures ?? []).forEach((closure, position) => {
     const data = without(closure, new Set(["id", "title", "date"]));
@@ -108,7 +107,8 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
     if (insertOutcomeCard) {
       insertOutcomeCard.run(
         versionId, closure.id, position, closure.title,
-        data.state ?? "", JSON.stringify(data), now, now
+        data.state ?? "", closure.date ?? "",
+        JSON.stringify(data), now, now
       );
     }
   });
@@ -146,8 +146,12 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
   const insertTaskLink = database.prepare(`
     INSERT INTO task_links (version_id, task_external_id, depends_on_external_id, position) VALUES (?, ?, ?, ?)
   `);
+  const insertCardLink = hasCardsTable ? database.prepare(`
+    INSERT OR IGNORE INTO project_card_links (version_id, card_external_id, depends_on_external_id, position) VALUES (?, ?, ?, ?)
+  `) : null;
   snapshot.tasks.forEach(task => (task.dependsOn ?? []).forEach((dependency, position) => {
     insertTaskLink.run(versionId, task.id, dependency, position);
+    if (insertCardLink) insertCardLink.run(versionId, task.id, dependency, position);
   }));
 
   const insertWorkstream = database.prepare(`
@@ -163,10 +167,7 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
   `) : null;
   (snapshot.companyWorkstreams ?? []).forEach((workstream, position) => {
     const data = without(workstream, new Set(["id", "title", "taskIds"]));
-    insertWorkstream.run(
-      versionId, workstream.id, position, workstream.title,
-      JSON.stringify(data)
-    );
+    insertWorkstream.run(versionId, workstream.id, position, workstream.title, JSON.stringify(data));
     if (insertWorkstreamCard) {
       const cardData = { ...data, members: workstream.taskIds ?? [] };
       insertWorkstreamCard.run(

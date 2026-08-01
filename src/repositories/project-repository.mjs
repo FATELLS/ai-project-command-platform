@@ -50,25 +50,29 @@ export function createProjectRepository(database) {
     `).get(projectId, layer);
   }
 
+  function tableExists(name) {
+    try {
+      database.prepare(`SELECT 1 FROM ${name} LIMIT 1`).get();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function getSnapshot(projectId, layer) {
     const version = resolveVersion(projectId, layer);
     if (!version) return undefined;
+
+    // 旧表路径——getSnapshot 是 legacy 兼容层，保持精确字段输出
+    // insertVersionGraph 双写旧表+统一表，这里读旧表以保证向后兼容
     const groups = rows(database, "project_units", version.id).map(row => ({
-      id: row.external_id,
-      name: row.name,
-      ...parseJson(row.data_json)
+      id: row.external_id, name: row.name, ...parseJson(row.data_json)
     }));
     const stages = rows(database, "project_stages", version.id).map(row => ({
-      id: row.external_id,
-      title: row.title,
-      date: row.date_label,
-      ...parseJson(row.data_json)
+      id: row.external_id, title: row.title, date: row.date_label, ...parseJson(row.data_json)
     }));
     const closures = rows(database, "project_closures", version.id).map(row => ({
-      id: row.external_id,
-      title: row.title,
-      date: row.date_label,
-      ...parseJson(row.data_json)
+      id: row.external_id, title: row.title, date: row.date_label, ...parseJson(row.data_json)
     }));
     const dependencyRows = database.prepare(`
       SELECT task_external_id, depends_on_external_id
@@ -81,13 +85,9 @@ export function createProjectRepository(database) {
       dependencies.set(row.task_external_id, values);
     }
     const tasks = rows(database, "project_tasks", version.id).map(row => ({
-      id: row.external_id,
-      groupId: row.unit_external_id,
-      title: row.title,
+      id: row.external_id, groupId: row.unit_external_id, title: row.title,
       ...parseJson(row.data_json),
-      startDate: row.start_date,
-      endDate: row.end_date,
-      progress: row.progress,
+      startDate: row.start_date, endDate: row.end_date, progress: row.progress,
       parentId: row.parent_external_id ?? "",
       dependsOn: dependencies.get(row.external_id) ?? []
     }));
@@ -102,28 +102,13 @@ export function createProjectRepository(database) {
       workstreamTasks.set(row.workstream_external_id, values);
     }
     const companyWorkstreams = rows(database, "project_workstreams", version.id).map(row => ({
-      id: row.external_id,
-      title: row.title,
-      ...parseJson(row.data_json),
+      id: row.external_id, title: row.title, ...parseJson(row.data_json),
       taskIds: workstreamTasks.get(row.external_id) ?? []
     }));
     return {
       ...parseJson(version.metadataJson),
-      groups,
-      stages,
-      closures,
-      tasks,
-      companyWorkstreams
+      groups, stages, closures, tasks, companyWorkstreams
     };
-  }
-
-  function tableExists(name) {
-    try {
-      database.prepare(`SELECT 1 FROM ${name} LIMIT 1`).get();
-      return true;
-    } catch {
-      return false;
-    }
   }
 
   function loadCardsFromUnifiedTable(versionId) {
@@ -231,91 +216,10 @@ export function createProjectRepository(database) {
 
     let units, stages, closures, tasks, workstreams, risks, metrics;
 
-    const useUnified = tableExists("project_cards") &&
-      database.prepare("SELECT 1 FROM project_cards WHERE version_id = ? LIMIT 1").get(versionId);
-
-    if (useUnified) {
-      const unified = loadCardsFromUnifiedTable(versionId);
-      units = unified.units; stages = unified.stages; closures = unified.closures;
-      tasks = unified.tasks; workstreams = unified.workstreams;
-      risks = unified.risks; metrics = unified.metrics;
-    } else {
-      units = database.prepare(`
-        SELECT external_id AS id, name, data_json AS dataJson
-        FROM project_units WHERE version_id = ? ORDER BY position
-      `).all(versionId).map(row => ({ ...parseJson(row.dataJson), id: row.id, name: row.name }));
-      stages = database.prepare(`
-        SELECT external_id AS id, title, date_label AS dateLabel, data_json AS dataJson
-        FROM project_stages WHERE version_id = ? ORDER BY position
-      `).all(versionId).map(row => ({ ...parseJson(row.dataJson), id: row.id, title: row.title, dateLabel: row.dateLabel }));
-      closures = database.prepare(`
-        SELECT external_id AS id, title, date_label AS dateLabel, data_json AS dataJson
-        FROM project_closures WHERE version_id = ? ORDER BY position
-      `).all(versionId).map(row => {
-        const data = parseJson(row.dataJson);
-        return {
-          id: row.id, title: row.title, dateLabel: row.dateLabel,
-          state: data.state ?? "", between: data.between ?? [],
-          description: data.description ?? "", result: data.result ?? "",
-          source: data.source ?? "", previewAssets: data.previewImages ?? []
-        };
-      });
-      const dependencyRows = database.prepare(`
-        SELECT task_external_id AS taskId, depends_on_external_id AS dependencyId
-        FROM task_links WHERE version_id = ? ORDER BY task_external_id, position
-      `).all(versionId);
-      const dependencies = new Map();
-      for (const row of dependencyRows) {
-        const values = dependencies.get(row.taskId) ?? [];
-        values.push(row.dependencyId);
-        dependencies.set(row.taskId, values);
-      }
-      tasks = database.prepare(`
-        SELECT external_id AS id, unit_external_id AS unitId, parent_external_id AS parentId,
-               title, start_date AS startDate, end_date AS endDate, progress, data_json AS dataJson
-        FROM project_tasks WHERE version_id = ? ORDER BY position
-      `).all(versionId).map(row => {
-        const data = parseJson(row.dataJson);
-        return {
-          ...data, id: row.id, unitId: row.unitId, parentId: row.parentId ?? "",
-          title: row.title, startDate: row.startDate, endDate: row.endDate,
-          progress: row.progress, dependsOn: dependencies.get(row.id) ?? [],
-          owner: data.owner ?? "", state: data.state ?? "", expectedOutput: data.expectedOutput ?? ""
-        };
-      });
-      const workstreamTaskRows = database.prepare(`
-        SELECT workstream_external_id AS workstreamId, task_external_id AS taskId
-        FROM workstream_tasks WHERE version_id = ? ORDER BY workstream_external_id, position
-      `).all(versionId);
-      const workstreamTasks = new Map();
-      for (const row of workstreamTaskRows) {
-        const values = workstreamTasks.get(row.workstreamId) ?? [];
-        values.push(row.taskId);
-        workstreamTasks.set(row.workstreamId, values);
-      }
-      workstreams = database.prepare(`
-        SELECT external_id AS id, title, data_json AS dataJson
-        FROM project_workstreams WHERE version_id = ? ORDER BY position
-      `).all(versionId).map(row => ({
-        id: row.id, title: row.title,
-        description: parseJson(row.dataJson).description ?? "",
-        taskIds: workstreamTasks.get(row.id) ?? []
-      }));
-      risks = database.prepare(`
-        SELECT external_id AS id, title, severity, status, owner, mitigation,
-               due_date AS dueDate, source
-        FROM project_risks WHERE version_id = ? ORDER BY position
-      `).all(versionId);
-      metrics = database.prepare(`
-        SELECT external_id AS id, name, value_json AS valueJson, unit, status,
-               as_of AS asOf, target_json AS targetJson, source
-        FROM project_metrics WHERE version_id = ? ORDER BY position
-      `).all(versionId).map(row => ({
-        id: row.id, name: row.name, value: parseNullableJson(row.valueJson),
-        unit: row.unit, status: row.status, asOf: row.asOf,
-        target: parseNullableJson(row.targetJson), source: row.source
-      }));
-    }
+    const unified = loadCardsFromUnifiedTable(versionId);
+    units = unified.units; stages = unified.stages; closures = unified.closures;
+    tasks = unified.tasks; workstreams = unified.workstreams;
+    risks = unified.risks; metrics = unified.metrics;
 
     return {
       projectId: context.projectId,
@@ -376,27 +280,15 @@ export function createProjectRepository(database) {
   }
 
   function countVersion(versionId) {
-    const useUnified = tableExists("project_cards") &&
-      database.prepare("SELECT 1 FROM project_cards WHERE version_id = ? LIMIT 1").get(versionId);
-    if (useUnified) {
-      const countType = type => database.prepare(
-        `SELECT count(*) AS count FROM project_cards WHERE version_id = ? AND element_type = ?`
-      ).get(versionId, type).count;
-      return {
-        units: countType("unit"),
-        tasks: countType("task"),
-        stages: countType("stage"),
-        closures: countType("outcome"),
-        workstreams: countType("workstream")
-      };
-    }
-    const count = table => database.prepare(`SELECT count(*) AS count FROM ${table} WHERE version_id = ?`).get(versionId).count;
+    const countType = type => database.prepare(
+      `SELECT count(*) AS count FROM project_cards WHERE version_id = ? AND element_type = ?`
+    ).get(versionId, type).count;
     return {
-      units: count("project_units"),
-      tasks: count("project_tasks"),
-      stages: count("project_stages"),
-      closures: count("project_closures"),
-      workstreams: count("project_workstreams")
+      units: countType("unit"),
+      tasks: countType("task"),
+      stages: countType("stage"),
+      closures: countType("outcome"),
+      workstreams: countType("workstream")
     };
   }
 
@@ -414,16 +306,12 @@ export function createProjectRepository(database) {
       : filters.sort === "updated"
         ? "p.updated_at DESC, p.name COLLATE NOCASE ASC"
         : "CASE WHEN recent.last_accessed_at IS NULL THEN 1 ELSE 0 END, recent.last_accessed_at DESC, p.updated_at DESC";
-    const useUnified = tableExists("project_cards");
-    const unitCountExpr = useUnified
-      ? "(SELECT count(*) FROM project_cards c WHERE c.version_id = p.published_version_id AND c.element_type = 'unit')"
-      : "(SELECT count(*) FROM project_units u WHERE u.version_id = p.published_version_id)";
-    const taskCountExpr = useUnified
-      ? "(SELECT count(*) FROM project_cards c WHERE c.version_id = p.published_version_id AND c.element_type = 'task')"
-      : "(SELECT count(*) FROM project_tasks t WHERE t.version_id = p.published_version_id)";
-    const stageCountExpr = useUnified
-      ? "(SELECT count(*) FROM project_cards c WHERE c.version_id = p.published_version_id AND c.element_type = 'stage')"
-      : "(SELECT count(*) FROM project_stages s WHERE s.version_id = p.published_version_id)";
+    const unitCountExpr =
+      "(SELECT count(*) FROM project_cards c WHERE c.version_id = p.published_version_id AND c.element_type = 'unit')";
+    const taskCountExpr =
+      "(SELECT count(*) FROM project_cards c WHERE c.version_id = p.published_version_id AND c.element_type = 'task')";
+    const stageCountExpr =
+      "(SELECT count(*) FROM project_cards c WHERE c.version_id = p.published_version_id AND c.element_type = 'stage')";
     const rows = database.prepare(`
       SELECT p.id, p.name, p.template_id AS templateId, p.template_version AS templateVersion,
              p.status, p.updated_at AS updatedAt, p.terminology_json AS terminologyJson,

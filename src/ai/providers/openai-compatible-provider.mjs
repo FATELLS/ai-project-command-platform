@@ -36,8 +36,10 @@ export function createOpenAiCompatibleProvider(config, options = {}) {
       if (!response.ok) { if (attempt === 0 && retryStatuses.has(response.status)) { await sleep(1); continue; } throw safeProviderError(`AI_PROVIDER_HTTP_${response.status}`); }
       let payload; try { payload = JSON.parse(body); } catch { throw safeProviderError("AI_PROVIDER_INVALID_JSON"); }
       if (!Array.isArray(payload.choices) || payload.choices.length !== 1) throw safeProviderError("AI_PROVIDER_INVALID_OUTPUT");
-      const choice = payload.choices[0]; if (choice.message?.tool_calls || choice.finish_reason !== "stop" || typeof choice.message?.content !== "string" || !choice.message.content.trim() || choice.message.content.length > (config.maxContentCharacters ?? 16_000)) throw safeProviderError("AI_PROVIDER_INVALID_OUTPUT");
-      return { content: choice.message.content, usage: { input: Number(payload.usage?.prompt_tokens ?? 0), output: Number(payload.usage?.completion_tokens ?? 0) }, providerLabel: String(config.safeLabel ?? "openai-compatible").slice(0, 80) };
+      const choice = payload.choices[0]; if (choice.message?.tool_calls || !["stop", "length"].includes(choice.finish_reason) || typeof choice.message?.content !== "string" || !choice.message.content.trim() || choice.message.content.length > (config.maxContentCharacters ?? 16_000)) throw safeProviderError("AI_PROVIDER_INVALID_OUTPUT");
+      const rawContent = choice.message.content.trim();
+      const extracted = rawContent.replace(/^```(?:json|JSON)?\s*\n?/, "").replace(/\n?```\s*$/, "").trim();
+      return { content: extracted, usage: { input: Number(payload.usage?.prompt_tokens ?? 0), output: Number(payload.usage?.completion_tokens ?? 0) }, providerLabel: String(config.safeLabel ?? "openai-compatible").slice(0, 80) };
     }
     throw safeProviderError("AI_PROVIDER_UNAVAILABLE");
   } });

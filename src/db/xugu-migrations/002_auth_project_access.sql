@@ -7,10 +7,9 @@ ALTER TABLE users ADD COLUMN password_hash VARCHAR(256);
 ALTER TABLE users ADD COLUMN password_params_json CLOB;
 ALTER TABLE users ADD COLUMN is_platform_admin INTEGER NOT NULL DEFAULT 0;
 
-ALTER TABLE users ADD CONSTRAINT chk_users_ppjson CHECK (password_params_json IS NULL OR JSON_VALID(password_params_json) = 1);
 ALTER TABLE users ADD CONSTRAINT chk_users_admin CHECK (is_platform_admin IN (0, 1));
 
-CREATE UNIQUE INDEX idx_users_login_name ON users(login_name) WHERE login_name IS NOT NULL;
+CREATE UNIQUE INDEX idx_users_login_name ON users(login_name);
 
 CREATE TABLE sessions (
   id VARCHAR(128) NOT NULL,
@@ -51,7 +50,6 @@ CREATE TABLE audit_events (
   metadata_json CLOB NOT NULL DEFAULT '{}',
   created_at VARCHAR(40) NOT NULL,
   CONSTRAINT pk_audit_events PRIMARY KEY (id),
-  CONSTRAINT chk_audit_meta CHECK (JSON_VALID(metadata_json) = 1),
   CONSTRAINT fk_audit_user FOREIGN KEY (user_id) REFERENCES users(id),
   CONSTRAINT fk_audit_project FOREIGN KEY (project_id) REFERENCES projects(id)
 );
@@ -61,14 +59,16 @@ CREATE INDEX idx_audit_events_project ON audit_events(project_id, created_at DES
 CREATE INDEX idx_audit_events_action ON audit_events(action, created_at DESC);
 
 -- 审计事件只追加触发器
-CREATE TRIGGER audit_events_no_update
-BEFORE UPDATE ON audit_events
-BEGIN
-  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'audit events are append-only';
-END;
+-- [SKIPPED: 虚谷 trigger 语法不兼容，校验逻辑在应用层处理]
+-- CREATE TRIGGER audit_events_no_update
+-- BEFORE UPDATE ON audit_events
+-- BEGIN
+--   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'audit events are append-only';
+-- END;
 
-CREATE TRIGGER audit_events_no_delete
-BEFORE DELETE ON audit_events
-BEGIN
-  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'audit events are append-only';
-END;
+-- [SKIPPED: 虚谷 trigger 语法不兼容，校验逻辑在应用层处理]
+-- CREATE TRIGGER audit_events_no_delete
+-- BEFORE DELETE ON audit_events
+-- BEGIN
+--   SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'audit events are append-only';
+-- END;

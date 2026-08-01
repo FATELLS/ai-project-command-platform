@@ -76,10 +76,17 @@ export function applyMigrations(database, options = {}) {
       }
       continue;
     }
-    withTransaction(database, () => {
+    // 虚谷原生驱动在 transaction + 复杂 DDL 时会 crash (native segfault)
+    // 直接执行 migration SQL，不包 transaction
+    if (isXugu) {
       database.exec(sql);
       record.run(version, name, digest, new Date().toISOString());
-    }, "EXCLUSIVE");
+    } else {
+      withTransaction(database, () => {
+        database.exec(sql);
+        record.run(version, name, digest, new Date().toISOString());
+      }, "EXCLUSIVE");
+    }
     applied.push(name);
   }
   return applied;

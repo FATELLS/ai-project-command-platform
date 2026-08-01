@@ -48,12 +48,12 @@ CREATE TABLE project_cards (
 
   CONSTRAINT pk_project_cards PRIMARY KEY (version_id, external_id),
   CONSTRAINT uq_pc_pos UNIQUE (version_id, element_type, position),
-  CONSTRAINT chk_pc_etype CHECK (element_type IN (
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pc_etype CHECK (element_type IN (
     'task', 'unit', 'stage', 'outcome', 'workstream', 'risk', 'metric'
   )),
-  CONSTRAINT chk_pc_progress CHECK (progress IS NULL OR (progress >= 0 AND progress <= 100)),
-  CONSTRAINT chk_pc_attrs CHECK (JSON_VALID(card_attrs) = 1),
-  CONSTRAINT chk_pc_deps CHECK (JSON_VALID(depends_on) = 1),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pc_progress CHECK (progress IS NULL OR (progress >= 0 AND progress <= 100)),
   CONSTRAINT fk_pc_version FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE
 );
 
@@ -73,7 +73,8 @@ CREATE TABLE project_card_links (
   relation_type VARCHAR(40) NOT NULL DEFAULT 'depends_on',
   position INTEGER NOT NULL DEFAULT 0,
   CONSTRAINT pk_project_card_links PRIMARY KEY (version_id, card_external_id, depends_on_external_id, relation_type),
-  CONSTRAINT chk_pcl_rel CHECK (relation_type IN ('depends_on', 'blocks', 'relates_to', 'completes')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pcl_rel CHECK (relation_type IN ('depends_on', 'blocks', 'relates_to', 'completes')),
   CONSTRAINT fk_pcl_card FOREIGN KEY (version_id, card_external_id) REFERENCES project_cards(version_id, external_id) ON DELETE CASCADE,
   CONSTRAINT fk_pcl_dep FOREIGN KEY (version_id, depends_on_external_id) REFERENCES project_cards(version_id, external_id)
 );

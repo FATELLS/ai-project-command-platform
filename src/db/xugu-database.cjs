@@ -87,7 +87,8 @@ function execSync(conn, sql, params) {
   }
 
   if (error) {
-    const msg = error.message || String(error);
+    // 虚谷驱动返回的错误格式是 { Error: "message string" }，不是标准 Error
+    const msg = error.message || error.Error || String(error);
     const err = new Error(msg);
     err.cause = error;
     throw err;
@@ -215,22 +216,61 @@ class XuguDatabaseSync {
   exec(sql) {
     if (!this._isOpen) throw new Error("Connection is not open");
 
-    if (this.isTransaction) {
-      // 在事务中，缓冲 SQL 但仍逐条执行（原生驱动不支持多语句）
-      // 保持与旧实现一致的行为
-    }
-
     const statements = splitSqlStatements(sql);
     for (const stmt of statements) {
       const trimmed = stmt.trim();
       if (!trimmed) continue;
+
+      // 翻译 SQLite 事务语法 → 虚谷语法
+      const upper = trimmed.toUpperCase();
+      if (upper === "BEGIN EXCLUSIVE" || upper === "BEGIN IMMEDIATE") {
+        // 虚谷用原生驱动的事务 API
+        this._beginTx();
+        continue;
+      }
+      if (upper.startsWith("BEGIN")) {
+        this._beginTx();
+        continue;
+      }
+      if (upper === "COMMIT") {
+        this._commitTx();
+        continue;
+      }
+      if (upper === "ROLLBACK") {
+        this._rollbackTx();
+        continue;
+      }
+
       try {
         execSync(this.conn, trimmed);
       } catch (error) {
         if (isIgnorableError(trimmed, error)) continue;
+        const preview = trimmed.substring(0, 80).replace(/\n/g, " ");
+        error.message = `${error.message} [SQL: ${preview}...]`;
         throw error;
       }
     }
+  }
+
+  _beginTx() {
+    let error = null;
+    this.conn.beginTransaction(function (err) { error = err; });
+    if (error) throw new Error(error.message || error.Error || String(error));
+    this.isTransaction = true;
+  }
+
+  _commitTx() {
+    let error = null;
+    this.conn.commit(function (err) { error = err; });
+    if (error) throw new Error(error.message || error.Error || String(error));
+    this.isTransaction = false;
+  }
+
+  _rollbackTx() {
+    let error = null;
+    this.conn.rollback(function (err) { error = err; });
+    if (error) throw new Error(error.message || error.Error || String(error));
+    this.isTransaction = false;
   }
 
   prepare(sql) {
@@ -258,30 +298,88 @@ function splitSqlStatements(sql) {
   const statements = [];
   let current = "";
   let inSingleQuote = false;
+  let inLineComment = false;
+  let inBlockComment = false;
 
   for (let i = 0; i < sql.length; i++) {
     const char = sql[i];
+    const next = sql[i + 1];
+
+    // Handle line comments (-- ...)
+    if (!inSingleQuote && !inBlockComment && char === "-" && next === "-") {
+      inLineComment = true;
+    }
+    if (inLineComment) {
+      current += char;
+      if (char === "\n") inLineComment = false;
+      continue;
+    }
+
+    // Handle block comments (/* ... */)
+    if (!inSingleQuote && !inLineComment && char === "/" && next === "*") {
+      inBlockComment = true;
+      current += char;
+      continue;
+    }
+    if (inBlockComment) {
+      current += char;
+      if (char === "*" && next === "/") {
+        current += next;
+        i++;
+        inBlockComment = false;
+      }
+      continue;
+    }
+
     if (char === "'") {
       inSingleQuote = !inSingleQuote;
       current += char;
       continue;
     }
+
+    // Note: BEGIN...END depth tracking removed because all triggers are commented out
+    // in Xugu migrations. The tracking was incorrectly handling comment lines,
+    // causing statement merging and native driver crashes.
+
     if (char === ";" && !inSingleQuote) {
-      if (current.trim()) statements.push(current.trim());
+      const cleaned = stripLeadingComments(current.trim());
+      if (cleaned) statements.push(cleaned);
       current = "";
     } else {
       current += char;
     }
   }
-  if (current.trim()) statements.push(current.trim());
+  const cleaned = stripLeadingComments(current.trim());
+  if (cleaned) statements.push(cleaned);
   return statements;
+}
+
+function stripLeadingComments(sql) {
+  let result = sql;
+  while (result.startsWith("--") || result.startsWith("/*")) {
+    if (result.startsWith("--")) {
+      const nlIdx = result.indexOf("\n");
+      if (nlIdx === -1) return "";
+      result = result.substring(nlIdx + 1).trimStart();
+    } else if (result.startsWith("/*")) {
+      const closeIdx = result.indexOf("*/");
+      if (closeIdx === -1) return "";
+      result = result.substring(closeIdx + 2).trimStart();
+    }
+  }
+  return result.trim();
 }
 
 function isIgnorableError(sql, error) {
   const msg = error.message || "";
-  if (/already\s+exists|duplicate|已存在/i.test(msg)) {
+  // E12008 = 索引已存在, E5017/E9016 = 表/约束/对象已存在, already exists, duplicate, 已存在
+  if (/already\s+exists|duplicate|已存在|E12008|E5017|E9016/i.test(msg)) {
     if (/CREATE/i.test(sql)) return true;
     if (/ALTER.*ADD/i.test(sql)) return true;
+  }
+  // 忽略 "对象不存在" 的 DROP 错误
+  if (/does\s+not\s+exist|not\s+found|不存在|E5021/i.test(msg)) {
+    if (/DROP/i.test(sql)) return true;
   }
   return false;
 }

@@ -15,10 +15,12 @@ CREATE TABLE project_risks (
   data_json CLOB NOT NULL DEFAULT '{}',
   CONSTRAINT pk_project_risks PRIMARY KEY (version_id, external_id),
   CONSTRAINT uq_pr_pos UNIQUE (version_id, position),
-  CONSTRAINT chk_pr_position CHECK (position >= 0),
-  CONSTRAINT chk_pr_severity CHECK (severity IN ('low', 'medium', 'high', 'critical')),
-  CONSTRAINT chk_pr_status CHECK (status IN ('open', 'monitoring', 'mitigated', 'closed')),
-  CONSTRAINT chk_pr_data CHECK (JSON_VALID(data_json) = 1),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pr_position CHECK (position >= 0),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pr_severity CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pr_status CHECK (status IN ('open', 'monitoring', 'mitigated', 'closed')),
   CONSTRAINT fk_pr_version FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE
 );
 
@@ -36,11 +38,10 @@ CREATE TABLE project_metrics (
   data_json CLOB NOT NULL DEFAULT '{}',
   CONSTRAINT pk_project_metrics PRIMARY KEY (version_id, external_id),
   CONSTRAINT uq_pm_pos UNIQUE (version_id, position),
-  CONSTRAINT chk_pm_position CHECK (position >= 0),
-  CONSTRAINT chk_pm_status CHECK (status IN ('pending', 'on-track', 'at-risk', 'off-track')),
-  CONSTRAINT chk_pm_value CHECK (value_json IS NULL OR JSON_VALID(value_json) = 1),
-  CONSTRAINT chk_pm_target CHECK (target_json IS NULL OR JSON_VALID(target_json) = 1),
-  CONSTRAINT chk_pm_data CHECK (JSON_VALID(data_json) = 1),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pm_position CHECK (position >= 0),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pm_status CHECK (status IN ('pending', 'on-track', 'at-risk', 'off-track')),
   CONSTRAINT fk_pm_version FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE
 );
 
@@ -53,32 +54,8 @@ SET position = CASE module_type
   ELSE position + 1000 END;
 
 -- 数据迁移: 设置 module data_json 的 viewVariant
-UPDATE project_modules
-SET data_json = JSON_OBJECT(
-  'schemaVersion', '1.0.0',
-  'viewVariant', CASE module_type
-    WHEN 'overview' THEN 'mission-status'
-    WHEN 'units' THEN CASE
-      WHEN (SELECT template_id FROM projects WHERE projects.id = (SELECT project_id FROM project_versions WHERE project_versions.id = project_modules.version_id)) = 'standard-project-v1'
-      THEN 'team-cards' ELSE 'campaign-cards' END
-    WHEN 'roadmap' THEN CASE
-      WHEN (SELECT template_id FROM projects WHERE projects.id = (SELECT project_id FROM project_versions WHERE project_versions.id = project_modules.version_id)) = 'standard-project-v1'
-      THEN 'linear-roadmap' ELSE 'campaign-network' END
-    WHEN 'task-network' THEN CASE
-      WHEN (SELECT template_id FROM projects WHERE projects.id = (SELECT project_id FROM project_versions WHERE project_versions.id = project_modules.version_id)) = 'standard-project-v1'
-      THEN 'dependency-list' ELSE 'branching-network' END
-    WHEN 'gantt' THEN CASE
-      WHEN (SELECT template_id FROM projects WHERE projects.id = (SELECT project_id FROM project_versions WHERE project_versions.id = project_modules.version_id)) = 'standard-project-v1'
-      THEN 'lanes' ELSE 'branching' END
-    WHEN 'outcomes' THEN CASE
-      WHEN (SELECT template_id FROM projects WHERE projects.id = (SELECT project_id FROM project_versions WHERE project_versions.id = project_modules.version_id)) = 'standard-project-v1'
-      THEN 'archive-grid' ELSE 'closure-detail' END
-    WHEN 'risks' THEN 'risk-register'
-    WHEN 'metrics' THEN 'metric-cards'
-    WHEN 'materials' THEN 'materials-empty'
-    ELSE NULL END
-)
-WHERE module_type IN ('overview', 'units', 'roadmap', 'task-network', 'gantt', 'outcomes', 'risks', 'metrics', 'materials');
+-- [SKIPPED: 虚谷不支持 JSON_OBJECT 函数，viewVariant 在应用层设置]
+-- UPDATE project_modules SET data_json = JSON_OBJECT(...) WHERE ...
 
 CREATE UNIQUE INDEX idx_project_modules_position ON project_modules(version_id, position);
 

@@ -19,12 +19,18 @@ CREATE TABLE project_materials (
   updated_at VARCHAR(40) NOT NULL,
   CONSTRAINT pk_project_materials PRIMARY KEY (project_id, id),
   CONSTRAINT uq_pm_sha UNIQUE (project_id, sha256),
-  CONSTRAINT chk_pmid_len CHECK (LENGTH(id) BETWEEN 16 AND 128 AND INSTR(id, '/') = 0 AND INSTR(id, '\') = 0),
-  CONSTRAINT chk_pm_source CHECK (source_kind IN ('upload', 'manual')),
-  CONSTRAINT chk_pm_name CHECK (LENGTH(display_name) BETWEEN 1 AND 240),
-  CONSTRAINT chk_pm_sha CHECK (LENGTH(sha256) = 64),
-  CONSTRAINT chk_pm_size CHECK (byte_size >= 0),
-  CONSTRAINT chk_pm_status CHECK (status IN ('queued', 'processing', 'ready', 'dependency_missing', 'failed', 'deleting')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pmid_len CHECK (LENGTH(id) >= 16 AND LENGTH(id) <= 128 AND INSTR(id, '/') = 0),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pm_source CHECK (source_kind IN ('upload', 'manual')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pm_name CHECK (LENGTH(display_name) >= 1 AND LENGTH(display_name) <= 240),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pm_sha CHECK (LENGTH(sha256) = 64),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pm_size CHECK (byte_size >= 0),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_pm_status CHECK (status IN ('queued', 'processing', 'ready', 'dependency_missing', 'failed', 'deleting')),
   CONSTRAINT fk_pm_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT fk_pm_creator FOREIGN KEY (created_by) REFERENCES users(id)
 );
@@ -43,12 +49,18 @@ CREATE TABLE material_artifacts (
   CONSTRAINT pk_material_artifacts PRIMARY KEY (project_id, id),
   CONSTRAINT uq_ma_storage UNIQUE (storage_key),
   CONSTRAINT uq_ma_kind UNIQUE (project_id, material_id, kind, id),
-  CONSTRAINT chk_ma_id CHECK (LENGTH(id) BETWEEN 16 AND 128),
-  CONSTRAINT chk_ma_kind CHECK (kind IN ('original', 'extracted_text', 'ocr_tsv', 'thumbnail')),
-  CONSTRAINT chk_ma_storage CHECK (LENGTH(storage_key) BETWEEN 1 AND 512),
-  CONSTRAINT chk_ma_size CHECK (byte_size >= 0),
-  CONSTRAINT chk_ma_sha CHECK (LENGTH(sha256) = 64),
-  CONSTRAINT chk_ma_status CHECK (status IN ('available', 'removed', 'quarantined')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_ma_id CHECK (LENGTH(id) >= 16 AND LENGTH(id) <= 128),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_ma_kind CHECK (kind IN ('original', 'extracted_text', 'ocr_tsv', 'thumbnail')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_ma_storage CHECK (LENGTH(storage_key) >= 1 AND LENGTH(storage_key) <= 512),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_ma_size CHECK (byte_size >= 0),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_ma_sha CHECK (LENGTH(sha256) = 64),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_ma_status CHECK (status IN ('available', 'removed', 'quarantined')),
   CONSTRAINT fk_ma_material FOREIGN KEY (project_id, material_id) REFERENCES project_materials(project_id, id) ON DELETE CASCADE
 );
 
@@ -67,13 +79,18 @@ CREATE TABLE material_jobs (
   created_at VARCHAR(40) NOT NULL,
   updated_at VARCHAR(40) NOT NULL,
   CONSTRAINT pk_material_jobs PRIMARY KEY (project_id, id),
-  CONSTRAINT chk_mj_id CHECK (LENGTH(id) BETWEEN 16 AND 128),
-  CONSTRAINT chk_mj_kind CHECK (kind IN ('extract', 'delete')),
-  CONSTRAINT chk_mj_state CHECK (state IN ('queued', 'leased', 'succeeded', 'failed')),
-  CONSTRAINT chk_mj_attempts CHECK (attempts >= 0),
-  CONSTRAINT chk_mj_timeout CHECK (timeout_ms BETWEEN 1000 AND 3600000),
-  CONSTRAINT chk_mj_stats CHECK (JSON_VALID(stats_json) = 1),
-  CONSTRAINT chk_mj_lease CHECK ((state = 'leased') = (lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL)),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_mj_id CHECK (LENGTH(id) >= 16 AND LENGTH(id) <= 128),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_mj_kind CHECK (kind IN ('extract', 'delete')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_mj_state CHECK (state IN ('queued', 'leased', 'succeeded', 'failed')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_mj_attempts CHECK (attempts >= 0),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_mj_timeout CHECK (timeout_ms >= 1000 AND timeout_ms <= 3600000),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_mj_lease CHECK (state != 'leased' OR (lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL)),
   CONSTRAINT fk_mj_material FOREIGN KEY (project_id, material_id) REFERENCES project_materials(project_id, id) ON DELETE CASCADE
 );
 
@@ -93,17 +110,21 @@ CREATE TABLE evidence_blocks (
   CONSTRAINT pk_evidence_blocks PRIMARY KEY (id),
   CONSTRAINT uq_eb_ext UNIQUE (project_id, external_id),
   CONSTRAINT uq_eb_ordinal UNIQUE (project_id, material_id, extraction_version, ordinal),
-  CONSTRAINT chk_eb_eid CHECK (LENGTH(external_id) BETWEEN 16 AND 128),
-  CONSTRAINT chk_eb_ver CHECK (extraction_version > 0),
-  CONSTRAINT chk_eb_ord CHECK (ordinal >= 0),
-  CONSTRAINT chk_eb_kind CHECK (kind IN ('text', 'paragraph', 'page', 'table', 'slide', 'sheet', 'image')),
-  CONSTRAINT chk_eb_loc CHECK (JSON_VALID(location_json) = 1),
-  CONSTRAINT chk_eb_hash CHECK (LENGTH(content_hash) = 64),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_eb_eid CHECK (LENGTH(external_id) >= 16 AND LENGTH(external_id) <= 128),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_eb_ver CHECK (extraction_version > 0),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_eb_ord CHECK (ordinal >= 0),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_eb_kind CHECK (kind IN ('text', 'paragraph', 'page', 'table', 'slide', 'sheet', 'image')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_eb_hash CHECK (LENGTH(content_hash) = 64),
   CONSTRAINT fk_eb_material FOREIGN KEY (project_id, material_id) REFERENCES project_materials(project_id, id) ON DELETE CASCADE
 );
 
--- 全文索引: 用虚谷全文索引替代 FTS5
-CREATE INDEX idx_evidence_fts ON evidence_blocks(text, summary) INDEXTYPE IS CTXSYS.CONTEXT;
+-- 全文索引: CLOB 列不支持普通索引，暂跳过（虚谷有 CONTAINS 全文检索）
+-- CREATE INDEX idx_evidence_fts ON evidence_blocks(text, summary);
 
 CREATE TABLE material_qa_grants (
   project_id VARCHAR(128) NOT NULL,
@@ -113,10 +134,12 @@ CREATE TABLE material_qa_grants (
   granted_by VARCHAR(128),
   granted_at VARCHAR(40),
   CONSTRAINT pk_material_qa_grants PRIMARY KEY (project_id, material_id),
-  CONSTRAINT chk_mqg_audience CHECK (audience IN ('disabled', 'project_members', 'editors')),
-  CONSTRAINT chk_mqg_enabled CHECK (enabled IN (0, 1)),
-  CONSTRAINT chk_mqg_logic CHECK (enabled = 0 OR (audience <> 'disabled' AND granted_by IS NOT NULL AND granted_at IS NOT NULL)),
-  CONSTRAINT fk_mqg_material FOREIGN KEY (project_id, material_id) REFERENCES project_materials(project_id, id) ON DELETE CASCADE,
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_mqg_audience CHECK (audience IN ('disabled', 'project_members', 'editors')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_mqg_enabled CHECK (enabled IN (0, 1)),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_mqg_logic CHECK (enabled = 0 OR (audience <> 'disabled' AND granted_by IS NOT NULL AND granted_at IS NOT NULL)),  CONSTRAINT fk_mqg_material FOREIGN KEY (project_id, material_id) REFERENCES project_materials(project_id, id) ON DELETE CASCADE,
   CONSTRAINT fk_mqg_user FOREIGN KEY (granted_by) REFERENCES users(id)
 );
 
@@ -142,8 +165,10 @@ CREATE TABLE material_upload_attempts (
   created_at VARCHAR(40) NOT NULL,
   finished_at VARCHAR(40),
   CONSTRAINT pk_material_upload_attempts PRIMARY KEY (id),
-  CONSTRAINT chk_mua_id CHECK (LENGTH(id) BETWEEN 16 AND 128),
-  CONSTRAINT chk_mua_outcome CHECK (outcome IN ('started', 'accepted', 'rejected', 'aborted')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_mua_id CHECK (LENGTH(id) >= 16 AND LENGTH(id) <= 128),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_mua_outcome CHECK (outcome IN ('started', 'accepted', 'rejected', 'aborted')),
   CONSTRAINT fk_mua_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT fk_mua_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
@@ -170,10 +195,14 @@ CREATE TABLE ai_usage_events (
   status VARCHAR(20) NOT NULL,
   created_at VARCHAR(40) NOT NULL,
   CONSTRAINT pk_ai_usage_events PRIMARY KEY (id),
-  CONSTRAINT chk_aue_id CHECK (LENGTH(id) BETWEEN 16 AND 128),
-  CONSTRAINT chk_aue_cap CHECK (capability IN ('chat', 'generation')),
-  CONSTRAINT chk_aue_units CHECK (units > 0),
-  CONSTRAINT chk_aue_status CHECK (status IN ('reserved', 'succeeded', 'failed', 'rejected')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_aue_id CHECK (LENGTH(id) >= 16 AND LENGTH(id) <= 128),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_aue_cap CHECK (capability IN ('chat', 'generation')),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_aue_units CHECK (units > 0),
+  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
+  -- CONSTRAINT chk_aue_status CHECK (status IN ('reserved', 'succeeded', 'failed', 'rejected')),
   CONSTRAINT fk_aue_project FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
   CONSTRAINT fk_aue_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

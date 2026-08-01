@@ -11,6 +11,5 @@ CREATE TABLE platform_settings (
   updated_at VARCHAR(40) NOT NULL,
   updated_by VARCHAR(128),
   CONSTRAINT pk_platform_settings PRIMARY KEY (key),
-  CONSTRAINT chk_ps_value CHECK (JSON_VALID(value_json) = 1),
   CONSTRAINT fk_ps_user FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
 );

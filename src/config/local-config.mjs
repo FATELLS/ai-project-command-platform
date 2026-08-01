@@ -11,23 +11,41 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
-import { appRoot, isPackaged } from "../paths.mjs";
+import { fileURLToPath } from "node:url";
 
 const CONFIG_FILENAME = ".api-keys.local.json";
 const EXAMPLE_FILENAME = "api-config.example.json";
 
 /**
+ * 本文件位于 src/config/local-config.mjs
+ * 包根目录 = ../../ (src/config/ → src/ → 包根)
+ */
+const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
+
+/**
+ * 检测是否在 npx 缓存目录或 node_modules 中运行（非本地开发）。
+ * 这些路径不可靠（npx 清缓存会丢失），fallback 到用户主目录稳定路径。
+ */
+function isInstalledPackage() {
+  return packageRoot.includes("_npx") ||
+    packageRoot.includes(".npm/_npx") ||
+    packageRoot.includes("node_modules");
+}
+
+/**
  * 获取配置文件路径
- * - 打包模式: 二进制同级目录
- * - 开发模式: 项目根目录
- * - npx 模式: 用户主目录下的稳定路径
+ * - 环境变量覆盖: PLATFORM_CONFIG_DIR（Docker/systemd 部署）
+ * - npx/npm install 模式: 用户主目录下的稳定路径
+ * - 本地开发: 包根目录
  */
 function getConfigPath() {
-  // npx 缓存目录不可靠，用用户主目录
-  if (!isPackaged && (appRoot.includes("_npx") || appRoot.includes(".npm/_npx"))) {
+  if (process.env.PLATFORM_CONFIG_DIR) {
+    return join(resolve(process.env.PLATFORM_CONFIG_DIR), CONFIG_FILENAME);
+  }
+  if (isInstalledPackage()) {
     return join(homedir(), ".ai-project-command-platform", CONFIG_FILENAME);
   }
-  return join(appRoot, CONFIG_FILENAME);
+  return join(packageRoot, CONFIG_FILENAME);
 }
 
 /**

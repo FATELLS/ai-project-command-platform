@@ -78,8 +78,9 @@ function parseConsoleOutput(output) {
     }
 
     // 如果还没有表头，第一个有 | 的行是表头
+    // 虚谷 xgconsole 返回大写列名，统一转小写以兼容 SQLite 风格的代码
     if (separatorIndex < 0 && line.includes("|") && headers.length === 0) {
-      headers = line.split("|").map(h => h.trim()).filter(h => h.length > 0);
+      headers = line.split("|").map(h => h.trim().toLowerCase()).filter(h => h.length > 0);
       continue;
     }
 

@@ -18,14 +18,22 @@ import {
 
 export const GENERIC_LOGIN_ERROR = "账号或密码不正确";
 
+// 虚谷后端返回的布尔值可能是字符串 "0"/"1"，需要安全转换
+function parseBool(val) {
+  if (typeof val === "boolean") return val;
+  if (typeof val === "number") return val !== 0;
+  if (typeof val === "string") return val === "1" || val.toLowerCase() === "true";
+  return Boolean(val);
+}
+
 function principalFromSession(session) {
   return {
     id: session.userId,
     displayName: session.displayName,
     loginName: session.loginName,
-    isPlatformAdmin: Boolean(session.isPlatformAdmin),
+    isPlatformAdmin: parseBool(session.isPlatformAdmin),
     csrfToken: session.csrfToken,
-    mustResetPassword: Boolean(session.mustResetPassword)
+    mustResetPassword: parseBool(session.mustResetPassword)
   };
 }
 
@@ -113,9 +121,9 @@ export function createAuthService(database, options = {}) {
         id: user.id,
         displayName: user.displayName,
         loginName: user.loginName,
-        isPlatformAdmin: Boolean(user.isPlatformAdmin),
+        isPlatformAdmin: parseBool(user.isPlatformAdmin),
         csrfToken: secrets.csrfToken,
-        mustResetPassword: Boolean(user.mustResetPassword)
+        mustResetPassword: parseBool(user.mustResetPassword)
       }
     };
   }

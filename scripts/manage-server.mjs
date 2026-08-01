@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import {
   closeSync,
   existsSync,
@@ -16,6 +16,9 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const command = process.argv[2] ?? "status";
+
+// 虚谷容器名称——与 src/db/xugu-database.cjs 的默认值保持一致
+const XUGU_CONTAINER = process.env.XUGU_CONTAINER || "xugu-dev";
 
 function readEnvFile(path) {
   if (!existsSync(path)) return {};
@@ -73,6 +76,81 @@ function processIsAlive(pid) {
   }
 }
 
+// ----------------------------------------------------------------
+// 虚谷 Docker 容器联动
+// ----------------------------------------------------------------
+
+function dockerAvailable() {
+  try {
+    execSync("docker info", { stdio: "pipe", timeout: 5_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function xuguContainerStatus() {
+  try {
+    const output = execSync(
+      `docker ps -a --filter name=^${XUGU_CONTAINER}$ --format "{{.Status}}"`,
+      { encoding: "utf8", stdio: "pipe", timeout: 5_000 }
+    ).trim();
+    return output || null;
+  } catch {
+    return null;
+  }
+}
+
+function ensureXuguContainer() {
+  const status = xuguContainerStatus();
+  if (!status) {
+    console.log(`  ⚠ 虚谷容器 ${XUGU_CONTAINER} 不存在，请先创建（docker run ...）。`);
+    return false;
+  }
+  if (/^Up\b/.test(status)) {
+    console.log(`  虚谷容器 ${XUGU_CONTAINER} 已在运行（${status}）。`);
+    return true;
+  }
+  // 容器存在但未运行——自动启动
+  console.log(`  虚谷容器 ${XUGU_CONTAINER} 状态为 "${status}"，正在自动启动...`);
+  try {
+    execSync(`docker start ${XUGU_CONTAINER}`, { stdio: "pipe", timeout: 30_000 });
+    // 等待容器内 xgconsole 可用（最多重试 3 次，每次等 2 秒）
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        execSync(
+          `docker exec ${XUGU_CONTAINER} /XGDBMS/BIN/xgconsole-linux-arm64 nssl 127.0.0.1 5138 SYSTEM SYSDBA SYSDBA -c "SELECT 1"`,
+          { stdio: "pipe", timeout: 10_000 }
+        );
+        console.log(`  虚谷容器 ${XUGU_CONTAINER} 已启动并就绪。`);
+        return true;
+      } catch {
+        if (attempt < 3) {
+          const { sleepSync } = { sleepSync: ms => execSync(`sleep ${ms / 1000}`) };
+          sleepSync(2_000);
+        }
+      }
+    }
+    // xgconsole 可能还在初始化，但容器已启动——继续走，让数据库连接层自己重试
+    console.log(`  虚谷容器 ${XUGU_CONTAINER} 已启动（数据库初始化中）。`);
+    return true;
+  } catch (error) {
+    console.log(`  ⚠ 无法启动虚谷容器：${error.message}`);
+    return false;
+  }
+}
+
+function stopXuguContainer() {
+  const status = xuguContainerStatus();
+  if (!status || !/^Up\b/.test(status)) return;
+  try {
+    execSync(`docker stop ${XUGU_CONTAINER}`, { stdio: "pipe", timeout: 20_000 });
+    console.log(`  虚谷容器 ${XUGU_CONTAINER} 已停止。`);
+  } catch (error) {
+    console.log(`  ⚠ 无法停止虚谷容器：${error.message}`);
+  }
+}
+
 function removePidFile() {
   rmSync(pidFile, { force: true });
 }
@@ -106,9 +184,18 @@ async function start() {
   const existingPid = readPid();
   if (processIsAlive(existingPid)) {
     console.log(`平台服务已在后台运行（PID ${existingPid}）。`);
+    ensureXuguContainer();
     return;
   }
   if (existsSync(pidFile)) removePidFile();
+
+  // 先确保虚谷容器在运行
+  if (dockerAvailable()) {
+    ensureXuguContainer();
+  } else {
+    console.log(`  ⚠ Docker 未运行或不可用，跳过虚谷容器检查。`);
+    console.log(`    如果后端是虚谷数据库，平台启动后将无法连接。`);
+  }
 
   mkdirSync(dirname(logFile), { recursive: true });
   const logDescriptor = openSync(logFile, "a");
@@ -160,6 +247,11 @@ async function stop() {
   }
   removePidFile();
   console.log(`平台服务已优雅停止（原 PID ${pid}）。`);
+
+  // 如果是虚谷后端且平台启动了容器，一并关闭
+  if (dockerAvailable() && process.env.PLATFORM_STOP_XUGU !== "0") {
+    stopXuguContainer();
+  }
 }
 
 async function status() {
@@ -173,6 +265,16 @@ async function status() {
   const health = await healthIsReady();
   console.log(`平台服务正在运行（PID ${pid}，健康检查：${health ? "正常" : "异常"}）。`);
   if (!health) process.exitCode = 1;
+
+  // 显示虚谷容器状态
+  if (dockerAvailable()) {
+    const xuguStatus = xuguContainerStatus();
+    if (xuguStatus) {
+      console.log(`虚谷容器 ${XUGU_CONTAINER}：${xuguStatus}`);
+    } else {
+      console.log(`虚谷容器 ${XUGU_CONTAINER}：未创建`);
+    }
+  }
 }
 
 try {

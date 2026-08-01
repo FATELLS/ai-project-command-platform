@@ -1,4 +1,6 @@
 export function createAuthRepository(database) {
+  // 虚谷 xgconsole 把所有列名（含 AS 别名）转大写，parseConsoleOutput 再转全小写。
+  // SQLite 路径保留驼峰别名。这里在查询函数里做映射，两条路径都安全。
   const findUserByLoginStatement = database.prepare(`
   SELECT id, display_name AS displayName, status, login_name AS loginName,
          password_salt AS passwordSalt, password_hash AS passwordHash,
@@ -18,8 +20,44 @@ export function createAuthRepository(database) {
    WHERE s.token_hash = ?
  `);
 
+  // 虚谷适配层返回全小写属性名，映射到驼峰
+  function mapUser(row) {
+    if (!row) return row;
+    return {
+      id: row.id,
+      displayName: row.displayName ?? row.displayname,
+      status: row.status,
+      loginName: row.loginName ?? row.loginname,
+      passwordSalt: row.passwordSalt ?? row.passwordsalt,
+      passwordHash: row.passwordHash ?? row.passwordhash,
+      passwordParamsJson: row.passwordParamsJson ?? row.passwordparamsjson,
+      isPlatformAdmin: row.isPlatformAdmin ?? row.isplatformadmin,
+      mustResetPassword: row.mustResetPassword ?? row.mustresetpassword
+    };
+  }
+
+  function mapSession(row) {
+    if (!row) return row;
+    return {
+      id: row.id,
+      tokenHash: row.tokenHash ?? row.tokenhash,
+      userId: row.userId ?? row.userid,
+      csrfToken: row.csrfToken ?? row.csrftoken,
+      createdAt: row.createdAt ?? row.createdat,
+      lastSeenAt: row.lastSeenAt ?? row.lastseenat,
+      idleExpiresAt: row.idleExpiresAt ?? row.idleexpiresat,
+      absoluteExpiresAt: row.absoluteExpiresAt ?? row.absoluteexpiresat,
+      displayName: row.displayName ?? row.displayname,
+      loginName: row.loginName ?? row.loginname,
+      status: row.status,
+      isPlatformAdmin: row.isPlatformAdmin ?? row.isplatformadmin,
+      mustResetPassword: row.mustResetPassword ?? row.mustresetpassword
+    };
+  }
+
   function countPlatformAdmins() {
-    return database.prepare("SELECT count(*) AS count FROM users WHERE is_platform_admin = 1").get().count;
+    const row = database.prepare("SELECT count(*) AS count FROM users WHERE is_platform_admin = 1").get();
+    return Number(row?.count ?? row?.COUNT ?? 0);
   }
 
  function insertUser(user) {
@@ -37,7 +75,7 @@ export function createAuthRepository(database) {
  }
 
   function findUserByLogin(loginName) {
-    return findUserByLoginStatement.get(loginName);
+    return mapUser(findUserByLoginStatement.get(loginName));
   }
 
  function setUserStatus(userId, status, updatedAt) {
@@ -61,7 +99,7 @@ export function createAuthRepository(database) {
   }
 
   function findSessionByTokenHash(tokenHash) {
-    return findSessionStatement.get(tokenHash);
+    return mapSession(findSessionStatement.get(tokenHash));
   }
 
   function touchSession(sessionId, lastSeenAt, idleExpiresAt) {
@@ -90,7 +128,16 @@ export function createAuthRepository(database) {
              target_id AS targetId, remote_address AS remoteAddress, metadata_json AS metadataJson,
              created_at AS createdAt
       FROM audit_events ORDER BY id
-    `).all();
+    `).all().map(row => ({
+      userId: row.userId ?? row.userid,
+      projectId: row.projectId ?? row.projectid,
+      action: row.action,
+      targetType: row.targetType ?? row.targettype,
+      targetId: row.targetId ?? row.targetid,
+      remoteAddress: row.remoteAddress ?? row.remoteaddress,
+      metadataJson: row.metadataJson ?? row.metadatajson,
+      createdAt: row.createdAt ?? row.createdat
+    }));
   }
 
  return {

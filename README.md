@@ -2,7 +2,7 @@
 
 面向多项目、多团队的项目推进平台。路线图、作战单元、排期、健康度、材料、AI 结构化提案、人工审核与发布都在同一项目命名空间内运行。
 
-当前发布版本：`0.9.2`
+当前发布版本：`0.9.3`
 
 ## 快速开始（npx，一行命令）
 
@@ -32,11 +32,11 @@ GitHub Release 提供五个不含项目数据的 x64/arm64 产物：
 
 | 系统 | 产物 | 启动方式 |
 | --- | --- | --- |
-| Windows 10/11 | `ai-project-command-platform-0.9.2-windows-x64.zip` | 解压后运行 `Start.ps1` |
-| Linux 通用版 | `ai-project-command-platform-0.9.2-linux-x64.tar.gz` | 解压后运行 `./start.sh` |
-| RHEL 系 RPM | `ai-project-command-platform-0.9.2-1.x86_64.rpm` | 安装即注册并启动 systemd 服务 |
-| macOS (Apple Silicon) | `ai-project-command-platform-0.9.2-macos-arm64.tar.gz` | 解压后运行 `./start.sh` |
-| macOS (Intel) | `ai-project-command-platform-0.9.2-macos-x64.tar.gz` | 解压后运行 `./start.sh` |
+| Windows 10/11 | `ai-project-command-platform-0.9.3-windows-x64.zip` | 解压后运行 `Start.ps1` |
+| Linux 通用版 | `ai-project-command-platform-0.9.3-linux-x64.tar.gz` | 解压后运行 `./start.sh` |
+| RHEL 系 RPM | `ai-project-command-platform-0.9.3-1.x86_64.rpm` | 安装即注册并启动 systemd 服务 |
+| macOS (Apple Silicon) | `ai-project-command-platform-0.9.3-macos-arm64.tar.gz` | 解压后运行 `./start.sh` |
+| macOS (Intel) | `ai-project-command-platform-0.9.3-macos-x64.tar.gz` | 解压后运行 `./start.sh` |
 
 安装包自带 Node.js 运行时，不要求目标机器预装 Node 或 npm。
 
@@ -45,7 +45,7 @@ GitHub Release 提供五个不含项目数据的 x64/arm64 产物：
 仓库默认为私有仓库，先用 `gh auth login` 登录一次，然后执行：
 
 ```bash
-tmp="$(mktemp -d)" && gh release download v0.9.2 -R FATELLS/ai-project-command-platform -p '*.rpm' -D "$tmp" && sudo rpm -Uvh "$tmp"/*.rpm
+tmp="$(mktemp -d)" && gh release download v0.9.3 -R FATELLS/ai-project-command-platform -p '*.rpm' -D "$tmp" && sudo rpm -Uvh "$tmp"/*.rpm
 ```
 
 适用于 RHEL、Rocky Linux、AlmaLinux、CentOS Stream 8 及以上版本。安装完成后：
@@ -60,7 +60,7 @@ sudo cat /var/lib/ai-project-command-platform/bootstrap-credentials.txt
 ### Windows 一行安装并启动
 
 ```powershell
-gh release download v0.9.2 -R FATELLS/ai-project-command-platform -p "*windows-x64.zip"; Expand-Archive .\ai-project-command-platform-0.9.2-windows-x64.zip; Set-ExecutionPolicy -Scope Process Bypass; .\ai-project-command-platform-0.9.2-windows-x64\Start.ps1
+gh release download v0.9.3 -R FATELLS/ai-project-command-platform -p "*windows-x64.zip"; Expand-Archive .\ai-project-command-platform-0.9.3-windows-x64.zip; Set-ExecutionPolicy -Scope Process Bypass; .\ai-project-command-platform-0.9.3-windows-x64\Start.ps1
 ```
 
 首次管理员凭据会显示在窗口中，并写入 `first-run-credentials.txt`。使用同目录的 `Stop.ps1` 停止服务。
@@ -70,13 +70,13 @@ gh release download v0.9.2 -R FATELLS/ai-project-command-platform -p "*windows-x
 Apple Silicon (M1/M2/M3/M4)：
 
 ```bash
-tmp="$(mktemp -d)" && gh release download v0.9.2 -R FATELLS/ai-project-command-platform -p '*macos-arm64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.2-macos-arm64/start.sh
+tmp="$(mktemp -d)" && gh release download v0.9.3 -R FATELLS/ai-project-command-platform -p '*macos-arm64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.3-macos-arm64/start.sh
 ```
 
 Intel：
 
 ```bash
-tmp="$(mktemp -d)" && gh release download v0.9.2 -R FATELLS/ai-project-command-platform -p '*macos-x64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.2-macos-x64/start.sh
+tmp="$(mktemp -d)" && gh release download v0.9.3 -R FATELLS/ai-project-command-platform -p '*macos-x64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.3-macos-x64/start.sh
 ```
 
 使用 `stop.sh` 停止。运行数据位于解压目录的 `data/`。
@@ -84,7 +84,7 @@ tmp="$(mktemp -d)" && gh release download v0.9.2 -R FATELLS/ai-project-command-p
 ### Linux 通用版一行安装并启动
 
 ```bash
-tmp="$(mktemp -d)" && gh release download v0.9.2 -R FATELLS/ai-project-command-platform -p '*linux-x64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.2-linux-x64/start.sh
+tmp="$(mktemp -d)" && gh release download v0.9.3 -R FATELLS/ai-project-command-platform -p '*linux-x64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.3-linux-x64/start.sh
 ```
 
 使用 `stop.sh` 停止。运行数据位于解压目录的 `data/`。

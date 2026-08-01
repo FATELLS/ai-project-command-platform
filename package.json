@@ -1,6 +1,6 @@
 {
   "name": "ai-project-command-platform",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "type": "module",
   "description": "多项目、模板化、AI 辅助更新的项目作战管理平台",
   "license": "MIT",
@@ -61,7 +61,7 @@
     "build:xugu:macos": "node scripts/build-packages.mjs macos --with-xugu",
     "build:xugu:win": "node scripts/build-packages.mjs win --with-xugu",
     "build:xugu:all": "node scripts/build-packages.mjs all --with-xugu",
-    "prepublishOnly": "node --test \"test/*.test.mjs\" && node scripts/verify.mjs"
+    "prepublishOnly": "node scripts/prepublish.mjs"
   },
   "dependencies": {
     "file-type": "22.0.1",

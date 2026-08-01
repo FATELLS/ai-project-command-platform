@@ -8,12 +8,11 @@ import { test, expect } from "@playwright/test";
  *   材料管理 → AI 节点预览 → 审核与发布 → 运维自检 → 退出
  *
  * 测试使用真实浏览器（Chromium headless），覆盖 UI 渲染、交互、路由、CSS。
- * 前提：服务器运行在 http://127.0.0.1:4173，数据库有测试项目数据。
+ * 前提：由 playwright.config.mjs 的 webServer 自动启动 fixture server。
  */
 
-const BASE = "http://127.0.0.1:4173";
 const ADMIN_USER = "admin";
-const ADMIN_PASS = "admin12345678";
+const ADMIN_PASS = "e2e-platform-admin-pw";
 
 // ========== 辅助函数 ==========
 

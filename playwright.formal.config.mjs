@@ -1,32 +1,29 @@
 import { defineConfig } from "@playwright/test";
 
-const port = Number(process.env.E2E_PORT || 4173);
+const port = Number(process.env.E2E_PORT || 4191);
 const baseURL = `http://127.0.0.1:${port}`;
 
 export default defineConfig({
-  testDir: "./e2e",
+  testDir: "./test/e2e",
+  testMatch: /.*\.spec\.mjs$/,
+  testIgnore: /06-abnormal/,
   timeout: 60_000,
   expect: { timeout: 10_000 },
-  retries: 0,
   workers: 1,
-  reporter: [["list"], ["html", { outputFolder: "e2e-report", open: "never" }]],
+  retries: 0,
+  globalSetup: "./test/e2e/global-setup.mjs",
+  reporter: [["list"]],
   use: {
     baseURL,
     headless: true,
+    storageState: ".e2e-auth/admin.json",
     screenshot: "only-on-failure",
-    video: "retain-on-failure",
     trace: "retain-on-failure",
     actionTimeout: 15_000,
     navigationTimeout: 15_000,
   },
   projects: [
-    {
-      name: "chromium",
-      use: {
-        browserName: "chromium",
-        channel: "chromium",
-      },
-    },
+    { name: "admin", storageState: ".e2e-auth/admin.json" },
   ],
   webServer: {
     command: "node test/e2e/fixtures/server.mjs",

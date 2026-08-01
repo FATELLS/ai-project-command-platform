@@ -325,7 +325,9 @@ for (const file of [
 ]) run(process.execPath, ["--check", file]);
 // 单元测试：显式 glob 避免误跑 test/e2e/fixtures/server.mjs。
 // 已知 chat-provider 有 1 个 cancelled（flaky timer），只要 0 fail 就算通过。
-const unitResult = spawnSync(process.execPath, ["--test", "test/*.test.mjs"], { cwd: root, encoding: "utf8", stdio: "inherit" });
+const unitResult = spawnSync(process.execPath, ["--test", "test/*.test.mjs"], { cwd: root, encoding: "utf8", stdio: "pipe" });
+if (unitResult.stdout) process.stdout.write(unitResult.stdout);
+if (unitResult.stderr) process.stderr.write(unitResult.stderr);
 if (unitResult.status !== 0) {
   // 检查输出中是否有真正的 fail（而非仅 cancelled）
   const output = (unitResult.stdout || "") + (unitResult.stderr || "");

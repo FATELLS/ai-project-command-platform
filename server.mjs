@@ -2,10 +2,13 @@
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
-import { loadLocalConfigToEnv } from "./src/config/local-config.mjs";
+import { loadEnvFiles, loadLocalConfigToEnv } from "./src/config/local-config.mjs";
 
-// 最先加载本地 API 配置文件（.api-keys.local.json），注入 process.env
-// 环境变量优先于配置文件，这样 Docker/systemd 部署仍可覆盖
+// 配置加载顺序（严格）：
+//   1. loadEnvFiles()  → .env / .env.local（已有的 process.env 值优先不被覆盖）
+//   2. loadLocalConfigToEnv() → .api-keys.local.json（仅在环境变量为空时注入）
+// 这确保所有启动路径（npm start / npx / node server.mjs）配置源一致。
+loadEnvFiles();
 loadLocalConfigToEnv();
 
 import { defaultDatabasePath, openDatabase } from "./src/db/database.mjs";

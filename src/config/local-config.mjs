@@ -5,6 +5,10 @@
 // 该文件被 .gitignore 排除，不会提交到版本控制。
 //
 // 启动时自动检测并加载该文件，将配置注入 process.env。
+// 同时提供 loadEnvFiles()：加载包根目录的 .env / .env.local，
+// 确保 npm bin 入口（server.mjs）、npx、直接 node server.mjs
+// 都能拿到 .env.local 的配置，而不只是 npm start 路径才生效。
+//
 // 如果文件不存在，自动生成一个空模���方便用户填写。
 // ============================================================
 
@@ -147,4 +151,71 @@ export function loadLocalConfigToEnv() {
   }
 
   return { configPath, loaded: true, injected, generated: false };
+}
+
+/**
+ * 解析单行 KEY=VALUE 格式的 env 文件。
+ * 支持：注释（# 开头）、空行、引号包裹的值。
+ */
+function parseEnvFile(content) {
+  const result = {};
+  for (const rawLine of content.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eqIndex = line.indexOf("=");
+    if (eqIndex < 1) continue;
+    const key = line.slice(0, eqIndex).trim();
+    let value = line.slice(eqIndex + 1).trim();
+    // 去除引号包裹
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    result[key] = value;
+  }
+  return result;
+}
+
+/**
+ * 加载包根目录下的 .env 和 .env.local 文件。
+ *
+ * 这是平台入口的配置基础设施——server.mjs 直接调用此函数，
+ * 不依赖 scripts/start-server.mjs 的 --env-file 参数。
+ * 确保三条启动路径（npm start / npx / node server.mjs）行为一致：
+ *   1. 先加载 .env（如果存在）
+ *   2. 再加载 .env.local（如果存在，覆盖 .env 同名键）
+ *   3. 已有的 process.env 值优先——环境变量 > 文件 > 默认
+ *
+ * @returns {{ loaded: number, skipped: number }}
+ */
+export function loadEnvFiles() {
+  const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
+  let loaded = 0;
+  let skipped = 0;
+
+  for (const filename of [".env", ".env.local"]) {
+    const filePath = join(packageRoot, filename);
+    if (!existsSync(filePath)) continue;
+
+    try {
+      const parsed = parseEnvFile(readFileSync(filePath, "utf8"));
+      for (const [key, value] of Object.entries(parsed)) {
+        // 环境变量优先：已有值不覆盖
+        if (process.env[key] !== undefined) {
+          skipped++;
+          continue;
+        }
+        process.env[key] = value;
+        loaded++;
+      }
+    } catch {
+      // 读取/解析失败不影响启动，让后续逻辑用默认值
+    }
+  }
+
+  if (loaded > 0) {
+    console.log(`  .env.local 已加载（注入 ${loaded} 项，跳过 ${skipped} 项已有环境变量）`);
+  }
+
+  return { loaded, skipped };
 }

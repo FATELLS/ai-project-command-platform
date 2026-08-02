@@ -27,7 +27,15 @@ export async function backupDatabaseFile(sourcePath,targetPath) {
   await mkdir(dirname(target),{recursive:true});
   try{await unlink(target);}catch(error){if(error.code!=="ENOENT")throw error;}
   const database=openDatabase(source);
-  try{database.exec(`VACUUM INTO ${sqlString(target)}`);}finally{database.close();}
+  try{
+    if(database._backend==="xugu"){
+      throw new Error("Xugu backup should use Xugu native tools, not VACUUM INTO");
+    }
+    // sql.js (WASM SQLite) 不支持 VACUUM INTO（无法访问文件系统）
+    // 改为先 _persist 写盘，再 copyFile
+    if(database._persist) database._persist();
+    await copyFile(source,target);
+  }finally{database.close();}
   return verifyDatabaseFile(target);
 }
 

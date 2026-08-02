@@ -11,7 +11,7 @@ import {
   rmSync,
   writeFileSync
 } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, join, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -189,21 +189,24 @@ async function start() {
   }
   if (existsSync(pidFile)) removePidFile();
 
-  // 先确保虚谷容器在运行
-  if (dockerAvailable()) {
+  // 先确保虚谷容器在运行（SQLite 后端跳过）
+  const isSqliteBackend = process.env.PLATFORM_DB_BACKEND === "sqlite";
+  if (!isSqliteBackend && dockerAvailable()) {
     ensureXuguContainer();
-  } else {
+  } else if (!isSqliteBackend) {
     console.log(`  ⚠ Docker 未运行或不可用，跳过虚谷容器检查。`);
     console.log(`    如果后端是虚谷数据库，平台启动后将无法连接。`);
   }
 
   mkdirSync(dirname(logFile), { recursive: true });
   const logDescriptor = openSync(logFile, "a");
-  const child = spawn(process.execPath, [
-    "--env-file-if-exists=.env",
-    "--env-file-if-exists=.env.local",
-    "server.mjs"
-  ], {
+  // 构建 Node 启动参数，兼容 Node 20（无 --env-file-if-exists）
+  const nodeArgs = [];
+  const envFiles = [".env", ".env.local"].filter(f => existsSync(join(rootDir, f)));
+  for (const f of envFiles) nodeArgs.push(`--env-file=${f}`);
+  nodeArgs.push("server.mjs");
+
+  const child = spawn(process.execPath, nodeArgs, {
     cwd: rootDir,
     detached: true,
     env: process.env,
@@ -249,7 +252,9 @@ async function stop() {
   console.log(`平台服务已优雅停止（原 PID ${pid}）。`);
 
   // 如果是虚谷后端且平台启动了容器，一并关闭
-  if (dockerAvailable() && process.env.PLATFORM_STOP_XUGU !== "0") {
+  // SQLite 后端不碰虚谷容器
+  const isSqliteBackend = process.env.PLATFORM_DB_BACKEND === "sqlite";
+  if (!isSqliteBackend && dockerAvailable() && process.env.PLATFORM_STOP_XUGU !== "0") {
     stopXuguContainer();
   }
 }

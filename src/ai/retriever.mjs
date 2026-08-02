@@ -27,6 +27,17 @@ export function createEvidenceRetriever(database, options = {}) {
   const topK = Math.min(options.topK ?? 8, 8);
   const xugu = database?._backend === "xugu";
 
+  // 检测 FTS5 是否可用（sql.js 默认不含 FTS5）
+  let ftsAvailable = null;
+  function hasFts() {
+    if (ftsAvailable !== null) return ftsAvailable;
+    try {
+      const row = database.prepare("SELECT count(*) AS c FROM sqlite_master WHERE type='table' AND name='evidence_fts'").get();
+      ftsAvailable = row && row.c > 0;
+    } catch { ftsAvailable = false; }
+    return ftsAvailable;
+  }
+
   function search({ projectId, question, audience = "project_member" }) {
     const terms = buildFtsTerms(question);
     if (!terms.length) return [];
@@ -34,8 +45,8 @@ export function createEvidenceRetriever(database, options = {}) {
 
     let rows = [];
 
-    if (xugu) {
-      // 虚谷后端: 使用 LIKE 查询（虚谷全文索引语法待验证后启用）
+    if (xugu || !hasFts()) {
+      // 虚谷后端或 sql.js(无FTS5): 使用 LIKE 查询
       const validTerms = terms.filter(term => [...term].length >= 2);
       if (validTerms.length) {
         // 构建 OR 条件

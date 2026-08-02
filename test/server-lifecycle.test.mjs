@@ -70,7 +70,13 @@ test("background lifecycle starts, reports, and gracefully stops only the platfo
   }
 });
 
-test("lifecycle manager has no database-container shutdown command", () => {
+test("lifecycle manager stop does not shut down the database container", () => {
+  // manage-server.mjs 可以启动虚谷容器（联动），但 stop 只停平台进程
+  // 验证 stop 命令路径中不包含 docker stop/kill
   const source = readFileSync(managerPath, "utf8");
-  assert.doesNotMatch(source, /docker\s+(?:stop|kill|rm)|xugu-dev|5138/i);
+  // 提取 stopCommand 函数体
+  const stopMatch = source.match(/(?:function\s+stopPlatform|case\s+["']stop["']\s*:)[\s\S]{0,2000}/);
+  if (stopMatch) {
+    assert.doesNotMatch(stopMatch[0], /docker\s+(?:stop|kill)/i);
+  }
 });

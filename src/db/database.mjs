@@ -139,6 +139,9 @@ class SqlJsDatabaseSync {
     this.path = path;
     this._isOpen = true;
     this._dirty = false;
+    // sql.js 默认不开 FK 和其他 PRAGMA，node:sqlite 默认开
+    db.run("PRAGMA foreign_keys = ON");
+    db.run("PRAGMA journal_mode = DELETE");
   }
 
   get isOpen() {
@@ -154,6 +157,10 @@ class SqlJsDatabaseSync {
     // sql.js 的 run() 可以执行多条语句
     this.db.run(sql);
     this._dirty = true;
+    // 追踪事务状态
+    const upper = sql.trim().toUpperCase();
+    if (upper.startsWith("BEGIN")) this._inTransaction = true;
+    else if (upper === "COMMIT" || upper === "ROLLBACK") this._inTransaction = false;
   }
 
   prepare(sql) {
@@ -213,11 +220,22 @@ class SqlJsStatement {
   }
 
   run(...params) {
-    this.db.run(this.sql, params);
-    this.database._dirty = true;
-    // sql.js 不直接返回 changes/lastInsertRowid
+    // sql.js 需要 prepare + step 来获取 lastInsertRowid
+    const stmt = this._prepare();
+    stmt.bind(params);
+    stmt.step();
     const changes = this.db.getRowsModified();
-    return { changes, lastInsertRowid: null };
+    // sql.js 通过 db.exec("SELECT last_insert_rowid()") 获取最后插入的 rowid
+    let lastInsertRowid = null;
+    if (changes > 0 && this.sql.trim().toUpperCase().startsWith("INSERT")) {
+      const result = this.db.exec("SELECT last_insert_rowid()");
+      if (result.length > 0 && result[0].values.length > 0) {
+        lastInsertRowid = result[0].values[0][0];
+      }
+    }
+    stmt.free();
+    this.database._dirty = true;
+    return { changes, lastInsertRowid };
   }
 }
 

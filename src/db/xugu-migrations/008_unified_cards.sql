@@ -50,8 +50,8 @@ CREATE TABLE project_cards (
   CONSTRAINT uq_pc_pos UNIQUE (version_id, element_type, position),
   -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
   -- CONSTRAINT chk_pc_etype CHECK (element_type IN (
-    'task', 'unit', 'stage', 'outcome', 'workstream', 'risk', 'metric'
-  )),
+  --   'task', 'unit', 'stage', 'outcome', 'workstream', 'risk', 'metric'
+  -- )),
   -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
   -- CONSTRAINT chk_pc_progress CHECK (progress IS NULL OR (progress >= 0 AND progress <= 100)),
   CONSTRAINT fk_pc_version FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE
@@ -96,12 +96,12 @@ INSERT INTO project_cards (
 SELECT
   t.version_id, t.external_id, 'task', t.position,
   t.title,
-  JSON_VALUE(t.data_json, '$.owner') DEFAULT '',
-  JSON_VALUE(t.data_json, '$.state') DEFAULT '',
-  JSON_VALUE(t.data_json, '$.objective') DEFAULT '',
+  COALESCE(JSON_VALUE(t.data_json, '$.owner'), ''),
+  COALESCE(JSON_VALUE(t.data_json, '$.state'), ''),
+  COALESCE(JSON_VALUE(t.data_json, '$.objective'), ''),
   t.start_date, t.end_date,
   CAST(t.progress AS SMALLINT),
-  JSON_VALUE(t.data_json, '$.health') DEFAULT '',
+  COALESCE(JSON_VALUE(t.data_json, '$.health'), ''),
   t.unit_external_id,
   t.parent_external_id,
   COALESCE((SELECT JSON_ARRAYAGG(l.depends_on_external_id) FROM task_links l
@@ -125,9 +125,9 @@ INSERT INTO project_cards (
 SELECT
   u.version_id, u.external_id, 'unit', u.position,
   u.name,
-  JSON_VALUE(u.data_json, '$.owner') DEFAULT '',
-  JSON_VALUE(u.data_json, '$.status') DEFAULT '',
-  JSON_VALUE(u.data_json, '$.objective') DEFAULT '',
+  COALESCE(JSON_VALUE(u.data_json, '$.owner'), ''),
+  COALESCE(JSON_VALUE(u.data_json, '$.status'), ''),
+  COALESCE(JSON_VALUE(u.data_json, '$.objective'), ''),
   JSON_MERGE_PATCH('{}', u.data_json),
   (SELECT created_at FROM project_versions WHERE id = u.version_id),
   (SELECT created_at FROM project_versions WHERE id = u.version_id)
@@ -146,9 +146,9 @@ INSERT INTO project_cards (
 SELECT
   s.version_id, s.external_id, 'stage', s.position,
   s.title,
-  JSON_VALUE(s.data_json, '$.state') DEFAULT '',
-  JSON_VALUE(s.data_json, '$.startDate') DEFAULT '',
-  JSON_VALUE(s.data_json, '$.endDate') DEFAULT '',
+  COALESCE(JSON_VALUE(s.data_json, '$.state'), ''),
+  COALESCE(JSON_VALUE(s.data_json, '$.startDate'), ''),
+  COALESCE(JSON_VALUE(s.data_json, '$.endDate'), ''),
   JSON_MERGE_PATCH('{"dateLabel": "", "description": "", "expectedOutput": ""}', s.data_json),
   (SELECT created_at FROM project_versions WHERE id = s.version_id),
   (SELECT created_at FROM project_versions WHERE id = s.version_id)
@@ -167,7 +167,7 @@ INSERT INTO project_cards (
 SELECT
   c.version_id, c.external_id, 'outcome', c.position,
   c.title,
-  JSON_VALUE(c.data_json, '$.state') DEFAULT '',
+  COALESCE(JSON_VALUE(c.data_json, '$.state'), ''),
   JSON_MERGE_PATCH('{"dateLabel": "", "description": "", "result": "", "source": ""}', c.data_json),
   (SELECT created_at FROM project_versions WHERE id = c.version_id),
   (SELECT created_at FROM project_versions WHERE id = c.version_id)

@@ -136,9 +136,9 @@ CREATE INDEX idx_publication_events_project ON publication_events(project_id,cre
 --   ELSE
 --     SET v_src = 1;
 --   END IF;
-  IF v_from = 0 OR v_to = 0 OR v_src = 0 THEN
-    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'publication event versions must match project layers';
-  END IF;
+--  IF v_from = 0 OR v_to = 0 OR v_src = 0 THEN
+--    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'publication event versions must match project layers';
+--  END IF;
 -- END;  [orphaned from trigger commenting]
 
 -- ===== 007: Release, Hardening, Readiness, Observability =====

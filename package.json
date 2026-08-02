@@ -35,7 +35,7 @@
     "outputPath": "dist"
   },
   "scripts": {
-    "start": "node --env-file-if-exists=.env --env-file-if-exists=.env.local server.mjs",
+    "start": "node scripts/start-server.mjs",
     "start:background": "node scripts/manage-server.mjs start",
     "stop": "node scripts/manage-server.mjs stop",
     "status": "node scripts/manage-server.mjs status",

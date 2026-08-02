@@ -23,6 +23,35 @@ function checksum(value) {
   return createHash("sha256").update(value).digest("hex");
 }
 
+// sql.js (WASM SQLite) 默认不含 FTS5 模块。
+// 检测 FTS5 可用性：如果不可用，从 SQL 中移除 FTS5 相关语句。
+let _fts5Checked = false;
+let _fts5Available = false;
+
+function checkFts5(database) {
+  if (_fts5Checked) return _fts5Available;
+  try {
+    database.exec("CREATE VIRTUAL TABLE IF NOT EXISTS __fts5_probe USING fts5(x)");
+    database.exec("DROP TABLE IF EXISTS __fts5_probe");
+    _fts5Available = true;
+  } catch {
+    _fts5Available = false;
+  }
+  _fts5Checked = true;
+  return _fts5Available;
+}
+
+function stripFts5IfUnsupported(database, sql) {
+  if (checkFts5(database)) return sql;
+
+  // FTS5 不可用：移除 evidence_fts 相关语句（CREATE VIRTUAL TABLE + TRIGGER）
+  // 保留 INSERT/SELECT 等不涉及 evidence_fts 的语句
+  // evidence_blocks 表本身保留，搜索回退到 LIKE（在 evidence-service / retriever 中处理）
+  return sql
+    .replace(/CREATE\s+VIRTUAL\s+TABLE\s+evidence_fts[\s\S]*?;/gi, "-- [FTS5 stripped: evidence_fts virtual table]\n")
+    .replace(/CREATE\s+TRIGGER\s+evidence_blocks_fts_\w+[\s\S]*?END\s*;/gi, "-- [FTS5 stripped: evidence_blocks trigger]\n");
+}
+
 function migrationFiles(directory) {
   return readdirSync(directory)
     .filter(name => /^\d+_[a-z0-9_-]+\.sql$/i.test(name))
@@ -82,8 +111,10 @@ export function applyMigrations(database, options = {}) {
       database.exec(sql);
       record.run(version, name, digest, new Date().toISOString());
     } else {
+      // sql.js 可能不含 FTS5 模块，需要移除 FTS5 相关语句
+      const processedSql = stripFts5IfUnsupported(database, sql);
       withTransaction(database, () => {
-        database.exec(sql);
+        database.exec(processedSql);
         record.run(version, name, digest, new Date().toISOString());
       }, "EXCLUSIVE");
     }

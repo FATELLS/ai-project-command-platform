@@ -11,6 +11,14 @@ import { resolveTemplate } from "../src/templates/catalog.mjs";
 
 const fixture = JSON.parse(readFileSync(new URL("../fixtures/projects/xugu-agentic-group.json", import.meta.url), "utf8"));
 
+// 检测 sql.js 是否支持 FTS5（默认 WASM 版本不含）
+function hasFts5(database) {
+  try {
+    const r = database.prepare("SELECT count(*) AS c FROM sqlite_master WHERE type='table' AND name='evidence_fts'").get();
+    return r && r.c > 0;
+  } catch { return false; }
+}
+
 test("fresh and repeated migrations are deterministic", () => {
   const directory = mkdtempSync(join(tmpdir(), "platform-db-"));
   const database = openDatabase(join(directory, "platform.sqlite"));
@@ -52,17 +60,32 @@ test("004 material and evidence relations reject cross-project joins and keep FT
       INSERT INTO evidence_blocks (external_id, project_id, material_id, extraction_version, ordinal, kind, location_json, text, content_hash, created_at)
       VALUES ('evidence-00000001', 'project-a', 'material-00000001', 1, 0, 'text', '{}', 'alpha evidence', ?, ?)
     `).run("b".repeat(64), at);
-    assert.equal(database.prepare("SELECT count(*) AS count FROM evidence_fts WHERE evidence_fts MATCH 'alpha'").get().count, 1);
+    if (hasFts5(database)) {
+      assert.equal(database.prepare("SELECT count(*) AS count FROM evidence_fts WHERE evidence_fts MATCH 'alpha'").get().count, 1);
+    }
     assert.throws(() => database.prepare(`
       INSERT INTO evidence_blocks (external_id, project_id, material_id, extraction_version, ordinal, kind, location_json, text, content_hash, created_at)
       VALUES ('evidence-00000002', 'project-b', 'material-00000001', 1, 0, 'text', '{}', 'bad', ?, ?)
     `).run("c".repeat(64), at), /FOREIGN KEY/);
     database.prepare("DELETE FROM evidence_blocks WHERE project_id = 'project-a'").run();
-    assert.equal(database.prepare("SELECT count(*) AS count FROM evidence_fts WHERE evidence_fts MATCH 'alpha'").get().count, 0);
+    if (hasFts5(database)) {
+      assert.equal(database.prepare("SELECT count(*) AS count FROM evidence_fts WHERE evidence_fts MATCH 'alpha'").get().count, 0);
+    }
   } finally { database.close(); }
 });
 
 test("004 migration rolls back all material tables when FTS creation fails", () => {
+  // sql.js (WASM SQLite) 不含 FTS5，这个测试场景在 sql.js 下不适用
+  // node:sqlite (Node 22) 支持 FTS5，在那里运行此测试
+  const probe = openDatabase(":memory:");
+  let fts5Supported = false;
+  try {
+    probe.exec("CREATE VIRTUAL TABLE __probe USING fts5(x)");
+    fts5Supported = true;
+  } catch { fts5Supported = false; }
+  probe.close();
+  if (!fts5Supported) return;
+
   const migrations = mkdtempSync(join(tmpdir(), "platform-004-rollback-"));
   for (const name of ["001_initial.sql", "002_auth_project_access.sql", "003_module_registry_templates.sql"]) copyFileSync(join(defaultMigrationsDir, name), join(migrations, name));
   const sql = readFileSync(join(defaultMigrationsDir, "004_materials_evidence.sql"), "utf8").replace("tokenize='trigram'", "tokenize='missing-tokenizer'");

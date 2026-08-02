@@ -18,6 +18,17 @@ export function createEvidenceService(database, options = {}) {
   const columns = `b.external_id AS externalId, b.material_id AS materialId, b.extraction_version AS extractionVersion,
     b.ordinal, b.kind, b.location_json AS locationJson, b.text, b.summary`;
 
+  // 检测 FTS5 是否可用（sql.js 默认不含 FTS5）
+  let ftsAvailable = null;
+  function hasFts() {
+    if (ftsAvailable !== null) return ftsAvailable;
+    try {
+      const row = database.prepare("SELECT count(*) AS c FROM sqlite_master WHERE type='table' AND name='evidence_fts'").get();
+      ftsAvailable = row && row.c > 0;
+    } catch { ftsAvailable = false; }
+    return ftsAvailable;
+  }
+
   function list({ projectId, materialId, requireQa = false, audience = "project_member" }) {
     const rows = database.prepare(`
       SELECT ${columns} FROM evidence_blocks b
@@ -53,9 +64,9 @@ export function createEvidenceService(database, options = {}) {
       WHERE b.project_id = ? AND m.status = 'ready' AND b.extraction_version = m.active_extraction_version
         AND g.enabled = 1 AND (g.audience = 'project_members' OR (? = 'editor' AND g.audience = 'editors'))`;
 
-    // 虚谷和 SQLite 短词都用 LIKE
-    // SQLite 长词用 FTS5 MATCH; 虚谷长词也用 LIKE（待虚谷全文索引验证后切换 CONTAINS）
-    const useLike = xugu || [...value].length < 3;
+    // 虚谷和 sql.js(无FTS5) 都用 LIKE
+    // SQLite 长词用 FTS5 MATCH（如果 FTS5 可用）
+    const useLike = xugu || [...value].length < 3 || !hasFts();
     const escaped = `%${value.replace(/[%_]/g, "\\$&")}%`;
 
     let rows;

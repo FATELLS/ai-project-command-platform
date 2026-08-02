@@ -15,16 +15,55 @@ function stableUniqueIds(value) {
   return ids;
 }
 
+// 将 task 的 PMBOK 元素压缩到 LLM 可消费的精简表示。
+// 数组字段限制条目数以控制 published_state 体积；字符串截断防止单条过长。
+const MAX_PMBOK_ARRAY_ITEMS = 8;
+const MAX_PMBOK_STRING_LEN = 500;
+
+function trimPmbokArray(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+  return arr.slice(0, MAX_PMBOK_ARRAY_ITEMS).map(item =>
+    typeof item === "string" ? item.slice(0, MAX_PMBOK_STRING_LEN) : item
+  );
+}
+
+function trimPmbokString(str) {
+  if (!str || typeof str !== "string") return "";
+  return str.length > MAX_PMBOK_STRING_LEN ? str.slice(0, MAX_PMBOK_STRING_LEN) + "…" : str;
+}
+
+// 从 graph task 构建 published_state 所需的 PMBOK 元素快照
+function taskPmbokSnapshot(task) {
+  const snapshot = {};
+  if (task.objective) snapshot.objective = trimPmbokString(task.objective);
+  if (task.health) snapshot.health = task.health;
+  // P1 条件必选——只在已有值时输出，让 LLM 做增量追加
+  if (task.stakeholders?.length) snapshot.stakeholders = trimPmbokArray(task.stakeholders);
+  if (task.deliverables?.length) snapshot.deliverables = trimPmbokArray(task.deliverables);
+  if (task.risks?.length) snapshot.risks = trimPmbokArray(task.risks);
+  // P2 可选增强——同样只在有值时输出
+  if (task.acceptanceCriteria) snapshot.acceptanceCriteria = trimPmbokString(task.acceptanceCriteria);
+  if (task.expectedOutput) snapshot.expectedOutput = trimPmbokString(task.expectedOutput);
+  if (task.decisions?.length) snapshot.decisions = trimPmbokArray(task.decisions);
+  return snapshot;
+}
+
 export function boundedPublished(graph) {
   const value = {
     projectId: graph.projectId,
     versionId: graph.versionId,
     versionLabel: graph.versionLabel,
     modules: graph.modules.map(item => ({ type: item.type, enabled: item.enabled })),
-    units: graph.units.map(item => ({ id: item.id, name: item.name })),
+    units: graph.units.map(item => ({ id: item.id, name: item.name, objective: trimPmbokString(item.objective) })),
     stages: graph.stages.map(item => ({ id: item.id, title: item.title, date: item.dateLabel ?? "" })),
-    tasks: graph.tasks.map(item => ({ id: item.id, unitId: item.unitId, parentId: item.parentId, title: item.title, startDate: item.startDate, endDate: item.endDate, progress: item.progress, dependsOn: item.dependsOn, owner: item.owner, state: item.state })),
-    risks: graph.risks.map(item => ({ id: item.id, title: item.title, severity: item.severity, status: item.status, owner: item.owner, dueDate: item.dueDate })),
+    tasks: graph.tasks.map(item => ({
+      id: item.id, unitId: item.unitId, parentId: item.parentId,
+      title: item.title, startDate: item.startDate, endDate: item.endDate,
+      progress: item.progress, dependsOn: item.dependsOn,
+      owner: item.owner, state: item.state,
+      ...taskPmbokSnapshot(item)
+    })),
+    risks: graph.risks.map(item => ({ id: item.id, title: item.title, severity: item.severity, status: item.status, owner: item.owner, dueDate: item.dueDate, mitigation: trimPmbokString(item.mitigation) })),
     metrics: graph.metrics.map(item => ({ id: item.id, name: item.name, value: item.value, unit: item.unit, status: item.status, asOf: item.asOf, target: item.target })),
     outcomes: graph.closures.map(item => ({ id: item.id, title: item.title, state: item.state, date: item.dateLabel, between: [...(item.between ?? [])] }))
   };

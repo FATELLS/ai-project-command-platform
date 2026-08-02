@@ -3,6 +3,46 @@ function text(value,label,{required=false,max=500}={}){if(value===undefined)retu
 function number(value,label){if(value===undefined||value===null||value==="unknown"||value==="")return undefined;if(typeof value!=="number")throw new TypeError(`${label} is invalid`);return value;}
 function stringArray(value,label){if(value===undefined)return undefined;if(!Array.isArray(value)||value.some(item=>typeof item!=="string"))throw new TypeError(`${label} is invalid`);return [...new Set(value)];}
 
+// PMBOK 数组字段去重键——用于 update 时的深度合并
+const ARRAY_DEDUP_KEY={"stakeholders":"_self","deliverables":"name","risks":"title","decisions":"summary"};
+// 按 dedup key 合并两个 PMBOK 数组：新条目追加，已有同名条目更新非空字段
+function mergePmbokArray(existing,incoming,dedupKey){
+  if(!Array.isArray(existing)||existing.length===0)return [...(incoming??[])];
+  if(!Array.isArray(incoming)||incoming.length===0)return [...existing];
+  const getKeyValue=(item)=>{
+    if(dedupKey==="_self")return typeof item==="string"?item:JSON.stringify(item);
+    return typeof item==="object"&&item!==null?String(item[dedupKey]??""):"";
+  };
+  const result=[...existing];
+  const existingKeys=new Set(existing.map(getKeyValue));
+  for(const item of incoming){
+    const key=getKeyValue(item);
+    if(key&&existingKeys.has(key)){
+      // 同名条目——更新非空字段（浅合并）
+      const idx=result.findIndex(r=>getKeyValue(r)===key);
+      if(idx>=0&&typeof item==="object"&&typeof result[idx]==="object"){
+        result[idx]={...result[idx],...Object.fromEntries(Object.entries(item).filter(([,v])=>v!==undefined&&v!==null&&v!==""))};
+      }
+    }else{
+      result.push(item);
+      if(key)existingKeys.add(key);
+    }
+  }
+  return result;
+}
+// 对 update 操作中 card_attrs 的数组字段做深度合并
+function deepMergeAttrs(currentAttrs,incomingAttrs){
+  const merged={...currentAttrs};
+  for(const[key,value]of Object.entries(incomingAttrs)){
+    if(ARRAY_DEDUP_KEY[key]&&Array.isArray(value)){
+      merged[key]=mergePmbokArray(currentAttrs[key]??[],value,ARRAY_DEDUP_KEY[key]);
+    }else{
+      merged[key]=value;
+    }
+  }
+  return merged;
+}
+
 function tableExists(database,name){try{database.prepare(`SELECT 1 FROM ${name} LIMIT 1`).get();return true;}catch{return false;}}
 
 function nextCardPosition(database,versionId){return database.prepare(`SELECT coalesce(max(position),-1)+1 AS position FROM project_cards WHERE version_id=?`).get(versionId).position;}
@@ -109,7 +149,7 @@ function writeCard(database,versionId,change,elementType){
   // update
   if(!cardExists(database,versionId,change.targetId))throw new TypeError("Review target does not exist in current draft");
   const current=getCardRow(database,versionId,change.targetId);
-  const mergedAttrs={...current.attrs,...attrsFields};
+  const mergedAttrs=deepMergeAttrs(current.attrs,attrsFields);
   const updates=[];
   const params=[];
   if(columnFields.title!==undefined||columnFields.name!==undefined){updates.push("title=?");params.push(text(columnFields.title||columnFields.name,"title",{max:512}));}

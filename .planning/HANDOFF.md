@@ -1,51 +1,99 @@
 # 交接
 
-最后更新：2026-07-29（项目更新四步主流程已验证）
+最后更新：2026-08-02（PMBOK 提示词改造 + 配置加载修复 + 生成管道可观测性 + AGENTS.md 留痕规则）
 
 ## 首先读取
 
-1. `AGENTS.md`
-2. `docs/RESULT.md`
-3. `.planning/PROJECT.md`
-4. `.planning/REQUIREMENTS.md`（含 Phase 11 WUI-01–25）
-5. `.planning/ROADMAP.md`（含 Phase 11）
-6. `.planning/STATE.md`
-7. `.planning/DECISIONS.md`（含 D-034 到 D-049）
-8. `.planning/PROCESS.md`（含 2026-07-29 Phase 11 规格化记录）
+1. `AGENTS.md`（含新的强制留痕与 Agent 交接规则）
+2. `.planning/STATE.md`（平台当前状态）
+3. `.planning/PROCESS.md` 最近 3 条记录（2026-08-02 PMBOK 改造 + 配置修复 + 可观测性强化）
+4. `docs/RESULT.md`（已实现结果）
+5. `.planning/PROJECT.md`
+6. `.planning/REQUIREMENTS.md`（含 Phase 11 WUI-01–25）
+7. `.planning/ROADMAP.md`（含 Phase 11）
+8. `.planning/DECISIONS.md`（含 D-034 到 D-049）
 9. `.planning/design/system/README.md`
-10. `.planning/design/system/SYSTEM-SPEC.md`
-11. `.planning/design/system/ARCHITECTURE.md`
-12. `.planning/design/system/TRACEABILITY.md`
-13. `.planning/phases/11-workflow-first-ui/README.md`
-14. `.planning/phases/11-workflow-first-ui/11-SPEC.md`
-15. `.planning/phases/11-workflow-first-ui/UI-SPEC.md`
-16. `.planning/phases/11-workflow-first-ui/TRACEABILITY.md`
-17. `.planning/phases/11-workflow-first-ui/11-VERIFICATION.md`
-18. `AI-SPEC.md`
+10. `.planning/phases/11-workflow-first-ui/README.md`
+11. `.planning/phases/11-workflow-first-ui/11-SPEC.md`
+12. `.planning/phases/11-workflow-first-ui/UI-SPEC.md`
+13. `.planning/phases/11-workflow-first-ui/11-VERIFICATION.md`
+14. `AI-SPEC.md`
 
-## 当前状态
+## 当前状态（2026-08-02）
 
-- Phase 1–9 已实现并通过验收，平台版本为 `0.8.0`；Roadmap 以 A"卡片泳道"作为项目路线图（主任务时间线、按单元分色的固定副任务卡片、两级原位展开），独立活动路线已退役，会话空闲超时为 4 小时。
+### 平台基线
+
+- **版本**：`0.9.6`（npm 已发布），Git HEAD `15dd870` 已推送
+- **Node 版本**：`>=20.0 <23`（虚谷原生驱动 ABI 115）
+- **SQLite 后端**：`sql.js`（WASM，Node 20 兼容）
+- **测试基线**：194 项单元测试全通过（194 pass / 0 fail / 0 cancelled）+ 49 项主流程 E2E + 9 项异常材料 E2E
+- **虚谷 migration**：8 文件全量验证通过，111 语句执行，47 表创建成功
+
+### 最近完成（本次会话）
+
+1. **PMBOK 七元素端到端贯通**（commit `f2c76b3`）：
+   - `boundedPublished()` 输出 objective/stakeholders/deliverables/risks/acceptanceCriteria/decisions/expectedOutput
+   - GENERATION_SYSTEM_PROMPT_V1 新增七元素提取框架（P0/P1/P2 三档优先级）
+   - writeCard PMBOK 数组字段深度合并去重
+   - 8 个新测试
+
+2. **server.mjs 配置加载修复**（commit `15dd870`）：
+   - `loadEnvFiles()` 加载 `.env` / `.env.local`
+   - 三条启动路径行为一致（npm start / npx / node server.mjs）
+   - 4 个新测试
+
+3. **生成管道可观测性强化**（本次未提交）：
+   - `generation-service.mjs`：processJob 全链路结构化日志（context/prompt/provider-call/provider-done/validated/done/failed，每步带耗时）
+   - `proposal-service.mjs`：异步生成/批量生成/重试三路径 queued/processing/done/failed 日志
+   - `openai-compatible-provider.mjs`：HTTP 请求体大小+估算 token、响应状态码+耗时、解析结果
+
+4. **AGENTS.md 强制留痕规则**（本次未提交）：
+   - 新增「强制留痕与 Agent 交接」章节
+   - 规定每次会话必须更新 6 类文档
+   - 规定新 Agent 接手必须按固定顺序读取
+
+### 未提交修改
+
+- `src/proposals/generation-service.mjs` — processJob 全链路可观测性日志
+- `src/services/proposal-service.mjs` — 异步生成/批量/重试日志
+- `src/ai/providers/openai-compatible-provider.mjs` — HTTP 请求/响应日志
+- `AGENTS.md` — 强制留痕与 Agent 交接规则
+
+### 关键代码路径（PMBOK + 生成管道）
+
+- **提示词**：`src/proposals/prompt-builder.mjs`（GENERATION_SYSTEM_PROMPT_V1 + OUTPUT_CONTRACT）
+- **上下文**：`src/proposals/context-builder.mjs`（`boundedPublished()` 输出 PMBOK 元素）
+- **模板存储映射**：`src/proposals/catalog.mjs`（`cardStorageMap`：columns vs attrs）
+- **写入合并**：`src/review/version-apply.mjs`（`writeCard` / `mergePmbokArray` / `deepMergeAttrs`）
+- **生成引擎**：`src/proposals/generation-service.mjs`（`processJob` 全链路日志）
+- **编排层**：`src/services/proposal-service.mjs`（异步生成 + 日志）
+- **AI Provider**：`src/ai/providers/openai-compatible-provider.mjs`（HTTP 日志）
+- **Provider 工厂**：`src/ai/provider-factory.mjs`（`createGenerationProviderFromEnv`）
+- **设置服务**：`src/services/settings-service.mjs`（`buildProviderEnvironment` DB 覆盖 env）
+- **配置加载**：`src/config/local-config.mjs`（`loadEnvFiles` + `loadLocalConfigToEnv`）
+
+### 下一个 Agent 应继续的工作
+
+1. **UI 端 PMBOK 生成验证**（最高优先级）：
+   - 启动平台（`npm run start:background`），登录，进入项目，上传材料，启动生成
+   - 观察控制台日志 `[gen]` 和 `[provider]` 输出，精确定位生成卡在哪个阶段
+   - 如果是 GLM-5.2 响应慢（provider-call 到 provider-done 之间），考虑给 prompt 瘦身或调参
+   - 如果是 context 构建慢或 prompt 构建慢，可能是数据量大需要优化查询
+
+2. **Phase 11 剩余切片**：查看者服务端边界收紧、总览注意力队列、ProjectSkeleton 扩展、可恢复发布编排、全弹窗键盘 UAT
+
+3. **前端保存 AI 配置到 DB**：当前 DB `platform_settings` 表为空，建议通过 UI 设置页保存一次，使配置持久化到 DB（而非仅依赖 .env.local）
+
+## 历史状态（Phase 1–11 背景）
+
+- Phase 1–9 已实现并通过验收，平台版本从 `0.8.0` 迭代到 `0.9.6`；Roadmap 以"卡片泳道"作为项目路线图。
 - Phase 10 已实现并通过验证；全项目 canonical system design 已按八个长期模块建立；Phase 11 是 Product Experience 模块的 `implementation in progress` 演进，第一实施切片已验证。
-- Phase 11 后多文档 UI 复跑已从 DOCX/XLSX/TXT/JSON 走到真实生成、逐项审核、草稿合并、人工发布和路线图验收；连续上传按钮与路线日期投影回归已修复，证据见 `.planning/benchmarks/project-progression-ui/RESULT.md`。
 - 首个项目 `xugu-agentic-group` 由参考 v4.2 脱敏种子迁移，当前通过 BM-08 人工发布到 `v4.3`。
-- 已有认证、基础角色、项目生命周期、项目切换、九类发布态模块，以及管理员/编辑者只写草稿的模块排序与启停 UI/API。
 - 九类底层模块在前端组织为六个一级工作区：总览、项目路线图、作战单元/团队、排期甘特、项目健康和项目资料。
-- 已有项目隔离的材料摄入、证据处理/定位/检索、问答授权和只读带引用项目问答。
-- 已有六类结构化更新模板、generation task、严格 ChangeProposal、确定性增量校验。
-- 项目资料负责长期战果和材料台账；独立 `/updates` 流程从本次更新材料开始，再进入处理与生成、模拟路线图、人工审核和发布，并直接复用正式路线图 renderer。AI 新增/修改高亮，本次之外的发布节点降亮只读。
-- 正式路线图阶段/任务卡片均提供受控编辑并生成 interaction proposal；节点预览只允许编辑本次生成卡片，既有节点降亮并明确只读，删除均要求精确输入“确认删除”。
-- 顶栏、路线图、卡片编辑和项目创建方式使用共享线性图标目录；纯图标具备可访问名称与 tooltip，卡片工具不遮挡内容。
-- 已有独立审核决定、字段绑定编辑、copy-on-write 草稿合并、确定性发布预览、人工发布和回滚。
-- 已有材料 readiness 诊断、作战单元生命周期校验、统一 request/trace ID、诊断包 API 和产品内测试中心。
-- 默认数据库为 `data/platform.sqlite`，测试与统一验证只使用临时目录。
-- 参考项目位于 `../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console/`，必须继续只读。
-- GitHub 私有仓库：`https://github.com/FATELLS/ai-project-command-platform`；正式 Release `v0.8.0`。
-- 正式 `server.mjs` 必须保留材料 worker 启动与优雅停止。
+- 独立 `/updates` 流程从本次更新材料开始，再进入处理与生成、模拟路线图、人工审核和发布，并直接复用正式路线图 renderer。
+- 正式路线图阶段/任务卡片均提供受控编辑并生成 interaction proposal；节点预览只允许编辑本次生成卡片。
 - 源码后台运行使用 `npm run start:background/status/stop/restart`；只管理平台 Node PID，严禁把虚谷数据库或 Docker 容器加入平台 `stop`。
-- 总览主操作为“项目更新”，进入独立 `/updates` 四步流程；通用入口先上传或选择本次材料，项目资料仍保留长期材料台账。
-- 创建与项目更新入口共享六类材料模板；创建 API 与材料 gate 对空文件、类型和签名保持对称校验。
-- 独立 `test:e2e:abnormal` 覆盖异常创建/更新、阶段用途不匹配和 UI 节点预览定位，并已纳入 `npm run verify`。
+- GitHub 公开仓库：`https://github.com/FATELLS/ai-project-command-platform`。
 
 ## Phase 11 当前进展
 

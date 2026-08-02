@@ -14,6 +14,24 @@ function safeCode(error) { return /^[A-Z][A-Z0-9_]{1,80}$/.test(String(error?.co
 function repairable(error) { return new Set(["PROPOSAL_SCHEMA_INVALID", "PROPOSAL_ENVELOPE_MISMATCH", "EVIDENCE_NOT_ALLOWED", "PATCH_FIELD_NOT_ALLOWED", "INVALID_CHANGE_ENUM", "INVALID_DATE", "INVALID_DATE_RANGE", "TARGET_NOT_FOUND", "DUPLICATE_TARGET", "DUPLICATE_CHANGE_ID", "CONFLICTING_CHANGES", "TASK_UNIT_NOT_FOUND", "TASK_LINK_NOT_FOUND", "TASK_LINK_CROSS_UNIT", "TASK_GRAPH_CYCLE", "DUPLICATE_NAME"]).has(error?.code); }
 function retryable(error) { return error?.status === 429 || error?.status === 503 || /TIMEOUT|NETWORK|HTTP_5|DISABLED|BUSY|UNAVAILABLE/.test(String(error?.code ?? "")); }
 
+/**
+ * 结构化生成管道日志——所有日志统一带 [gen] 前缀和 jobId，
+ * 方便从控制台输出或日志文件中快速定位生成卡在哪个阶段。
+ */
+function genLog(jobId, phase, message, extra) {
+  const ts = new Date().toISOString();
+  const parts = [`[gen] ${ts} job=${jobId} ${phase}`];
+  if (message) parts.push(String(message));
+  if (extra && typeof extra === "object") {
+    const summary = Object.entries(extra)
+      .filter(([, v]) => v !== undefined && v !== null)
+      .map(([k, v]) => `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`)
+      .join(" ");
+    if (summary) parts.push(summary);
+  }
+  console.log(parts.join(" | "));
+}
+
 function pricedUsage(usage, pricing) {
   const input = Math.max(0, Number(usage?.input ?? 0)); const output = Math.max(0, Number(usage?.output ?? 0));
   if (!pricing || !Number.isFinite(pricing.inputMicrosPerMillion) || !Number.isFinite(pricing.outputMicrosPerMillion)) return { inputTokens: input, outputTokens: output, costStatus: "unpriced", costMicros: null, currency: null, priceVersion: null };
@@ -58,26 +76,49 @@ export function createGenerationService(database, options = {}) {
     let job = repository.getJob(projectId, jobId);
     if (!job) throw proposalError("GENERATION_JOB_NOT_FOUND", "生成任务不存在或你无权访问", 404);
     if (["succeeded", "failed_terminal", "stale"].includes(job.state)) return job;
+    genLog(jobId, "start", `processJob begin`, { projectId, state: job.state, template: `${job.template?.id}@${job.template?.version}`, materials: job.materials?.length, evidence: job.evidence?.length });
+    const t0 = Date.now();
     let release; let providerCalls = job.attemptsCount;
     try {
-      const context = lockedContext(job); const template = getProposalTemplate(context.templateId, context.templateVersion);
+      const tCtx0 = Date.now();
+      const context = lockedContext(job);
+      genLog(jobId, "context", `context built in ${Date.now() - tCtx0}ms`, { evidenceBlocks: context.evidence?.length, publishedTasks: context.published?.tasks?.length, digest: context.digest?.slice(0, 12) });
+      const template = getProposalTemplate(context.templateId, context.templateVersion);
       if (!template) throw proposalError("TEMPLATE_NOT_FOUND", "更新模板不可用", 409);
       repository.updateJob(projectId, jobId, { state: "retrieving_evidence", errorCode: null });
       release = quota.acquire();
+      genLog(jobId, "quota", `quota acquired in ${Date.now() - t0}ms`);
       let validated; let validationCodes = [];
       for (let pass = 0; pass < 2; pass += 1) {
         providerCalls += 1; const attemptId = randomUUID(); const started = now(); const kind = pass === 0 ? "initial" : "structure_repair";
         repository.updateJob(projectId, jobId, { state: pass === 0 ? "generating" : "repairing", attempts: providerCalls });
+
+        // 构建 prompt 并记录大小（关键诊断信号）
+        const tPrompt0 = Date.now();
+        const prompt = buildGenerationPrompt(context, template, { validationCodes });
+        const systemLen = prompt.messages[0]?.content?.length ?? 0;
+        const userLen = prompt.messages[1]?.content?.length ?? 0;
+        genLog(jobId, "prompt", `prompt built in ${Date.now() - tPrompt0}ms`, { kind, systemChars: systemLen, userChars: userLen, totalChars: systemLen + userLen, approxTokens: Math.round((systemLen + userLen) / 4) });
+
         try {
-          const raw = await provider.generate(buildGenerationPrompt(context, template, { validationCodes }), { signal: contextOptions.signal });
+          genLog(jobId, "provider-call", `calling AI provider (${kind})...`, { model: provider.safeLabel, timeoutMs: options.environment?.AI_GENERATION_TIMEOUT_MS ?? "default" });
+          const raw = await provider.generate(prompt, { signal: contextOptions.signal });
+          const providerMs = Date.now() - started;
+          genLog(jobId, "provider-done", `provider responded in ${providerMs}ms`, { inputTokens: raw.usage?.input, outputTokens: raw.usage?.output, contentLen: raw.content?.length, providerLabel: raw.providerLabel });
+
           repository.updateJob(projectId, jobId, { state: "validating" });
+          const tValid0 = Date.now();
           validated = validateProposal(raw.content, context);
+          genLog(jobId, "validated", `proposal validated in ${Date.now() - tValid0}ms`, { changes: validated.changes?.length, warnings: validated.warnings?.length });
+
           const usage = pricedUsage(raw.usage, options.pricing);
           repository.addAttempt(projectId, jobId, { id: attemptId, attemptNumber: providerCalls, kind, outcome: "succeeded", providerLabel: raw.providerLabel ?? provider.safeLabel ?? (provider.configured ? "configured" : "disabled"), latencyMs: Math.max(0, now() - started), ...usage });
           break;
         } catch (error) {
+          const providerMs = Date.now() - started;
+          genLog(jobId, "provider-error", `attempt ${kind} failed in ${providerMs}ms`, { code: safeCode(error), message: error?.message?.slice(0, 200) });
           repository.addAttempt(projectId, jobId, { id: attemptId, attemptNumber: providerCalls, kind, outcome: "failed", providerLabel: provider.safeLabel ?? (provider.configured ? "configured" : "disabled"), latencyMs: Math.max(0, now() - started), resultCode: safeCode(error), costStatus: "unpriced" });
-          if (pass === 0 && repairable(error)) { validationCodes = [safeCode(error), ...(error.details ? [`${safeCode(error)}: ${JSON.stringify(error.details)}`] : [])]; continue; }
+          if (pass === 0 && repairable(error)) { validationCodes = [safeCode(error), ...(error.details ? [`${safeCode(error)}: ${JSON.stringify(error.details)}`] : [])]; genLog(jobId, "repair", `entering structure_repair pass`, { validationCodes }); continue; }
           throw error;
         }
       }
@@ -85,9 +126,11 @@ export function createGenerationService(database, options = {}) {
       const current = database.prepare("SELECT published_version_id AS id FROM projects WHERE id=?").get(projectId);
       if (!current || Number(current.id) !== Number(job.baseVersionId)) throw proposalError("BASE_VERSION_STALE", "发布版本已变化", 409);
       repository.saveProposal(projectId, jobId, validated);
+      genLog(jobId, "done", `processJob succeeded in ${Date.now() - t0}ms`, { state: "succeeded", totalAttempts: providerCalls });
       return repository.getJob(projectId, jobId);
     } catch (error) {
       const code = safeCode(error); const state = ["BASE_VERSION_STALE", "GENERATION_CONTEXT_STALE"].includes(code) ? "stale" : retryable(error) ? "failed_retryable" : "failed_terminal";
+      genLog(jobId, "failed", `processJob failed in ${Date.now() - t0}ms`, { code, state, message: error?.message?.slice(0, 200) });
       repository.updateJob(projectId, jobId, { state, attempts: providerCalls, errorCode: code, validation: error instanceof ProposalServiceError ? { status: "failed", code, details: error.details ?? null } : { status: "failed", code } });
       return repository.getJob(projectId, jobId);
     } finally { release?.(); }

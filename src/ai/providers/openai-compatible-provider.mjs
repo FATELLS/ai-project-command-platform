@@ -23,23 +23,35 @@ export function validateProviderConfig(config) {
 export function createOpenAiCompatibleProvider(config, options = {}) {
   const base = validateProviderConfig(config); const fetchImpl = options.fetchImpl ?? globalThis.fetch; const sleep = options.sleep ?? delay;
   const endpoint = new URL(`${base.pathname.replace(/\/$/, "")}/chat/completions`, base.origin).toString();
-  return Object.freeze({ configured: true, safeLabel: String(config.safeLabel ?? "openai-compatible").slice(0, 80), async generate(request, { signal } = {}) {
+  const providerLabel = String(config.safeLabel ?? "openai-compatible").slice(0, 80);
+  const configuredTimeoutMs = config.timeoutMs ?? 45_000;
+  const configuredMaxTokens = Math.min(config.maxOutputTokens ?? 1_200, 8_000);
+  return Object.freeze({ configured: true, safeLabel: providerLabel, async generate(request, { signal } = {}) {
+    const requestBody = JSON.stringify({ model: config.model, messages: request.messages, temperature: 0.1, max_tokens: configuredMaxTokens, stream: false, response_format: request.responseFormat, ...(config.reasoningEffort ? { reasoning_effort: config.reasoningEffort } : {}) });
+    const bodyBytes = Buffer.byteLength(requestBody);
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const deadline = AbortSignal.timeout(config.timeoutMs ?? 45_000); const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
+      const fetchStart = Date.now();
+      const deadline = AbortSignal.timeout(configuredTimeoutMs); const combined = signal ? AbortSignal.any([signal, deadline]) : deadline;
+      if (attempt === 0) console.log(`[provider] ${new Date().toISOString()} POST ${endpoint} | model=${config.model} reqBody=${bodyBytes} bytes (~${Math.round(bodyBytes / 4)} tokens) timeoutMs=${configuredTimeoutMs} reasoning=${config.reasoningEffort ?? "default"}`);
       let response;
       try {
-        response = await fetchImpl(endpoint, { method: "POST", headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json", accept: "application/json" }, body: JSON.stringify({ model: config.model, messages: request.messages, temperature: 0.1, max_tokens: Math.min(config.maxOutputTokens ?? 1_200, 8_000), stream: false, response_format: request.responseFormat, ...(config.reasoningEffort ? { reasoning_effort: config.reasoningEffort } : {}) }), signal: combined });
+        response = await fetchImpl(endpoint, { method: "POST", headers: { authorization: `Bearer ${config.apiKey}`, "content-type": "application/json", accept: "application/json" }, body: requestBody, signal: combined });
       } catch (error) {
+        const elapsed = Date.now() - fetchStart;
+        console.error(`[provider] ${new Date().toISOString()} FETCH FAILED after ${elapsed}ms | ${error?.name}: ${error?.message?.slice(0, 200)}`);
         if (signal?.aborted) throw signal.reason; if (attempt === 0 && error?.name !== "AbortError") { await sleep(1); continue; } throw safeProviderError(error?.name === "AbortError" ? "AI_PROVIDER_TIMEOUT" : "AI_PROVIDER_NETWORK_ERROR");
       }
+      const fetchMs = Date.now() - fetchStart;
       const body = await boundedBody(response, config.maxResponseBytes ?? 256 * 1024);
+      console.log(`[provider] ${new Date().toISOString()} response ${response.status} in ${fetchMs}ms | body=${body.length} bytes`);
       if (!response.ok) { if (attempt === 0 && retryStatuses.has(response.status)) { await sleep(1); continue; } throw safeProviderError(`AI_PROVIDER_HTTP_${response.status}`); }
       let payload; try { payload = JSON.parse(body); } catch { throw safeProviderError("AI_PROVIDER_INVALID_JSON"); }
       if (!Array.isArray(payload.choices) || payload.choices.length !== 1) throw safeProviderError("AI_PROVIDER_INVALID_OUTPUT");
       const choice = payload.choices[0]; if (choice.message?.tool_calls || !["stop", "length"].includes(choice.finish_reason) || typeof choice.message?.content !== "string" || !choice.message.content.trim() || choice.message.content.length > (config.maxContentCharacters ?? 16_000)) throw safeProviderError("AI_PROVIDER_INVALID_OUTPUT");
       const rawContent = choice.message.content.trim();
       const extracted = rawContent.replace(/^```(?:json|JSON)?\s*\n?/, "").replace(/\n?```\s*$/, "").trim();
-      return { content: extracted, usage: { input: Number(payload.usage?.prompt_tokens ?? 0), output: Number(payload.usage?.completion_tokens ?? 0) }, providerLabel: String(config.safeLabel ?? "openai-compatible").slice(0, 80) };
+      console.log(`[provider] ${new Date().toISOString()} parsed OK | finish=${choice.finish_reason} inputTokens=${payload.usage?.prompt_tokens ?? "?"} outputTokens=${payload.usage?.completion_tokens ?? "?"} contentLen=${extracted.length}`);
+      return { content: extracted, usage: { input: Number(payload.usage?.prompt_tokens ?? 0), output: Number(payload.usage?.completion_tokens ?? 0) }, providerLabel };
     }
     throw safeProviderError("AI_PROVIDER_UNAVAILABLE");
   } });

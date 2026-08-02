@@ -331,5 +331,26 @@
 
 - 状态：`accepted`
 - 决策：`/projects/:projectId/updates` 只表示开始一次项目更新，第一步是上传或选择本次材料；它不得自动打开最近 proposal。生成完成后的继续入口必须导航到 `/updates/preview/:proposalId`，再由 `/updates/proposals/:proposalId` 进入审核，并依次完成草稿合并和人工发布。
-- 原因：把“开始新更新”和“继续旧预览”复用为同一个无实例 URL，会跳过材料输入并让用户无法判断当前操作属于哪一次更新。proposalId 是模拟路线图、审核决定和发布前状态的最小稳定业务实例。
+- 原因：把"开始新更新"和"继续旧预览"复用为同一个无实例 URL，会跳过材料输入并让用户无法判断当前操作属于哪一次更新。proposalId 是模拟路线图、审核决定和发布前状态的最小稳定业务实例。
 - 影响：历史未完成更新只能在材料起点作为次要继续入口；项目资料继续保存长期材料台账，模拟路线图继续复用正式 renderer，proposal/draft/published 安全边界不变。
+
+## D-050 PMBOK 七元素作为卡片通用属性提取框架
+
+- 状态：`accepted / implemented`
+- 决策：生成提示词引导 LLM 围绕 PMBOK 七元素（目标/范围、时间/进度、人员/相关方、评价/质量、交付物、风险、决策）从材料中提取内容，输出直接对应卡片属性。`boundedPublished()` 上下文输出已有 PMBOK 值以支持增量合并；writeCard 的 PMBOK 数组字段采用深度合并去重。
+- 原因：此前提示词只输出硬编码字段（changes[].patch），LLM 看不到已有 PMBOK 值，update 操作的数组字段被浅替换导致已有值丢失。七元素框架让卡片属性有统一的项目管理语义来源，跨项目类型归并（销售、研发、管理、市场、基础设施卡片结构统一）。
+- 影响：提示词（GENERATION_SYSTEM_PROMPT_V1）、上下文（boundedPublished）、写入（writeCard）三层端到端贯通；dedup 键：stakeholders 按人名、deliverables 按 name、risks 按 title、decisions 按 summary。
+
+## D-051 生成管道必须具备全链路可观测性
+
+- 状态：`accepted / implemented`
+- 决策：生成管道 processJob 的每个阶段（context 构建、prompt 构建、provider 调用、响应解析、验证、保存）都必须输出结构化时间戳日志，包含 jobId、阶段名、耗时和关键指标（prompt 大小、token 用量、HTTP 状态码）。异步生成、批量生成和重试三路径也必须有 queued/processing/done/failed 日志。
+- 原因：生成管道此前是"黑洞"——异步执行、零运行时日志，卡住时无法判断瓶颈在 context 构建、prompt 太大、API 慢还是解析慢。可观测性是定位和优化前提。
+- 影响：所有日志带 `[gen]` 或 `[provider]` 前缀 + ISO 时间戳 + jobId，写入 console（app.log）。后续可接入结构化日志系统。
+
+## D-052 Agent 交接必须持久化到项目文档
+
+- 状态：`accepted`
+- 决策：所有会话讨论、决策和操作必须写入项目文档（PROCESS.md、HANDOFF.md、STATE.md、RESULT.md、DECISIONS.md、memory/YYYY-MM-DD.md），不能只存在对话记忆中。AGENTS.md 包含留痕检查清单和新 Agent 接手流程。
+- 原因：切换 Agent 时上下文丢失会导致重复工作、遗漏关键决策或破坏已有架构。对话记忆不可靠，文档是跨 Agent 的唯一可靠信息源。
+- 影响：每次会话结束前必须完成 6 类文档更新；新 Agent 必须按固定顺序读取文档后才能开始编码。

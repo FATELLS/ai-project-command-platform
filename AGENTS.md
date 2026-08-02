@@ -42,6 +42,81 @@
 5. 更新 `docs/RESULT.md`、`.planning/PROCESS.md`、`.planning/STATE.md` 和 `.planning/HANDOFF.md`。
 6. 架构边界变化时更新 `.planning/DECISIONS.md`。
 
+## 强制留痕与 Agent 交接（不可省略）
+
+> **任何 Agent 在结束当前会话之前，必须完成以下全部步骤。** 未完成的会话视为未完成工作。
+> 这是保证 Agent 切换不丢上下文的唯一机制。
+
+### 1. 每一步操作留痕
+
+每次代码修改、配置变更、测试运行或架构决策，必须在**当次工具调用阶段**写入以下文件：
+
+| 文件 | 写入时机 | 内容 |
+|------|---------|------|
+| `.planning/PROCESS.md` | 每次会话结束前 | 追加本次会话的讨论总结、做了什么、为什么这样做、遇到什么问题、怎么解决的 |
+| `docs/RESULT.md` | 代码/功能变更后 | 更新已实现结果的对应章节 |
+| `.planning/STATE.md` | 代码/功能变更后 | 更新当前平台状态（版本、测试基线、Git HEAD） |
+| `.planning/HANDOFF.md` | 每次会话结束前 | 更新交接状态：下一个 Agent 需要知道什么、从哪里继续 |
+| `.planning/DECISIONS.md` | 架构/设计决策变更时 | 追加 D-XXX 编号的决策记录 |
+| `.workbuddy/memory/YYYY-MM-DD.md` | 每次会话结束前 | 追加简短日志（与 PROCESS.md 互补，更偏技术细节） |
+
+### 2. 会话讨论总结
+
+每次会话中有意义的讨论（用户提出的需求、方向性反馈、纠正性意见），**必须**总结后写入 `.planning/PROCESS.md`：
+
+- 用户提出了什么需求/问题
+- Agent 的分析和方案
+- 用户认可或纠正了什么
+- 最终决定了什么
+- 未解决的问题和风险
+
+格式：
+```markdown
+## YYYY-MM-DD 会话记录
+
+### 讨论主题
+（一句话概括）
+
+### 用户需求
+- ...
+
+### Agent 分析与方案
+- ...
+
+### 用户反馈/纠正
+- ...
+
+### 最终决策
+- ...
+
+### 遗留问题
+- ...
+```
+
+### 3. Agent 交接检查清单
+
+当前会话结束前，确认以下文件均已更新：
+
+- [ ] `.planning/PROCESS.md` — 本次会话讨论和操作的完整记录
+- [ ] `.planning/HANDOFF.md` — 下一个 Agent 的起点（当前状态、下一步工作）
+- [ ] `.planning/STATE.md` — 平台版本号、Git HEAD、测试基线
+- [ ] `docs/RESULT.md` — 已实现结果（如有代码变更）
+- [ ] `.planning/DECISIONS.md` — 新的架构决策（如有）
+- [ ] `.workbuddy/memory/YYYY-MM-DD.md` — 当日工作日志
+
+### 4. 新 Agent 接手流程
+
+新 Agent 开始工作时，**必须按以下顺序读取**：
+
+1. `AGENTS.md`（本文件）
+2. `.planning/HANDOFF.md` — 最新的交接状态
+3. `.planning/STATE.md` — 平台当前状态
+4. `.planning/PROCESS.md` 最近 3 条记录 — 近期工作脉络
+5. `docs/RESULT.md` — 已实现结果
+6. 根据任务需要，继续读取 ROADMAP / DECISIONS / REQUIREMENTS 等
+
+**禁止**跳过上述步骤直接开始编码。
+
 ## Git 与安全
 
 - 提交代码、Schema、模板、脱敏种子和过程文档。

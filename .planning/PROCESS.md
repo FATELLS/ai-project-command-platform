@@ -1,5 +1,56 @@
 # 项目过程
 
+## 2026-08-02：PMBOK 提示词改造 + 配置加载修复 + 生成管道可观测性 + AGENTS.md 留痕规则
+
+状态：`accepted`
+
+### 讨论主题
+
+用户要求：(1) 修复 API 生成功能（P0 遗留），(2) 所有讨论和对话内容必须持久化，(3) 每步操作必须留痕，(4) 确保切换 Agent 时不丢上下文。
+
+### 完成的工作
+
+1. **PMBOK 七元素端到端贯通**（commit `f2c76b3`）：
+   - `context-builder.mjs` `boundedPublished()` 输出 PMBOK 元素（objective/stakeholders/deliverables/risks/acceptanceCriteria/decisions/expectedOutput），数组限 8 条、字符串截断 500 字
+   - `prompt-builder.mjs` GENERATION_SYSTEM_PROMPT_V1 新增 PMBOK 七元素提取框架（P0/P1/P2 三档优先级）、元素间关联引导、增量合并规则、dedup 键定义
+   - `version-apply.mjs` writeCard 的 PMBOK 数组字段从浅替换改为深度合并去重（mergePmbokArray + deepMergeAttrs），dedup 键：stakeholders 按人名、deliverables 按 name、risks 按 title、decisions 按 summary
+   - 新增 8 个单元测试（test/pmbok-pipeline.test.mjs）
+
+2. **server.mjs 配置加载修复**（commit `15dd870`）：
+   - 新增 `loadEnvFiles()` 函数，解析 `.env` / `.env.local`（KEY=VALUE 格式）
+   - `server.mjs` 入口调用 `loadEnvFiles()` + `loadLocalConfigToEnv()`，确保三条启动路径（npm start / npx / node server.mjs）配置源一致
+   - 新增 4 个单元测试（test/env-loading.test.mjs）
+
+3. **API key 持久化**：`.env.local` 的 `AI_CHAT_API_KEY` 和 `AI_GENERATION_API_KEY` 从失效 key 更新为有效 key
+
+4. **生成管道可观测性强化**（本次提交）：
+   - `generation-service.mjs` processJob 全链路加结构化时间戳日志：context 构建耗时、prompt 构建耗时+大小、provider 调用开始/结束+token 用量、验证结果、成功/失败耗时
+   - `proposal-service.mjs` 异步生成、批量生成、重试三路径全部加 queued/processing/done/failed 日志
+   - `openai-compatible-provider.mjs` HTTP 请求/响应加详细日志：请求体大小（字节+估算 token）、响应状态码+耗时、解析结果（finish_reason、token 用量、content 长度）
+
+5. **AGENTS.md 强制留痕规则**（本次提交）：
+   - 新增「强制留痕与 Agent 交接」章节
+   - 规定每次会话必须更新：PROCESS.md（讨论总结）、HANDOFF.md（交接状态）、STATE.md（平台状态）、RESULT.md（实现结果）、DECISIONS.md（决策）、memory/YYYY-MM-DD.md（技术日志）
+   - 规定新 Agent 接手必须按固定顺序读取文档
+
+### 用户反馈/纠正
+
+- 「我用的不是 GLM 5.2 吗」→ AI 之前误用 glm-4.6 模型，纠正后更新配置
+- 「启动方式难道不属于平台的一部分？」→ AI 之前把 server.mjs 不加载 .env.local 归因为"外部"问题，用户纠正为平台自身的代码缺陷
+- 「api我不是重新给你了，你没持久化？」→ AI 拿到有效 key 后没写入 .env.local，用户纠正为必须持久化
+- 「你 api 启动这个东西，你是不是要代码级修复？」→ 用户指出仅做配置加载补丁不够，需要深入生成管道本身的代码
+
+### 最终决策
+
+- 生成管道必须加可观测性日志，不能是"黑洞"
+- 所有讨论必须写入 PROCESS.md，不能只存在对话记忆中
+- AGENTS.md 是 Agent 交接的契约文档，包含留痕检查清单和接手流程
+
+### 遗留问题
+
+- UI 端 PMBOK 生成验证因 GLM-5.2 大 prompt 处理延迟未完成（简单 prompt 2 秒返回，平台完整 prompt 需要更长时间）
+- DB `platform_settings` 表为空——AI 配置完全依赖 .env.local，从未在前端设置页保存过。这导致 `buildProviderEnvironment` 返回的 env 与 process.env 相同（空 DB 不覆盖），功能上可行但建议在前端保存一次使配置持久化到 DB
+
 ## 2026-07-18：项目初始化
 
 状态：`accepted`

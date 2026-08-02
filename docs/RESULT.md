@@ -78,6 +78,32 @@
 - 打开主任务后，路线画布以低强度深蓝灰遮罩降亮非当前区域；主任务使用更明显的半透明玻璃背景，所属副任务收纳在同宽 420px 面板内按三列排列。作战单元收成每组顶部小色标，主卡与子任务区用平滑双坡线连接，二级详情不越过面板边界。
 - `0.8.0` 新增 Windows x64 ZIP、Linux x64 tar.gz 与 RHEL 系 x64 RPM 分发；安装包自带 Node.js，RPM 自动注册 systemd 并启动。Release 只复制运行白名单，不包含项目数据库、上传材料、真实密钥、夹具、规划和测试内容。
 - 私有 GitHub 仓库与 `v0.8.0` Release 已完成发布；Windows/Linux 原生 x64 启动冒烟、RPM 构建和 SHA-256 产物上传全部成功。
+
+## PMBOK 七元素提取框架（2026-08-02）
+
+- 生成提示词 `GENERATION_SYSTEM_PROMPT_V1` 已包含 PMBOK 七元素提取框架（P0 目标/范围、P1 时间/进度/人员/相关方/交付物、P2 评价/质量/风险/决策），引导 LLM 围绕这些元素从材料中提取内容。
+- `boundedPublished()` 上下文现在输出已有卡片的 PMBOK 值（objective/health/stakeholders/deliverables/risks/acceptanceCriteria/decisions/expectedOutput），数组限 8 条、字符串截断 500 字。LLM 可以看到已有值并实现真正的增量合并。
+- writeCard 的 PMBOK 数组字段（stakeholders/deliverables/risks/decisions）从浅替换改为深度合并去重，dedup 键分别为人名/name/title/summary。
+- 新增 8 个 PMBOK 管道单元测试（boundedPublished 输出、增量合并、writeCard 深度合并）。
+
+## 配置加载一致性（2026-08-02）
+
+- 新增 `loadEnvFiles()` 函数，在 `server.mjs` 入口加载 `.env` / `.env.local`。
+- 三条启动路径（`npm start` / `npx` / `node server.mjs`）配置源行为统一，不再依赖 `--env-file` 参数。
+- 新增 4 个配置加载单元测试。
+
+## 生成管道全链路可观测性（2026-08-02）
+
+- 生成管道 `processJob` 全链路加结构化时间戳日志：context 构建、prompt 构建（含大小和估算 token）、provider 调用（含超时配置和模型标签）、provider 响应（含 HTTP 状态码、耗时、token 用量、content 长度）、验证结果、成功/失败总耗时。
+- 异步生成、批量生成和重试三路径全部加 queued/processing/done/failed 日志。
+- AI provider 的 HTTP 请求/响应加详细日志：请求体大小（字节+估算 token）、响应状态码+耗时、解析结果（finish_reason、token 用量）。
+- 日志格式统一为 `[gen]` / `[provider]` 前缀 + ISO 时间戳 + jobId，方便从控制台输出中快速定位生成卡在哪个阶段。
+
+## AGENTS.md 强制留痕与 Agent 交接规则（2026-08-02）
+
+- `AGENTS.md` 新增「强制留痕与 Agent 交接」章节，规定每次会话必须更新 6 类文档（PROCESS.md / HANDOFF.md / STATE.md / RESULT.md / DECISIONS.md / memory/YYYY-MM-DD.md）。
+- 规定会话讨论总结格式（讨论主题、用户需求、Agent 分析、用户反馈、最终决策、遗留问题）。
+- 规定新 Agent 接手必须按固定顺序读取文档（AGENTS.md → HANDOFF.md → STATE.md → PROCESS.md 最近 3 条 → RESULT.md）。
 - Phase 10 用户体验简化已落地：材料工作区消除抬头重复（移除 localTabs，sectionNav 统一覆盖全部子视图）；战情问答从材料工作区标签移出为项目级右侧浮动按钮（所有项目页面可用）；材料表格和详情页彻底移除问答授权/生成授权列、按钮和元数据行，上传处理、人工录入和模板选择均在内部自动开启生成资格；项目创建提供三种方式（对话式 AI 引导、上传材料自动提取、手动表单），新增 `/api/projects/from-material` 和 `/api/projects/suggest` 端点。
 - 2026-07-29 更新后验证修复已落地：`outcomes` 已恢复为九类固定模块之一并接入模板、服务端 loader、前端 renderer 和“项目资料”导航；登录 IP 窗口限流恢复；PDF/图片材料在无 vision provider 时仍可走受限 `pdftotext`/`tesseract` fallback；迁移 008–010 已纳入备份与统一验证基线。
 - Phase 11 第一实施切片已落地：项目入口改为紧凑操作工作台；项目内固定为六个一级工作区和单一标题层级；总览、材料和审核页把当前业务对象与主操作移到首屏；查看者界面隐藏技术 ID 与受限入口；三种创建方式统一经过项目骨架确认；材料状态改为用户可行动语言；审核先展示业务变化、影响与证据并折叠技术细节；设置新增渐进披露和不回显密钥的连接测试；移动端不再隐藏路线图核心内容。

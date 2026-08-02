@@ -59,10 +59,16 @@ export function createProposalService(database, options = {}) {
       return { task: result };
     }
     // 异步模式：立即返回 queued 状态，后台执行 processJob
+    console.log(`[gen] ${new Date().toISOString()} job=${job.id} queued | template=${job.template?.id} materials=${job.materials.length} baseVersion=${job.baseVersionId}`);
     setImmediate(() => {
+      const asyncStart = Date.now();
+      console.log(`[gen] ${new Date().toISOString()} job=${job.id} processing begin (async)`);
       generation.processJob(projectId, job.id)
-        .then(result => { if (result.state !== job.state) audit(principal,"generation.completed",projectId,"generation_job",job.id,{state:result.state,errorCode:result.errorCode,proposalId:result.proposalId}); })
-        .catch(error => { console.error(`[generation] processJob failed for ${job.id}:`, error?.message ?? error); });
+        .then(result => {
+          console.log(`[gen] ${new Date().toISOString()} job=${job.id} processing done in ${Date.now() - asyncStart}ms | state=${result.state} errorCode=${result.errorCode ?? "none"}`);
+          if (result.state !== job.state) audit(principal,"generation.completed",projectId,"generation_job",job.id,{state:result.state,errorCode:result.errorCode,proposalId:result.proposalId});
+        })
+        .catch(error => { console.error(`[gen] ${new Date().toISOString()} job=${job.id} processing FAILED in ${Date.now() - asyncStart}ms:`, error?.message ?? error); });
     });
     return { task: job };
   }
@@ -99,9 +105,14 @@ export function createProposalService(database, options = {}) {
           results.push(result);
         } else {
           setImmediate(() => {
+            const batchStart = Date.now();
+            console.log(`[gen] ${new Date().toISOString()} job=${job.id} batch processing begin`);
             generation.processJob(projectId, job.id)
-              .then(result => { if (result.state !== job.state) audit(principal,"generation.batch_completed",projectId,"generation_job",job.id,{state:result.state,errorCode:result.errorCode,proposalId:result.proposalId,batch:true}); })
-              .catch(error => { console.error(`[generation] batch processJob failed for ${job.id}:`, error?.message ?? error); });
+              .then(result => {
+                console.log(`[gen] ${new Date().toISOString()} job=${job.id} batch processing done in ${Date.now() - batchStart}ms | state=${result.state}`);
+                if (result.state !== job.state) audit(principal,"generation.batch_completed",projectId,"generation_job",job.id,{state:result.state,errorCode:result.errorCode,proposalId:result.proposalId,batch:true});
+              })
+              .catch(error => { console.error(`[gen] ${new Date().toISOString()} job=${job.id} batch processing FAILED in ${Date.now() - batchStart}ms:`, error?.message ?? error); });
           });
           results.push(job);
         }
@@ -118,7 +129,7 @@ export function createProposalService(database, options = {}) {
 
   function listJobs(principal,projectId){permission(principal,projectId);return {items:generation.repository.listJobs(projectId),capabilities:capabilityEnvelope(principal,projectId).capabilities};}
   function getJob(principal,projectId,id){permission(principal,projectId);const task=generation.repository.getJob(projectId,id);if(!task)throw proposalError("GENERATION_JOB_NOT_FOUND","生成任务不存在或你无权访问",404);return {task,capabilities:capabilityEnvelope(principal,projectId).capabilities};}
-  async function retryJob(principal,projectId,id,input){const access=permission(principal,projectId);if(!access.create)throw proposalError("GENERATION_JOB_NOT_FOUND","生成任务不存在或你无权访问",404);const task=generation.retryJob(principal,projectId,id,input.idempotencyKey);audit(principal,"generation.retried",projectId,"generation_job",task.id,{retryOf:id});if(options.syncProcess){const result=await generation.processJob(projectId,task.id);return {task:result};}setImmediate(()=>{generation.processJob(projectId,task.id).catch(error=>{console.error(`[generation] retry processJob failed for ${task.id}:`,error?.message??error);});});return {task};}
+  async function retryJob(principal,projectId,id,input){const access=permission(principal,projectId);if(!access.create)throw proposalError("GENERATION_JOB_NOT_FOUND","生成任务不存在或你无权访问",404);const task=generation.retryJob(principal,projectId,id,input.idempotencyKey);audit(principal,"generation.retried",projectId,"generation_job",task.id,{retryOf:id});if(options.syncProcess){const result=await generation.processJob(projectId,task.id);return {task:result};}console.log(`[gen] ${new Date().toISOString()} job=${task.id} retry queued (retryOf=${id})`);setImmediate(()=>{const retryStart=Date.now();generation.processJob(projectId,task.id).then(result=>{console.log(`[gen] ${new Date().toISOString()} job=${task.id} retry done in ${Date.now()-retryStart}ms | state=${result.state}`);}).catch(error=>{console.error(`[gen] ${new Date().toISOString()} job=${task.id} retry FAILED in ${Date.now()-retryStart}ms:`,error?.message??error);});});return {task};}
   function enrichProposal(projectId, proposal) { if (!proposal) return proposal; return { ...proposal, changes: proposal.changes.map(change => ({ ...change, evidence: change.evidenceIds.map(id => { const row=database.prepare(`SELECT e.external_id AS evidenceId,e.material_id AS materialId,e.ordinal,e.kind,e.location_json AS locationJson,m.display_name AS materialName FROM evidence_blocks e JOIN project_materials m ON m.project_id=e.project_id AND m.id=e.material_id WHERE e.project_id=? AND e.external_id=?`).get(projectId,id); return row ? {...row,location:JSON.parse(row.locationJson)} : {evidenceId:id}; }) })) }; }
   function listProposals(principal,projectId){permission(principal,projectId);return {items:generation.repository.listProposals(projectId).map(item=>enrichProposal(projectId,item)),capabilities:capabilityEnvelope(principal,projectId).capabilities};}
   function getProposal(principal,projectId,id){permission(principal,projectId);const proposal=enrichProposal(projectId,generation.repository.getProposal(projectId,id));if(!proposal)throw proposalError("CHANGE_PROPOSAL_NOT_FOUND","更新提案不存在或你无权访问",404);return {proposal,capabilities:capabilityEnvelope(principal,projectId).capabilities};}

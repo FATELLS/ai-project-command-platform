@@ -27,17 +27,26 @@ const { Worker } = require("worker_threads");
 // ----------------------------------------------------------------
 
 function driverPath() {
-  // 尝试按平台/架构选择正确的 .node 文件
+  // 按 platform/arch 选择对应的原生驱动 .node 文件
+  const plat = platform();
+  const ar = arch();
+  const nodejsDir = join(__dirname, "..", "..", "vendor", "xugudb", "nodejs");
+
+  // 构建候选列表：精确匹配优先，通用名 fallback
   const candidates = [];
 
-  if (platform() === "darwin" && arch() === "arm64") {
-    candidates.push(join(__dirname, "..", "..", "vendor", "xugudb", "nodejs", "xugudbjs.node"));
-  } else if (platform() === "linux" && arch() === "arm64") {
-    candidates.push(join(__dirname, "..", "..", "vendor", "xugudb", "nodejs", "xugudbjs-linux-aarch64.node"));
+  if (plat === "darwin" && ar === "arm64") {
+    candidates.push(join(nodejsDir, "xugudbjs.node"));
+  } else if (plat === "linux" && ar === "arm64") {
+    candidates.push(join(nodejsDir, "xugudbjs-linux-aarch64.node"));
+  } else if (plat === "linux" && (ar === "x64" || ar === "x86_64")) {
+    candidates.push(join(nodejsDir, "xugudbjs-linux-x86_64.node"));
+  } else if (plat === "win32" && (ar === "x64" || ar === "x86_64")) {
+    candidates.push(join(nodejsDir, "xugudbjs-win32-x64.node"));
   }
 
-  // 通用 fallback
-  candidates.push(join(__dirname, "..", "..", "vendor", "xugudb", "nodejs", "xugudbjs.node"));
+  // 通用 fallback（macOS ARM64 的默认文件名）
+  candidates.push(join(nodejsDir, "xugudbjs.node"));
 
   for (const p of candidates) {
     if (existsSync(p)) {
@@ -51,7 +60,7 @@ function driverPath() {
 
   throw new Error(
     `XuguDB native driver not found. Looked for:\n${candidates.join("\n")}\n` +
-    `Platform: ${platform()}/${arch()}. Please download from https://xugudb.com/download`
+    `Platform: ${plat}/${ar}. Please download from https://xugudb.com/download`
   );
 }
 

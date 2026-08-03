@@ -1,8 +1,9 @@
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { tmpdir, arch } from "node:os";
+import { join, dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 process.env.NODE_ENV = "test";
 
@@ -16,6 +17,20 @@ import { createAuthRepository } from "../../../src/repositories/auth-repository.
 import { hashPassword } from "../../../src/security/passwords.mjs";
 import { createAuthService } from "../../../src/services/auth-service.mjs";
 
+// 从 manifest 按当前架构选择虚谷镜像
+const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const manifestPath = join(rootDir, "vendor", "xugudb", "image", "manifest.json");
+function resolveXuguImage() {
+  if (!existsSync(manifestPath)) return "ai-project-command-platform/xugudb:12.9.10-arm64";
+  const m = JSON.parse(readFileSync(manifestPath, "utf8"));
+  if (m.images) {
+    const ar = arch();
+    const dockerArch = ar === "x64" || ar === "x86_64" ? "amd64" : ar;
+    return m.images[dockerArch]?.image || m.images["arm64"]?.image || "ai-project-command-platform/xugudb:12.9.10-arm64";
+  }
+  return m.image || "ai-project-command-platform/xugudb:12.9.10-arm64";
+}
+
 // E2E fixture server：每次启动用独立临时目录，导入两个夹具并创建角色用户。
 // 绑定 fake provider 让材料→生成→提案闭环可自动跑通，无需真实 LLM 密钥。
 const host = "127.0.0.1";
@@ -23,7 +38,7 @@ const port = Number(process.env.E2E_PORT || 4191);
 const xuguPort = Number(process.env.XUGU_PORT || 55140);
 const xuguContainer = process.env.XUGU_CONTAINER || "ai-platform-playwright-xugu";
 const xuguVolume = process.env.XUGU_VOLUME || "ai-platform-playwright-xugu-data";
-const xuguImage = process.env.XUGU_IMAGE || "ai-project-command-platform/xugudb:12.9.10-arm64";
+const xuguImage = process.env.XUGU_IMAGE || resolveXuguImage();
 const dataDir = process.env.E2E_DATA_DIR && process.env.E2E_DATA_DIR.length > 0
   ? process.env.E2E_DATA_DIR
   : mkdtempSync(join(tmpdir(), "e2e-platform-"));

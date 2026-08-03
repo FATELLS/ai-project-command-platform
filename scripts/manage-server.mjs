@@ -12,6 +12,7 @@ import {
   rmSync,
   writeFileSync
 } from "node:fs";
+import { arch } from "node:os";
 import { dirname, join, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEnvFiles } from "../src/config/local-config.mjs";
@@ -34,10 +35,34 @@ const xuguManifestPath = resolve(rootDir, "vendor/xugudb/image/manifest.json");
 const xuguManifest = existsSync(xuguManifestPath)
   ? JSON.parse(readFileSync(xuguManifestPath, "utf8"))
   : null;
-const XUGU_IMAGE = setting("XUGU_IMAGE", xuguManifest?.image ?? "ai-project-command-platform/xugudb:12.9.10-arm64");
-const xuguImageArchive = xuguManifest
-  ? resolve(dirname(xuguManifestPath), xuguManifest.archive)
+
+// 按当前 CPU 架构选择镜像定义
+// schemaVersion 2: images[arch]，schemaVersion 1: 顶层单架构（向后兼容）
+function selectImageEntry(manifest) {
+  if (!manifest) return null;
+  if (manifest.images && typeof manifest.images === "object") {
+    const ar = arch();
+    // Docker 使用 amd64 而非 x64
+    const dockerArch = ar === "x64" || ar === "x86_64" ? "amd64" : ar;
+    return manifest.images[dockerArch] || null;
+  }
+  // v1 兼容
+  if (manifest.image && manifest.archive) {
+    return {
+      image: manifest.image,
+      archive: manifest.archive,
+      archiveSha256: manifest.archiveSha256 || ""
+    };
+  }
+  return null;
+}
+
+const xuguImageEntry = selectImageEntry(xuguManifest);
+const XUGU_IMAGE = setting("XUGU_IMAGE", xuguImageEntry?.image ?? "ai-project-command-platform/xugudb:12.9.10-arm64");
+const xuguImageArchive = xuguImageEntry && xuguImageEntry.archive
+  ? resolve(dirname(xuguManifestPath), xuguImageEntry.archive)
   : null;
+const xuguImageArchiveSha256 = xuguImageEntry?.archiveSha256 || null;
 
 function runtimePath(name, fallback) {
   const configured = setting(name, fallback);
@@ -106,10 +131,12 @@ function ensureXuguImage() {
     console.log("  ⚠ 虚谷镜像包不存在 | code=XUGU_IMAGE_ARCHIVE_MISSING");
     return false;
   }
-  const digest = createHash("sha256").update(readFileSync(xuguImageArchive)).digest("hex");
-  if (digest !== xuguManifest.archiveSha256) {
-    console.log("  ⚠ 虚谷镜像包校验失败 | code=XUGU_IMAGE_ARCHIVE_INVALID");
-    return false;
+  if (xuguImageArchiveSha256) {
+    const digest = createHash("sha256").update(readFileSync(xuguImageArchive)).digest("hex");
+    if (digest !== xuguImageArchiveSha256) {
+      console.log("  ⚠ 虚谷镜像包校验失败 | code=XUGU_IMAGE_ARCHIVE_INVALID");
+      return false;
+    }
   }
   try {
     execFileSync("docker", ["load", "-i", xuguImageArchive], { stdio: "pipe", timeout: 120_000 });

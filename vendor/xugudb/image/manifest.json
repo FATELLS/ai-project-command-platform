@@ -10,10 +10,10 @@
       "archiveSha256": "a116606bfdd23b961456b65460cfd9e898c278f97bfcec809cf68d1f7f445d02"
     },
     "amd64": {
-      "image": "ai-project-command-platform/xugudb:12.9.10-amd64",
-      "sourceDigest": "",
-      "archive": "xugudb-12.9.10-amd64.tar.gz",
-      "archiveSha256": ""
+      "image": "ai-project-command-platform/xugudb:12.10.13-amd64",
+      "sourceDigest": "sha256:33549bb19479588137378a1233378a6e4ba23d610b0aa22bb6b63df9a35e9629",
+      "archive": "xugudb-12.10.13-amd64.tar.gz",
+      "archiveSha256": "95a0578cd5b2baecc45039841df0190fdbb69d0a3cd25c8a6cefc29147a9adc6"
     }
   }
 }

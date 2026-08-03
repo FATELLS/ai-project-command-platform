@@ -194,3 +194,36 @@ V1.0 全工程整合、虚谷完整栈、UI 全功能测试、代码审查和设
 - verify:code 通过。
 - 提交 `ff8eda1`。
 
+### 容器运行时解耦（2026-08-03）
+
+#### 用户需求
+- 新人拿到发布包后，一个安装动作就能下载安装依赖并启动虚谷，不需要额外安装 Docker Desktop。
+
+#### 分析
+- 代码里所有容器操作硬编码 `"docker"` CLI。
+- Linux 上可用 podman（daemonless, rootless, CLI 兼容）替代 docker，无需 Docker Desktop。
+- macOS 无虚谷原生服务端，仍需容器运行时（Colima/OrbStack/Docker Desktop）。
+
+#### 修改
+1. **`scripts/bootstrap-runtime.sh`**（新建）：全新环境自动准备容器运行时
+   - Linux: 自动检测 → 未安装则通过 apt/yum/dnf/zypper/pacman/apk 安装 podman
+   - macOS: 检测 OrbStack → Colima → Docker Desktop 优先级
+   - 结果写入 `.env.local` 的 `CONTAINER_CLI` 变量
+2. **`scripts/manage-server.mjs`**: `execFileSync("docker",...)` → `execFileSync(CONTAINER_CLI,...)`，CONTAINER_CLI 默认 docker
+3. **`src/operations/database-backup.mjs`**: 同上改造
+4. **`test/e2e/fixtures/server.mjs`**: 同上改造
+5. **`test/xugu-integration.test.mjs`**: 同上改造
+6. **`packaging/linux/start.sh`**: 首次启动自动调 bootstrap-runtime.sh
+7. **`packaging/macos/start.sh`**: 同上
+8. **`packaging/linux/README-LINUX.txt`**: 更新运行时说明
+9. **`docs/DISTRIBUTION.md`**: 更新首次启动步骤
+
+#### 测试
+- verify 通过（Node 20）。
+- 65 个纯逻辑单元测试通过。
+- 8 个 Docker 依赖测试因 Docker Desktop VM 仍处于 binfmt 损坏状态而跳过（非本次改动引起）。
+
+#### 决定
+- Linux 用户无需 Docker Desktop：start.sh 自动安装 podman。
+- macOS 用户仍需容器运行时（虚谷无 macOS 原生服务端），但可用 Colima/OrbStack 替代 Docker Desktop。
+- `CONTAINER_CLI` 环境变量让用户可灵活选择 docker/podman/nerdctl。

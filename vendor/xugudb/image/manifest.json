@@ -4,10 +4,10 @@
   "dataPath": "/opt/database/Server",
   "images": {
     "arm64": {
-      "image": "ai-project-command-platform/xugudb:12.9.10-arm64",
-      "sourceDigest": "sha256:735f6da8b4eb27fff3ce32fdf43e1e897b1f99285294f907899974399d03b30d",
-      "archive": "xugudb-12.9.10-arm64.tar.gz",
-      "archiveSha256": "a116606bfdd23b961456b65460cfd9e898c278f97bfcec809cf68d1f7f445d02"
+      "image": "ai-project-command-platform/xugudb:12.10.13-arm64",
+      "sourceDigest": "sha256:d17f320435986db95c30a2c502f55494683fda2acac4d96a472c7e49773122ff",
+      "archive": "xugudb-12.10.13-arm64.tar.gz",
+      "archiveSha256": "a1eb1fa6d0e8e0b662d5d6c4dc1dc395c5214f95b60b000be8236fa64fc1f1ea"
     },
     "amd64": {
       "image": "ai-project-command-platform/xugudb:12.10.13-amd64",

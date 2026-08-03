@@ -1,0 +1,27 @@
+FROM debian:11
+# LABEL maintainer="Chengdu Xugu Weiye Technology Co.,Ltd"
+
+# Environment
+ENV DB_DISTRO_NAME=xugu
+ENV DB_KERNEL_VERSION=12.9.9
+ENV DB_BUILD_TIME=20250714
+ENV DB_BUILD_ARCH=aarch64
+ENV DB_ROOT_DIR=/opt/database
+ENV DB_SERVER_DIR=${DB_ROOT_DIR}/Server
+
+# Install base dependency from package manager
+RUN apt -y update && \
+    apt -y install libaio1
+
+# Install xugu
+ADD Server ${DB_SERVER_DIR}
+
+# Create a volume that mapped to the Server directory
+VOLUME ${DB_SERVER_DIR}
+
+# Set default listen port in container
+EXPOSE 5138
+# Set default work directory
+WORKDIR ${DB_ROOT_DIR}
+# Set container entrypoint program
+ENTRYPOINT ["/opt/database/Server/BIN/xugu_linux_aarch64_20250714", "-child"]

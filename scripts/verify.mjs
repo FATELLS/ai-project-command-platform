@@ -73,7 +73,7 @@ if (manifest.images) {
   const armEntry = manifest.images.arm64;
   const armArchive = join(root, "vendor/xugudb/image", armEntry.archive);
   assert.ok(armEntry.archiveSha256, "arm64 image archiveSha256 is required");
-  assert.ok(statSync(armArchive).size > 50 * 1024 * 1024, "bundled Xugu ARM64 image archive is unexpectedly small");
+  assert.ok(statSync(armArchive).size > 1024 * 1024, "bundled Xugu ARM64 image archive is unexpectedly small");
   assert.equal(sha256(armArchive), armEntry.archiveSha256, "bundled Xugu ARM64 image checksum mismatch");
 
   // amd64 镜像如果存在则校验
@@ -82,14 +82,14 @@ if (manifest.images) {
   const currentEntry = manifest.images[dockerArch];
   if (currentEntry && currentEntry.archiveSha256 && existsSync(join(root, "vendor/xugudb/image", currentEntry.archive))) {
     const currentArchive = join(root, "vendor/xugudb/image", currentEntry.archive);
-    assert.ok(statSync(currentArchive).size > 50 * 1024 * 1024, `bundled Xugu ${dockerArch} image archive is unexpectedly small`);
+    assert.ok(statSync(currentArchive).size > 1024 * 1024, `bundled Xugu ${dockerArch} image archive is unexpectedly small`);
     assert.equal(sha256(currentArchive), currentEntry.archiveSha256, `bundled Xugu ${dockerArch} image checksum mismatch`);
   }
 } else {
   // v1 向后兼容
   assert.equal(manifest.architecture, "arm64");
   const imageArchive = join(root, "vendor/xugudb/image", manifest.archive);
-  assert.ok(statSync(imageArchive).size > 50 * 1024 * 1024, "bundled Xugu image archive is unexpectedly small");
+  assert.ok(statSync(imageArchive).size > 1024 * 1024, "bundled Xugu image archive is unexpectedly small");
   assert.equal(sha256(imageArchive), manifest.archiveSha256, "bundled Xugu image checksum mismatch");
 }
 

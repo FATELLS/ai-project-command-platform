@@ -10,7 +10,7 @@ flowchart LR
   B["Browser"] --> H["Node HTTP Application"]
   H --> S["Domain Services"]
   S --> W["Xugu Driver Worker"]
-  W --> X[("XuguDB 12.9.10")]
+  W --> X[("XuguDB 12.10.13")]
   S --> F["Project-isolated Material Storage"]
   S --> P["Allowlisted AI Provider"]
   M["Lifecycle Manager"] --> H

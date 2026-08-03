@@ -8,6 +8,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   renameSync,
   rmSync,
   writeFileSync
@@ -26,8 +27,8 @@ function setting(name, fallback) {
 }
 
 const xuguLifecycle = setting("PLATFORM_XUGU_LIFECYCLE", "managed");
-const validXuguLifecycle = new Set(["managed", "external"]).has(xuguLifecycle);
-const managesXugu = xuguLifecycle === "managed";
+const validXuguLifecycle = new Set(["managed", "external", "native"]).has(xuguLifecycle);
+const managesXugu = xuguLifecycle === "managed" || xuguLifecycle === "native";
 const XUGU_CONTAINER = setting("XUGU_CONTAINER", "ai-project-command-platform-xugu");
 const XUGU_VOLUME = setting("XUGU_VOLUME", `${XUGU_CONTAINER}-data`);
 const XUGU_PORT = setting("XUGU_PORT", "5138");
@@ -58,7 +59,7 @@ function selectImageEntry(manifest) {
 }
 
 const xuguImageEntry = selectImageEntry(xuguManifest);
-const XUGU_IMAGE = setting("XUGU_IMAGE", xuguImageEntry?.image ?? "ai-project-command-platform/xugudb:12.9.10-arm64");
+const XUGU_IMAGE = setting("XUGU_IMAGE", xuguImageEntry?.image ?? "ai-project-command-platform/xugudb:12.10.13-arm64");
 const xuguImageArchive = xuguImageEntry && xuguImageEntry.archive
   ? resolve(dirname(xuguManifestPath), xuguImageEntry.archive)
   : null;
@@ -91,12 +92,143 @@ function processIsAlive(pid) {
 }
 
 // ----------------------------------------------------------------
-// 虚谷 Docker 容器联动
+// 虚谷原生进程联动（native 模式，不走容器）
 // ----------------------------------------------------------------
+
+const xuguNativePidFile = runtimePath("XUGU_NATIVE_PID_FILE", "xugu-server.pid");
+const xuguNativeLogFile = runtimePath("XUGU_NATIVE_LOG_FILE", "xugu-server.log");
+const xuguDataDir = runtimePath("XUGU_DATA_DIR", "data/xugu");
+
+function xuguServerBinary() {
+  const platform = process.platform;
+  const ar = arch();
+  const serverRoot = resolve(rootDir, "vendor/xugudb/server");
+  if (platform === "win32") {
+    const winDir = join(serverRoot, "windows/amd64/XuguDB/Server/BIN");
+    const candidates = [
+      join(winDir, "xugu_windows_amd64_20250714.exe"),
+      join(winDir, "xugu_windows_amd64_20250731.exe")
+    ];
+    for (const c of candidates) if (existsSync(c)) return c;
+    // fallback: glob for xugu_windows_amd64_*.exe
+    try {
+      const binDir = join(serverRoot, "windows/amd64/XuguDB/Server/BIN");
+      if (existsSync(binDir)) {
+        for (const f of readdirSync(binDir)) {
+          if (/^xugu_windows_amd64_.*\.exe$/.test(f)) return join(binDir, f);
+        }
+      }
+    } catch {}
+    return null;
+  }
+  if (platform === "linux") {
+    const archDir = ar === "arm64" ? "aarch64" : "x86_64";
+    const linuxDir = join(serverRoot, `linux/${archDir}/XuguDB/Server/BIN`);
+    const candidates = [
+      join(linuxDir, `xugu_linux_${archDir}_20250714`),
+      join(linuxDir, `xugu_linux_${archDir}_20250731`)
+    ];
+    for (const c of candidates) if (existsSync(c)) return c;
+    try {
+      if (existsSync(linuxDir)) {
+        for (const f of readdirSync(linuxDir)) {
+          if (new RegExp(`^xugu_linux_${archDir}_`).test(f)) return join(linuxDir, f);
+        }
+      }
+    } catch {}
+    return null;
+  }
+  return null;
+}
+
+function readNativePid() {
+  if (!existsSync(xuguNativePidFile)) return null;
+  const value = Number(readFileSync(xuguNativePidFile, "utf8").trim());
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+function writeNativePid(pid) {
+  mkdirSync(dirname(xuguNativePidFile), { recursive: true });
+  writeFileSync(xuguNativePidFile, `${pid}\n`, { mode: 0o600 });
+}
+
+function removeNativePidFile() {
+  rmSync(xuguNativePidFile, { force: true });
+}
+
+function startNativeXugu() {
+  const existingPid = readNativePid();
+  if (existingPid && processIsAlive(existingPid)) {
+    console.log(`  虚谷原生服务已在运行（PID ${existingPid}）。`);
+    return true;
+  }
+  const binary = xuguServerBinary();
+  if (!binary) {
+    console.log("  ⚠ 未找到虚谷服务端二进制 | code=XUGU_NATIVE_BINARY_MISSING");
+    return false;
+  }
+  mkdirSync(xuguDataDir, { recursive: true });
+  mkdirSync(dirname(xuguNativeLogFile), { recursive: true });
+  const logFd = openSync(xuguNativeLogFile, "a");
+  const child = spawn(binary, ["--child"], {
+    cwd: xuguDataDir,
+    detached: true,
+    stdio: ["ignore", logFd, logFd]
+  });
+  closeSync(logFd);
+  child.unref();
+  writeNativePid(child.pid);
+  console.log(`  虚谷原生服务已启动（PID ${child.pid}，监听 ${XUGU_PORT}）。`);
+  return true;
+}
+
+function stopNativeXugu() {
+  const pid = readNativePid();
+  if (!pid || !processIsAlive(pid)) {
+    removeNativePidFile();
+    return;
+  }
+  try {
+    process.kill(pid, "SIGTERM");
+    const stopped = waitUntilSync(() => !processIsAlive(pid), 15_000);
+    if (!stopped) {
+      process.kill(pid, "SIGKILL");
+    }
+    removeNativePidFile();
+    console.log(`  虚谷原生服务已停止（原 PID ${pid}）。`);
+  } catch {
+    console.log("  ⚠ 无法停止虚谷原生服务 | code=XUGU_NATIVE_STOP_FAILED");
+  }
+}
+
+function waitUntilSync(check, timeoutMs, intervalMs = 250) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (check()) return true;
+    const remain = Math.min(intervalMs, deadline - Date.now());
+    if (remain > 0) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, remain);
+  }
+  return false;
+}
+
+function nativeXuguStatus() {
+  const pid = readNativePid();
+  if (!pid || !processIsAlive(pid)) {
+    if (existsSync(xuguNativePidFile)) removeNativePidFile();
+    return null;
+  }
+  return `Up (PID ${pid})`;
+}
+
+// ----------------------------------------------------------------
+// 虚谷容器联动（支持 docker / podman / nerdctl 等兼容 CLI）
+// ----------------------------------------------------------------
+
+const CONTAINER_CLI = setting("CONTAINER_CLI", "docker");
 
 function dockerAvailable() {
   try {
-    execFileSync("docker", ["info"], { stdio: "pipe", timeout: 5_000 });
+    execFileSync(CONTAINER_CLI, ["info"], { stdio: "pipe", timeout: 5_000 });
     return true;
   } catch {
     return false;
@@ -106,7 +238,7 @@ function dockerAvailable() {
 function xuguContainerStatus() {
   try {
     const output = execFileSync(
-      "docker",
+      CONTAINER_CLI,
       ["ps", "-a", "--filter", `name=^${XUGU_CONTAINER}$`, "--format", "{{.Status}}"],
       { encoding: "utf8", stdio: "pipe", timeout: 5_000 }
     ).trim();
@@ -118,7 +250,7 @@ function xuguContainerStatus() {
 
 function xuguImageExists() {
   try {
-    execFileSync("docker", ["image", "inspect", XUGU_IMAGE], { stdio: "pipe", timeout: 5_000 });
+    execFileSync(CONTAINER_CLI, ["image", "inspect", XUGU_IMAGE], { stdio: "pipe", timeout: 5_000 });
     return true;
   } catch {
     return false;
@@ -139,7 +271,7 @@ function ensureXuguImage() {
     }
   }
   try {
-    execFileSync("docker", ["load", "-i", xuguImageArchive], { stdio: "pipe", timeout: 120_000 });
+    execFileSync(CONTAINER_CLI, ["load", "-i", xuguImageArchive], { stdio: "pipe", timeout: 120_000 });
     return xuguImageExists();
   } catch {
     console.log("  ⚠ 无法加载虚谷镜像 | code=XUGU_IMAGE_LOAD_FAILED");
@@ -150,7 +282,7 @@ function ensureXuguImage() {
 function createXuguContainer() {
   if (!ensureXuguImage()) return false;
   try {
-    execFileSync("docker", [
+    execFileSync(CONTAINER_CLI, [
       "run", "-d",
       "--name", XUGU_CONTAINER,
       "-p", `127.0.0.1:${XUGU_PORT}:5138`,
@@ -177,7 +309,7 @@ function ensureXuguContainer() {
   // 容器存在但未运行——自动启动
   console.log(`  虚谷容器 ${XUGU_CONTAINER} 状态为 "${status}"，正在自动启动...`);
   try {
-    execFileSync("docker", ["start", XUGU_CONTAINER], { stdio: "pipe", timeout: 30_000 });
+    execFileSync(CONTAINER_CLI, ["start", XUGU_CONTAINER], { stdio: "pipe", timeout: 30_000 });
     // 应用只有在数据库迁移完成后才会通过 /health；避免把数据库凭据放入进程参数。
     console.log(`  虚谷容器 ${XUGU_CONTAINER} 已启动，等待平台健康检查确认数据库就绪。`);
     return true;
@@ -191,7 +323,7 @@ function stopXuguContainer() {
   const status = xuguContainerStatus();
   if (!status || !/^Up\b/.test(status)) return;
   try {
-    execFileSync("docker", ["stop", XUGU_CONTAINER], { stdio: "pipe", timeout: 20_000 });
+    execFileSync(CONTAINER_CLI, ["stop", XUGU_CONTAINER], { stdio: "pipe", timeout: 20_000 });
     console.log(`  虚谷容器 ${XUGU_CONTAINER} 已停止。`);
   } catch {
     console.log("  ⚠ 无法停止虚谷容器 | code=XUGU_CONTAINER_STOP_FAILED");
@@ -231,21 +363,28 @@ async function start() {
   const existingPid = readPid();
   if (processIsAlive(existingPid)) {
     console.log(`平台服务已在后台运行（PID ${existingPid}）。`);
-    if (managesXugu && dockerAvailable()) ensureXuguContainer();
+    if (managesXugu && xuguLifecycle === "native") startNativeXugu();
+    else if (managesXugu && dockerAvailable()) ensureXuguContainer();
     else if (xuguLifecycle === "external") console.log("虚谷数据库：外部共享模式（只连接，不管理生命周期）。");
     return;
   }
   if (existsSync(pidFile)) removePidFile();
 
-  if (managesXugu && dockerAvailable()) {
+  if (managesXugu && xuguLifecycle === "native") {
+    if (!startNativeXugu()) {
+      const error = new Error("native Xugu server unavailable");
+      error.code = "XUGU_NATIVE_UNAVAILABLE";
+      throw error;
+    }
+  } else if (managesXugu && dockerAvailable()) {
     if (!ensureXuguContainer()) {
       const error = new Error("managed Xugu container unavailable");
       error.code = "XUGU_CONTAINER_UNAVAILABLE";
       throw error;
     }
   } else if (managesXugu) {
-    const error = new Error("Docker unavailable");
-    error.code = "DOCKER_UNAVAILABLE";
+    const error = new Error("container runtime unavailable");
+    error.code = "CONTAINER_UNAVAILABLE";
     throw error;
   } else {
     console.log("虚谷数据库：外部共享模式（只连接，不管理生命周期）。");
@@ -271,7 +410,8 @@ async function start() {
   if (!ready || !processIsAlive(child.pid) || !(await healthIsReady())) {
     if (processIsAlive(child.pid)) process.kill(child.pid, "SIGTERM");
     removePidFile();
-    if (managesXugu && dockerAvailable()) stopXuguContainer();
+    if (managesXugu && xuguLifecycle === "native") stopNativeXugu();
+    else if (managesXugu && dockerAvailable()) stopXuguContainer();
     const error = new Error("platform did not become healthy");
     error.code = "PLATFORM_START_HEALTH_FAILED";
     throw error;
@@ -299,7 +439,9 @@ async function stop() {
   }
 
   // 虚谷是默认产品运行栈的一部分；即使应用进程已退出，stop 也收口数据库状态。
-  if (managesXugu && dockerAvailable()) {
+  if (managesXugu && xuguLifecycle === "native") {
+    stopNativeXugu();
+  } else if (managesXugu && dockerAvailable()) {
     stopXuguContainer();
   } else if (xuguLifecycle === "external") {
     console.log("虚谷数据库：外部共享模式，未执行停止操作。");
@@ -318,15 +460,19 @@ async function status() {
     if (!health) process.exitCode = 1;
   }
 
-  // 显示虚谷容器状态
-  if (managesXugu && dockerAvailable()) {
+  // 显示虚谷状态
+  if (managesXugu && xuguLifecycle === "native") {
+    const xuguStatus = nativeXuguStatus();
+    if (xuguStatus) console.log(`虚谷原生服务：${xuguStatus}`);
+    else console.log("虚谷原生服务：未运行");
+  } else if (managesXugu && dockerAvailable()) {
     const xuguStatus = xuguContainerStatus();
     if (xuguStatus) {
       console.log(`虚谷容器 ${XUGU_CONTAINER}：${xuguStatus}`);
     } else {
       console.log(`虚谷容器 ${XUGU_CONTAINER}：未创建`);
     }
-  } else if (managesXugu) console.log("虚谷数据库：Docker 不可用");
+  } else if (managesXugu) console.log("虚谷数据库：容器运行时不可用");
   else console.log("虚谷数据库：外部共享模式（只连接，不管理生命周期）。");
 }
 

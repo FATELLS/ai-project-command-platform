@@ -8,7 +8,7 @@ import test from "node:test";
 
 const container = "ai-platform-node-test-xugu";
 const volume = "ai-platform-node-test-xugu-data";
-const image = "ai-project-command-platform/xugudb:12.9.10-arm64";
+const image = "ai-project-command-platform/xugudb:12.10.13-arm64";
 const port = "55141";
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "ai-platform-xugu-test-"));
 
@@ -18,8 +18,10 @@ process.env.XUGU_CONTAINER = container;
 process.env.XUGU_VOLUME = volume;
 process.env.XUGU_IMAGE = image;
 
+const containerCli = process.env.CONTAINER_CLI || "docker";
+
 function docker(args, timeout = 120_000) {
-  return execFileSync("docker", args, { encoding: "utf8", stdio: "pipe", timeout }).trim();
+  return execFileSync(containerCli, args, { encoding: "utf8", stdio: "pipe", timeout }).trim();
 }
 
 function ignoreDocker(args) {

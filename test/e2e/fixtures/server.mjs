@@ -21,14 +21,14 @@ import { createAuthService } from "../../../src/services/auth-service.mjs";
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const manifestPath = join(rootDir, "vendor", "xugudb", "image", "manifest.json");
 function resolveXuguImage() {
-  if (!existsSync(manifestPath)) return "ai-project-command-platform/xugudb:12.9.10-arm64";
+  if (!existsSync(manifestPath)) return "ai-project-command-platform/xugudb:12.10.13-arm64";
   const m = JSON.parse(readFileSync(manifestPath, "utf8"));
   if (m.images) {
     const ar = arch();
     const dockerArch = ar === "x64" || ar === "x86_64" ? "amd64" : ar;
-    return m.images[dockerArch]?.image || m.images["arm64"]?.image || "ai-project-command-platform/xugudb:12.9.10-arm64";
+    return m.images[dockerArch]?.image || m.images["arm64"]?.image || "ai-project-command-platform/xugudb:12.10.13-arm64";
   }
-  return m.image || "ai-project-command-platform/xugudb:12.9.10-arm64";
+  return m.image || "ai-project-command-platform/xugudb:12.10.13-arm64";
 }
 
 // E2E fixture server：每次启动用独立临时目录，导入两个夹具并创建角色用户。
@@ -44,8 +44,10 @@ const dataDir = process.env.E2E_DATA_DIR && process.env.E2E_DATA_DIR.length > 0
   : mkdtempSync(join(tmpdir(), "e2e-platform-"));
 const storageRoot = join(dataDir, "materials");
 
+const containerCli = process.env.CONTAINER_CLI || "docker";
+
 function docker(args) {
-  return execFileSync("docker", args, { encoding: "utf8", stdio: "pipe", timeout: 120_000 });
+  return execFileSync(containerCli, args, { encoding: "utf8", stdio: "pipe", timeout: 120_000 });
 }
 function ignoreDocker(args) { try { docker(args); } catch {} }
 ignoreDocker(["rm", "-f", xuguContainer]);

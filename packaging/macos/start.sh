@@ -39,6 +39,17 @@ if [[ ! -f "$ENV_FILE" ]]; then
     "请在首次登录后立即修改密码，并妥善删除本文件。" > "$CREDENTIAL_FILE"
 fi
 
+# ---- 运行时自动准备 ----
+# macOS 需要容器运行时（虚谷无 macOS 版）
+# bootstrap 会自动检测/安装 Colima、OrbStack 或 Docker Desktop
+if ! grep -q "^CONTAINER_CLI=" "$ENV_FILE" 2>/dev/null; then
+  echo "正在检测容器运行时..." >&2
+  bash "$APP_ROOT/scripts/bootstrap-runtime.sh" 2>&1 || true
+fi
+
+export PLATFORM_XUGU_LIFECYCLE="$(grep '^PLATFORM_XUGU_LIFECYCLE=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo 'managed')"
+export CONTAINER_CLI="$(grep '^CONTAINER_CLI=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo 'docker')"
+
 mkdir -p "$APP_ROOT/data"
 (cd "$APP_ROOT" && "$NODE_BIN" scripts/manage-server.mjs start)
 

@@ -4,9 +4,11 @@ import { createReadStream } from "node:fs";
 import { mkdir, stat } from "node:fs/promises";
 import { basename, dirname, resolve } from "node:path";
 
-const DEFAULT_IMAGE = "ai-project-command-platform/xugudb:12.9.10-arm64";
+const DEFAULT_IMAGE = "ai-project-command-platform/xugudb:12.10.13-arm64";
 const DEFAULT_CONTAINER = "ai-project-command-platform-xugu";
 const DEFAULT_VOLUME = "ai-project-command-platform-xugu-data";
+
+const CONTAINER_CLI = process.env.CONTAINER_CLI || "docker";
 
 function safeName(value, label) {
   if (!/^[a-zA-Z0-9_.-]+$/.test(value)) throw new TypeError(`${label} is invalid`);
@@ -27,7 +29,7 @@ function settings(options = {}) {
 }
 
 function docker(args, options = {}) {
-  return execFileSync("docker", args, { encoding: "utf8", stdio: "pipe", timeout: options.timeout ?? 120_000 }).trim();
+  return execFileSync(CONTAINER_CLI, args, { encoding: "utf8", stdio: "pipe", timeout: options.timeout ?? 120_000 }).trim();
 }
 
 function assertContainerStopped(container) {

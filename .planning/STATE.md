@@ -2,7 +2,7 @@
 
 日期：2026-08-03
 版本：`1.0.0`
-数据库：XuguDB `12.9.10-arm64` / `12.10.13-amd64`
+数据库：XuguDB `12.10.13`（arm64 + amd64 统一版本）
 迁移：`001..008`
 Git HEAD：`ff8eda1`（amd64 Docker 镜像 + Linux/Windows 驱动二进制全部到位）
 

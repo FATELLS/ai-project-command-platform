@@ -39,6 +39,18 @@ if [[ ! -f "$ENV_FILE" ]]; then
     "请在首次登录后立即修改密码，并妥善删除本文件。" > "$CREDENTIAL_FILE"
 fi
 
+# ---- 运行时自动准备 ----
+# bootstrap 会根据平台自动选择 native（零容器）或 container（podman/docker）模式
+# 并把 PLATFORM_XUGU_LIFECYCLE 和 CONTAINER_CLI 写入 .env.local
+if ! grep -q "^PLATFORM_XUGU_LIFECYCLE=" "$ENV_FILE" 2>/dev/null; then
+  echo "正在检测运行时环境..." >&2
+  bash "$APP_ROOT/scripts/bootstrap-runtime.sh" 2>&1 || true
+fi
+
+# 从 .env.local 读取 lifecycle（bootstrap 可能已改写）
+export PLATFORM_XUGU_LIFECYCLE="$(grep '^PLATFORM_XUGU_LIFECYCLE=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo 'managed')"
+export CONTAINER_CLI="$(grep '^CONTAINER_CLI=' "$ENV_FILE" 2>/dev/null | cut -d= -f2- || echo 'docker')"
+
 mkdir -p "$APP_ROOT/data"
 (cd "$APP_ROOT" && "$NODE_BIN" scripts/manage-server.mjs start)
 

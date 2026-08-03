@@ -148,3 +148,35 @@ V1.0 全工程整合、虚谷完整栈、UI 全功能测试、代码审查和设
 - `curl /health`：返回 `{"status":"ok"}`。
 - `npm run stop`：应用先优雅停止（PID 93238）→ 虚谷容器后停止（Exited 137）。
 - 停止后 status 确认两者均不可达；隔离体验实例 `ai-platform-isolated-ui` 未受影响。
+
+## 2026-08-03 多架构虚谷支持（Linux x86 + Windows 预留）
+
+### 用户需求
+
+- 虚谷还有 Linux x86 和 Windows 版本，都可以打包成 Docker 镜像在对应环境使用。
+- 先推进 Linux x86 Docker 支持。
+
+### 分析
+
+- 当前 vendor 仅有 ARM64 Docker 镜像 tar.gz + macOS/Linux ARM64 原生驱动。
+- 需要三层改动：manifest 多架构、driverPath 多平台、manage-server/fixture 按架构选镜像。
+- verify.mjs 需适配 v2 manifest 格式（保留 v1 向后兼容）。
+- Windows 原生安装不走 Docker，需要独立的生命周期管理分支（后续工作项）。
+
+### 执行结果
+
+- `manifest.json` 升级为 schemaVersion 2，images 下含 arm64（完整）和 amd64（占位，待填入实际镜像和 SHA-256）。
+- `driverPath()` 新增 linux/x64 → `xugudbjs-linux-x86_64.node`、win32/x64 → `xugudbjs-win32-x64.node` 候选。
+- `manage-server.mjs` 新增 `selectImageEntry()` 按运行时 arch 从 manifest 选择镜像，兼容 v1 单架构格式。
+- E2E fixture server 改为从 manifest 读取镜像名，不再硬编码 ARM64 tag。
+- `verify.mjs` 支持 v2 多架构 manifest 校验，arm64 基线不变，amd64 存在时动态校验。
+- `README-LINUX.txt` 补充 x86_64 portable 包说明。
+- verify:code 通过、Node 67/67 全通过。
+- 提交 `015b37e`。
+
+### 待获取的二进制
+
+1. 虚谷 Linux x86 Docker 镜像：下载 `XuguDB-Server-12.10.13-linux-x86_64` 产品包，用 Dockerfile 构建镜像，`docker save` 为 `xugudb-12.9.10-amd64.tar.gz`。
+2. Node 原生驱动 Linux x86_64：`xugudbjs-linux-x86_64.node`，从 xugudb.com NodeJS V1.0.0 下载。
+3. 填入 manifest amd64 条目的 archiveSha256 和 sourceDigest。
+

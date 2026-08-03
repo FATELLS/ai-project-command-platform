@@ -7,10 +7,10 @@
 
 - 工程已收口为虚谷单后端，唯一迁移目录 `src/db/xugu-migrations/`。
 - 项目图唯一模型为 `project_cards` / `project_card_links`。
-- 虚谷镜像与 ARM64 驱动位于 `vendor/xugudb/`。
-- managed 生命周期由 `scripts/manage-server.mjs` 负责。
+- 虚谷镜像与 ARM64 驱动位于 `vendor/xugudb/`；manifest 已升级为 v2 多架构格式（arm64 完整、amd64 占位）。
+- managed 生命周期由 `scripts/manage-server.mjs` 负责，按运行时 arch 自动选择镜像。
 - 真实数据库桥接位于 `src/db/xugu-database.cjs` 与 `src/db/xugu-worker.cjs`。
-- 发布只支持 Linux ARM64 和 macOS Apple Silicon portable。
+- 发布支持 Linux ARM64 和 macOS Apple Silicon portable；Linux x86_64 代码路径已就绪，待获取 amd64 镜像和驱动。
 - 本机旧 `xugu-dev` 容器已停止但未删除；隔离体验实例仍在运行。
 - V1.0 整合最终提交为 `5aea6f0`，已推送至 `origin/main`；完整服务使用 `npm run start:background`，不是 `npx serve`。
 - 2026-08-03 全新隔离环境完整复验通过；修复 E2E 测试竞态后提交 `d9aac1e`（尚未推送）。
@@ -33,11 +33,10 @@
 
 ## 下一步
 
-1. 若继续 V1.1，优先拆分 `src/http/app.mjs` 与前端巨型模块，保持现有 82 条主浏览器契约。
-2. 增加 macOS CI 完整栈 smoke 和长期虚谷升级夹具。
-3. 发布前继续使用 Node 20.x 执行 `npm run verify` 与异常 UI 套件。
-4. E2E 运行前需清空 `test-results/` 目录，避免安全删除机制拦截 Playwright 的批量清理。
-5. E2E 需通过 `PATH` 前缀确保 Node 20 优先于 Node 22（Playwright webServer 继承 PATH）。
+1. 获取虚谷 Linux x86 Docker 镜像（下载 `XuguDB-Server linux-x86_64` 产品包 → 构建 → `docker save`），填入 manifest amd64 条目。
+2. 获取 Linux x86_64 原生驱动 `xugudbjs-linux-x86_64.node`，放入 `vendor/xugudb/nodejs/`。
+3. Windows 原生支持需要独立的进程管理生命周期（不走 Docker），作为独立工作项。
+4. 若继续 V1.1，优先拆分 `src/http/app.mjs` 与前端巨型模块，保持现有 82 条主浏览器契约。
 
 ## 禁止回退
 

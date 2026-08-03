@@ -33,7 +33,6 @@ test.describe("01 登录流程", () => {
   test("成功登录跳转到项目列表", async ({ page }) => {
     await login(page);
     // 验证项目卡片渲染
-    await expect(page.locator("article.project-card")).toHaveCount(await page.locator("article.project-card").count());
     const cardCount = await page.locator("article.project-card").count();
     expect(cardCount).toBeGreaterThan(0);
   });

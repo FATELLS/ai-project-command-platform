@@ -61,8 +61,8 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     expect(response.payload.proposal.status).toBe("pending");
 
     // 验证任务在发布版的 state 没有被直接修改（拖拽不直写 published/draft）
-    const pub = await api(BASE, `/api/projects/xugu-agentic-group/public/modules/task-network`, h);
-    const task = pub.payload.data.nodes.find((n) => n.id === taskId);
+    const pub = await api(BASE, `/api/projects/xugu-agentic-group/public/modules/roadmap`, h);
+    const task = pub.payload.data.tasks.find((item) => item.id === taskId);
     // 发布态 state 不应因提案改变
     expect(task).toBeTruthy();
   });
@@ -101,7 +101,7 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     expect(await page.locator(".swimlane-stage-card").count()).toBeGreaterThanOrEqual(6);
     await expect(page.locator(".swimlane-card-empty")).toContainText("未选择时隐藏全部");
     await expect(page.locator(".swimlane-card-row")).toHaveCount(0);
-    await expect(page.locator(".swimlane-task-card")).toHaveCount(0);
+    await expect(page.locator(".roadmap-unscheduled-cards .swimlane-task-card")).toHaveCount(1);
 
     const launch = page.locator(".swimlane-stage-card").filter({ hasText: "首批场景出征" });
     await launch.click();
@@ -114,7 +114,7 @@ test.describe("Phase 8 路线图可视化工作台", () => {
     await launch.click();
     await expect(page).not.toHaveURL(/stage=/);
     await expect(page.locator(".swimlane-card-row")).toHaveCount(0);
-    await expect(page.locator(".swimlane-task-card")).toHaveCount(0);
+    await expect(page.locator(".roadmap-unscheduled-cards .swimlane-task-card")).toHaveCount(1);
   });
 
   test("副任务是固定卡片集合而非甘特条，并按作战单元稳定分色", async ({ page }) => {

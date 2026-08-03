@@ -48,137 +48,46 @@ function insertVersionGraph(database, projectId, layer, snapshot, sourceChecksum
     module.enabled ? 1 : 0,
     JSON.stringify({ schemaVersion: module.schemaVersion, viewVariant: module.viewVariant })
   ));
-
-  // 双写模式：同时写入旧表和 project_cards 统一表
-  // 旧表兼容部分迁移测试场景（migration 010 之前）；统一表是正式存储
-  const hasCardsTable = (() => { try { database.prepare("SELECT 1 FROM project_cards LIMIT 1").get(); return true; } catch { return false; } })();
-
-  const insertUnit = database.prepare(`
-    INSERT INTO project_units (version_id, external_id, position, name, data_json) VALUES (?, ?, ?, ?, ?)
-  `);
-  const insertUnitCard = hasCardsTable ? database.prepare(`
-    INSERT OR IGNORE INTO project_cards (
-      version_id, external_id, element_type, position, title, owner, state, objective, card_attrs, created_at, updated_at
-    ) VALUES (?, ?, 'unit', ?, ?, ?, ?, ?, ?, ?, ?)
-  `) : null;
-  snapshot.groups.forEach((unit, position) => {
-    const data = without(unit, new Set(["id", "name"]));
-    insertUnit.run(versionId, unit.id, position, unit.name, JSON.stringify(data));
-    if (insertUnitCard) {
-      insertUnitCard.run(
-        versionId, unit.id, position, unit.name,
-        data.owner ?? "", data.status ?? "", data.objective ?? "",
-        JSON.stringify(data), now, now
-      );
-    }
-  });
-
-  const insertStage = database.prepare(`
-    INSERT INTO project_stages (version_id, external_id, position, title, date_label, data_json) VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  const insertStageCard = hasCardsTable ? database.prepare(`
-    INSERT OR IGNORE INTO project_cards (
-      version_id, external_id, element_type, position, title, state, start_date, end_date, card_attrs, created_at, updated_at
-    ) VALUES (?, ?, 'stage', ?, ?, ?, ?, ?, ?, ?, ?)
-  `) : null;
-  snapshot.stages.forEach((stage, position) => {
-    const data = without(stage, new Set(["id", "title", "date"]));
-    insertStage.run(versionId, stage.id, position, stage.title, stage.date ?? "", JSON.stringify(data));
-    if (insertStageCard) {
-      insertStageCard.run(
-        versionId, stage.id, position, stage.title,
-        data.state ?? "", data.startDate ?? "", data.endDate ?? "",
-        JSON.stringify(data), now, now
-      );
-    }
-  });
-
-  const insertClosure = database.prepare(`
-    INSERT INTO project_closures (version_id, external_id, position, title, date_label, data_json) VALUES (?, ?, ?, ?, ?, ?)
-  `);
-  const insertOutcomeCard = hasCardsTable ? database.prepare(`
-    INSERT OR IGNORE INTO project_cards (
-      version_id, external_id, element_type, position, title, state, start_date, card_attrs, created_at, updated_at
-    ) VALUES (?, ?, 'outcome', ?, ?, ?, ?, ?, ?, ?)
-  `) : null;
-  (snapshot.closures ?? []).forEach((closure, position) => {
-    const data = without(closure, new Set(["id", "title", "date"]));
-    insertClosure.run(versionId, closure.id, position, closure.title, closure.date ?? "", JSON.stringify(data));
-    if (insertOutcomeCard) {
-      insertOutcomeCard.run(
-        versionId, closure.id, position, closure.title,
-        data.state ?? "", closure.date ?? "",
-        JSON.stringify(data), now, now
-      );
-    }
-  });
-
-  const insertTask = database.prepare(`
-    INSERT INTO project_tasks (
-      version_id, external_id, unit_external_id, parent_external_id, position, title,
-      start_date, end_date, progress, data_json
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const insertTaskCard = hasCardsTable ? database.prepare(`
-    INSERT OR IGNORE INTO project_cards (
+  const insertCard = database.prepare(`
+    INSERT INTO project_cards (
       version_id, external_id, element_type, position, title, owner, state, objective,
-      start_date, end_date, progress, health, unit_id, parent_id, depends_on, card_attrs, created_at, updated_at
-    ) VALUES (?, ?, 'task', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `) : null;
-  snapshot.tasks.forEach((task, position) => {
-    const data = without(task, new Set(["id", "groupId", "parentId", "dependsOn", "title", "startDate", "endDate", "progress"]));
-    insertTask.run(
-      versionId, task.id, task.groupId, task.parentId || null, position, task.title,
-      task.startDate ?? "", task.endDate ?? "", task.progress ?? null, JSON.stringify(data)
-    );
-    if (insertTaskCard) {
-      insertTaskCard.run(
-        versionId, task.id, position, task.title,
-        data.owner ?? "", data.state ?? "", data.objective ?? "",
-        task.startDate ?? "", task.endDate ?? "", task.progress ?? null, data.health ?? "",
-        task.groupId ?? "", task.parentId ?? null,
-        JSON.stringify(task.dependsOn ?? []),
-        JSON.stringify(data), now, now
-      );
-    }
-  });
-
-  const insertTaskLink = database.prepare(`
-    INSERT INTO task_links (version_id, task_external_id, depends_on_external_id, position) VALUES (?, ?, ?, ?)
+      start_date, end_date, progress, health, unit_id, parent_id, depends_on,
+      card_attrs, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
-  const insertCardLink = hasCardsTable ? database.prepare(`
-    INSERT OR IGNORE INTO project_card_links (version_id, card_external_id, depends_on_external_id, position) VALUES (?, ?, ?, ?)
-  `) : null;
-  snapshot.tasks.forEach(task => (task.dependsOn ?? []).forEach((dependency, position) => {
-    insertTaskLink.run(versionId, task.id, dependency, position);
-    if (insertCardLink) insertCardLink.run(versionId, task.id, dependency, position);
+  const addCard = (type, position, item, data = {}) => insertCard.run(
+    versionId, item.id, type, position, item.title ?? item.name,
+    data.owner ?? "", data.state ?? data.status ?? "", data.objective ?? "",
+    item.date ?? item.startDate ?? "", item.endDate ?? data.endDate ?? "",
+    item.progress ?? null, data.health ?? "", item.groupId ?? "", item.parentId || null,
+    JSON.stringify(item.dependsOn ?? []), JSON.stringify(data), now, now
+  );
+
+  snapshot.groups.forEach((item, position) => addCard(
+    "unit", position, item, without(item, new Set(["id", "name"]))
+  ));
+  snapshot.stages.forEach((item, position) => addCard(
+    "stage", position, item, without(item, new Set(["id", "title", "date"]))
+  ));
+  (snapshot.closures ?? []).forEach((item, position) => addCard(
+    "outcome", position, item, without(item, new Set(["id", "title", "date"]))
+  ));
+  snapshot.tasks.forEach((item, position) => addCard(
+    "task", position, item,
+    without(item, new Set(["id", "groupId", "parentId", "dependsOn", "title", "startDate", "endDate", "progress"]))
+  ));
+  (snapshot.companyWorkstreams ?? []).forEach((item, position) => addCard(
+    "workstream", position, item,
+    { ...without(item, new Set(["id", "title", "taskIds"])), members: item.taskIds ?? [] }
+  ));
+
+  const insertLink = database.prepare(`
+    INSERT INTO project_card_links (version_id, card_external_id, depends_on_external_id, position)
+    VALUES (?, ?, ?, ?)
+  `);
+  snapshot.tasks.forEach(item => (item.dependsOn ?? []).forEach((dependency, position) => {
+    insertLink.run(versionId, item.id, dependency, position);
   }));
-
-  const insertWorkstream = database.prepare(`
-    INSERT INTO project_workstreams (version_id, external_id, position, title, data_json) VALUES (?, ?, ?, ?, ?)
-  `);
-  const insertWorkstreamTask = database.prepare(`
-    INSERT INTO workstream_tasks (version_id, workstream_external_id, task_external_id, position) VALUES (?, ?, ?, ?)
-  `);
-  const insertWorkstreamCard = hasCardsTable ? database.prepare(`
-    INSERT OR IGNORE INTO project_cards (
-      version_id, external_id, element_type, position, title, card_attrs, created_at, updated_at
-    ) VALUES (?, ?, 'workstream', ?, ?, ?, ?, ?)
-  `) : null;
-  (snapshot.companyWorkstreams ?? []).forEach((workstream, position) => {
-    const data = without(workstream, new Set(["id", "title", "taskIds"]));
-    insertWorkstream.run(versionId, workstream.id, position, workstream.title, JSON.stringify(data));
-    if (insertWorkstreamCard) {
-      const cardData = { ...data, members: workstream.taskIds ?? [] };
-      insertWorkstreamCard.run(
-        versionId, workstream.id, position, workstream.title,
-        JSON.stringify(cardData), now, now
-      );
-    }
-    (workstream.taskIds ?? []).forEach((taskId, taskPosition) => {
-      insertWorkstreamTask.run(versionId, workstream.id, taskId, taskPosition);
-    });
-  });
   return versionId;
 }
 

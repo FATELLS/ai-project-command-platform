@@ -1,14 +1,15 @@
 import { mkdtempSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// E2E fixture server 使用 SQLite 快速路径（生产环境走虚谷）
 process.env.NODE_ENV = "test";
 
 import { createFakeProvider } from "../../../src/ai/providers/fake-provider.mjs";
 import { openDatabase } from "../../../src/db/database.mjs";
 import { applyMigrations } from "../../../src/db/migrate.mjs";
+import { upsert } from "../../../src/db/sql-dialect.mjs";
 import { createApp } from "../../../src/http/app.mjs";
 import { importLegacyProject } from "../../../src/migration/legacy-project.mjs";
 import { createAuthRepository } from "../../../src/repositories/auth-repository.mjs";
@@ -19,11 +20,29 @@ import { createAuthService } from "../../../src/services/auth-service.mjs";
 // 绑定 fake provider 让材料→生成→提案闭环可自动跑通，无需真实 LLM 密钥。
 const host = "127.0.0.1";
 const port = Number(process.env.E2E_PORT || 4191);
+const xuguPort = Number(process.env.XUGU_PORT || 55140);
+const xuguContainer = process.env.XUGU_CONTAINER || "ai-platform-playwright-xugu";
+const xuguVolume = process.env.XUGU_VOLUME || "ai-platform-playwright-xugu-data";
+const xuguImage = process.env.XUGU_IMAGE || "ai-project-command-platform/xugudb:12.9.10-arm64";
 const dataDir = process.env.E2E_DATA_DIR && process.env.E2E_DATA_DIR.length > 0
   ? process.env.E2E_DATA_DIR
   : mkdtempSync(join(tmpdir(), "e2e-platform-"));
 const storageRoot = join(dataDir, "materials");
-const database = openDatabase(join(dataDir, "platform.sqlite"));
+
+function docker(args) {
+  return execFileSync("docker", args, { encoding: "utf8", stdio: "pipe", timeout: 120_000 });
+}
+function ignoreDocker(args) { try { docker(args); } catch {} }
+ignoreDocker(["rm", "-f", xuguContainer]);
+ignoreDocker(["volume", "rm", xuguVolume]);
+docker(["run", "-d", "--name", xuguContainer, "-p", `127.0.0.1:${xuguPort}:5138`, "-v", `${xuguVolume}:/opt/database/Server`, xuguImage]);
+
+let database;
+for (let attempt = 0; attempt < 360; attempt += 1) {
+  try { database = openDatabase(); break; }
+  catch { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1_000); }
+}
+if (!database) throw new Error("isolated Xugu database did not become ready");
 applyMigrations(database);
 
 const at = "2026-07-18T00:00:00.000Z";
@@ -49,7 +68,7 @@ function ensureUser(id, login, displayName) {
   }
 }
 function setMember(projectId, userId, role) {
-  database.prepare("INSERT INTO project_members (project_id,user_id,role,created_at) VALUES (?,?,?,?) ON CONFLICT(project_id,user_id) DO UPDATE SET role=excluded.role").run(projectId, userId, role, at);
+  upsert(database, "project_members", ["project_id", "user_id", "role", "created_at"], [projectId, userId, role, at], ["project_id", "user_id"]);
 }
 ensureUser("e2e-editor", "e2e-editor", "项目编辑者");
 ensureUser("e2e-viewer", "e2e-viewer", "只读访问者");
@@ -108,7 +127,12 @@ let closing = false;
 function shutdown() {
   if (closing) return;
   closing = true;
-  server.close(() => { if (database.isOpen) database.close(); });
+  server.close(() => {
+    if (database.isOpen) database.close();
+    ignoreDocker(["stop", "-t", "60", xuguContainer]);
+    ignoreDocker(["rm", xuguContainer]);
+    ignoreDocker(["volume", "rm", xuguVolume]);
+  });
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);

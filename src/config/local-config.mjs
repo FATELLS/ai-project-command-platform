@@ -6,15 +6,13 @@
 //
 // 启动时自动检测并加载该文件，将配置注入 process.env。
 // 同时提供 loadEnvFiles()：加载包根目录的 .env / .env.local，
-// 确保 npm bin 入口（server.mjs）、npx、直接 node server.mjs
-// 都能拿到 .env.local 的配置，而不只是 npm start 路径才生效。
+// 确保源码运行和 portable 包都能读取相同的 .env.local 配置。
 //
-// 如果文件不存在，自动生成一个空模���方便用户填写。
+// 如果文件不存在，自动生成一个空模板方便用户填写。
 // ============================================================
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const CONFIG_FILENAME = ".api-keys.local.json";
@@ -27,27 +25,13 @@ const EXAMPLE_FILENAME = "api-config.example.json";
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 
 /**
- * 检测是否在 npx 缓存目录或 node_modules 中运行（非本地开发）。
- * 这些路径不可靠（npx 清缓存会丢失），fallback 到用户主目录稳定路径。
- */
-function isInstalledPackage() {
-  return packageRoot.includes("_npx") ||
-    packageRoot.includes(".npm/_npx") ||
-    packageRoot.includes("node_modules");
-}
-
-/**
  * 获取配置文件路径
  * - 环境变量覆盖: PLATFORM_CONFIG_DIR（Docker/systemd 部署）
- * - npx/npm install 模式: 用户主目录下的稳定路径
- * - 本地开发: 包根目录
+ * - 默认: 应用根目录
  */
 function getConfigPath() {
   if (process.env.PLATFORM_CONFIG_DIR) {
     return join(resolve(process.env.PLATFORM_CONFIG_DIR), CONFIG_FILENAME);
-  }
-  if (isInstalledPackage()) {
-    return join(homedir(), ".ai-project-command-platform", CONFIG_FILENAME);
   }
   return join(packageRoot, CONFIG_FILENAME);
 }
@@ -103,7 +87,7 @@ export function ensureLocalConfig() {
     const config = JSON.parse(raw);
     return { configPath, config, generated: false };
   } catch (error) {
-    console.warn(`  ⚠ 本地配置文件解析失败 (${configPath}): ${error.message}`);
+    console.warn(`  ⚠ 本地配置文件解析失败 (${configPath}) | code=LOCAL_CONFIG_PARSE_FAILED`);
     return { configPath, config: CONFIG_TEMPLATE, generated: false, error: true };
   }
 }
@@ -181,41 +165,51 @@ function parseEnvFile(content) {
  *
  * 这是平台入口的配置基础设施——server.mjs 直接调用此函数，
  * 不依赖 scripts/start-server.mjs 的 --env-file 参数。
- * 确保三条启动路径（npm start / npx / node server.mjs）行为一致：
+ * 确保源码运行和 portable 包行为一致：
  *   1. 先加载 .env（如果存在）
  *   2. 再加载 .env.local（如果存在，覆盖 .env 同名键）
  *   3. 已有的 process.env 值优先——环境变量 > 文件 > 默认
  *
  * @returns {{ loaded: number, skipped: number }}
  */
-export function loadEnvFiles() {
-  const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
+export function loadEnvFiles(options = {}) {
+  const rootDir = options.rootDir ?? packageRoot;
+  const environment = options.environment ?? process.env;
+  const externalKeys = new Set(Object.keys(environment));
+  const fileValues = {};
   let loaded = 0;
   let skipped = 0;
 
   for (const filename of [".env", ".env.local"]) {
-    const filePath = join(packageRoot, filename);
+    const filePath = join(rootDir, filename);
     if (!existsSync(filePath)) continue;
 
     try {
       const parsed = parseEnvFile(readFileSync(filePath, "utf8"));
-      for (const [key, value] of Object.entries(parsed)) {
-        // 环境变量优先：已有值不覆盖
-        if (process.env[key] !== undefined) {
-          skipped++;
-          continue;
-        }
-        process.env[key] = value;
-        loaded++;
-      }
+      Object.assign(fileValues, parsed);
     } catch {
       // 读取/解析失败不影响启动，让后续逻辑用默认值
     }
   }
 
-  if (loaded > 0) {
-    console.log(`  .env.local 已加载（注入 ${loaded} 项，跳过 ${skipped} 项已有环境变量）`);
+  for (const [key, value] of Object.entries(fileValues)) {
+    if (externalKeys.has(key)) {
+      skipped++;
+      continue;
+    }
+    environment[key] = value;
+    loaded++;
+  }
+
+  if (loaded > 0 && options.quiet !== true) {
+    console.log(`  环境配置已加载（注入 ${loaded} 项，跳过 ${skipped} 项外部环境变量）`);
   }
 
   return { loaded, skipped };
+}
+
+export function loadRuntimeConfig(options = {}) {
+  const envFiles = loadEnvFiles(options);
+  const localConfig = loadLocalConfigToEnv();
+  return { envFiles, localConfig };
 }

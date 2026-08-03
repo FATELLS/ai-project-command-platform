@@ -1,41 +1,15 @@
 {
   "name": "ai-project-command-platform",
-  "version": "0.9.6",
+  "version": "1.0.0",
   "type": "module",
+  "private": true,
   "description": "多项目、模板化、AI 辅助更新的项目作战管理平台",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "engines": {
-    "node": ">=20.0 <23"
-  },
-  "bin": {
-    "ai-project-command-platform": "./server.mjs"
-  },
-  "files": [
-    "server.mjs",
-    "src/",
-    "public/",
-    "fixtures/",
-    "scripts/",
-    ".env.example",
-    "api-config.example.json",
-    "README.md"
-  ],
-  "pkg": {
-    "assets": [
-      "public/**/*",
-      "src/db/migrations/*.sql",
-      "fixtures/**/*"
-    ],
-    "targets": [
-      "node20-linux-x64",
-      "node20-macos-x64",
-      "node20-macos-arm64",
-      "node20-win-x64"
-    ],
-    "outputPath": "dist"
+    "node": ">=20.0 <21"
   },
   "scripts": {
-    "start": "node scripts/start-server.mjs",
+    "start": "node server.mjs",
     "start:background": "node scripts/manage-server.mjs start",
     "stop": "node scripts/manage-server.mjs stop",
     "status": "node scripts/manage-server.mjs status",
@@ -45,29 +19,16 @@
     "export:xugu": "node scripts/export-project.mjs --project xugu-agentic-group --stdout",
     "backup": "node scripts/backup-database.mjs",
     "restore": "node scripts/restore-database.mjs",
-    "verify": "node scripts/verify.mjs",
-    "test": "node --test \"test/*.test.mjs\"",
+    "verify:code": "node scripts/verify.mjs",
+    "verify": "node scripts/verify.mjs && node --test --test-concurrency=1 test/*.test.mjs && npx playwright test --reporter=list",
+    "test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "test:xugu": "node --test test/xugu-integration.test.mjs",
     "test:e2e": "npx playwright test --reporter=list",
     "test:e2e:abnormal": "npx playwright test --config=playwright.abnormal.config.mjs",
-    "e2e:install": "npx playwright install chromium",
-    "build:pkg": "node scripts/build-native.mjs",
-    "build:deb": "node scripts/build-packages.mjs deb",
-    "build:rpm": "node scripts/build-packages.mjs rpm",
-    "build:macos": "node scripts/build-packages.mjs macos",
-    "build:win": "node scripts/build-packages.mjs win",
-    "build:all": "node scripts/build-packages.mjs all",
-    "build:xugu:deb": "node scripts/build-packages.mjs deb --with-xugu",
-    "build:xugu:rpm": "node scripts/build-packages.mjs rpm --with-xugu",
-    "build:xugu:macos": "node scripts/build-packages.mjs macos --with-xugu",
-    "build:xugu:win": "node scripts/build-packages.mjs win --with-xugu",
-    "build:xugu:all": "node scripts/build-packages.mjs all --with-xugu",
-    "prepublishOnly": "node scripts/prepublish.mjs"
+    "e2e:install": "npx playwright install chromium"
   },
   "dependencies": {
-    "deasync": "^0.1.31",
-    "file-type": "22.0.1",
-    "odbc": "^2.5.0",
-    "sql.js": "^1.14.1",
+    "file-type": "21.3.4",
     "yauzl": "3.4.0"
   },
   "devDependencies": {

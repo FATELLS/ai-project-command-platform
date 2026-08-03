@@ -24,10 +24,13 @@ export default defineConfig({
     command: "node test/e2e/fixtures/server.mjs",
     url: `${baseURL}/health`,
     reuseExistingServer: false,
-    timeout: 30_000,
+    timeout: 420_000,
     env: {
       ...process.env,
       E2E_PORT: String(port),
+      XUGU_PORT: process.env.XUGU_PORT || "55142",
+      XUGU_CONTAINER: process.env.XUGU_CONTAINER || "ai-platform-playwright-abnormal-xugu",
+      XUGU_VOLUME: process.env.XUGU_VOLUME || "ai-platform-playwright-abnormal-xugu-data",
       PLATFORM_BOOTSTRAP_PASSWORD: "e2e-platform-admin-pw"
     }
   }

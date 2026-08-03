@@ -77,60 +77,56 @@ export function createGenerationService(database, options = {}) {
     if (!job) throw proposalError("GENERATION_JOB_NOT_FOUND", "生成任务不存在或你无权访问", 404);
     if (["succeeded", "failed_terminal", "stale"].includes(job.state)) return job;
     genLog(jobId, "start", `processJob begin`, { projectId, state: job.state, template: `${job.template?.id}@${job.template?.version}`, materials: job.materials?.length, evidence: job.evidence?.length });
-    const t0 = Date.now();
+    const t0 = now();
     let release; let providerCalls = job.attemptsCount;
     try {
-      const tCtx0 = Date.now();
+      const tCtx0 = now();
       const context = lockedContext(job);
-      genLog(jobId, "context", `context built in ${Date.now() - tCtx0}ms`, { evidenceBlocks: context.evidence?.length, publishedTasks: context.published?.tasks?.length, digest: context.digest?.slice(0, 12) });
+      genLog(jobId, "context", `context built in ${Math.max(0, now() - tCtx0)}ms`, { evidenceBlocks: context.evidence?.length, publishedTasks: context.published?.tasks?.length, digest: context.digest?.slice(0, 12) });
       const template = getProposalTemplate(context.templateId, context.templateVersion);
       if (!template) throw proposalError("TEMPLATE_NOT_FOUND", "更新模板不可用", 409);
-      repository.updateJob(projectId, jobId, { state: "retrieving_evidence", errorCode: null });
       release = quota.acquire();
-      genLog(jobId, "quota", `quota acquired in ${Date.now() - t0}ms`);
+      genLog(jobId, "quota", `quota acquired in ${Math.max(0, now() - t0)}ms`);
       let validated; let validationCodes = [];
       for (let pass = 0; pass < 2; pass += 1) {
         providerCalls += 1; const attemptId = randomUUID(); const started = now(); const kind = pass === 0 ? "initial" : "structure_repair";
-        repository.updateJob(projectId, jobId, { state: pass === 0 ? "generating" : "repairing", attempts: providerCalls });
-
         // 构建 prompt 并记录大小（关键诊断信号）
-        const tPrompt0 = Date.now();
+        const tPrompt0 = now();
         const prompt = buildGenerationPrompt(context, template, { validationCodes });
         const systemLen = prompt.messages[0]?.content?.length ?? 0;
         const userLen = prompt.messages[1]?.content?.length ?? 0;
-        genLog(jobId, "prompt", `prompt built in ${Date.now() - tPrompt0}ms`, { kind, systemChars: systemLen, userChars: userLen, totalChars: systemLen + userLen, approxTokens: Math.round((systemLen + userLen) / 4) });
+        genLog(jobId, "prompt", `prompt built in ${Math.max(0, now() - tPrompt0)}ms`, { kind, systemChars: systemLen, userChars: userLen, totalChars: systemLen + userLen, approxTokens: Math.round((systemLen + userLen) / 4) });
 
         try {
           genLog(jobId, "provider-call", `calling AI provider (${kind})...`, { model: provider.safeLabel, timeoutMs: options.environment?.AI_GENERATION_TIMEOUT_MS ?? "default" });
           const raw = await provider.generate(prompt, { signal: contextOptions.signal });
-          const providerMs = Date.now() - started;
+          const providerMs = Math.max(0, now() - started);
           genLog(jobId, "provider-done", `provider responded in ${providerMs}ms`, { inputTokens: raw.usage?.input, outputTokens: raw.usage?.output, contentLen: raw.content?.length, providerLabel: raw.providerLabel });
 
-          repository.updateJob(projectId, jobId, { state: "validating" });
-          const tValid0 = Date.now();
+          const tValid0 = now();
           validated = validateProposal(raw.content, context);
-          genLog(jobId, "validated", `proposal validated in ${Date.now() - tValid0}ms`, { changes: validated.changes?.length, warnings: validated.warnings?.length });
+          genLog(jobId, "validated", `proposal validated in ${Math.max(0, now() - tValid0)}ms`, { changes: validated.changes?.length, warnings: validated.warnings?.length });
 
           const usage = pricedUsage(raw.usage, options.pricing);
           repository.addAttempt(projectId, jobId, { id: attemptId, attemptNumber: providerCalls, kind, outcome: "succeeded", providerLabel: raw.providerLabel ?? provider.safeLabel ?? (provider.configured ? "configured" : "disabled"), latencyMs: Math.max(0, now() - started), ...usage });
           break;
         } catch (error) {
-          const providerMs = Date.now() - started;
-          genLog(jobId, "provider-error", `attempt ${kind} failed in ${providerMs}ms`, { code: safeCode(error), message: error?.message?.slice(0, 200) });
+          const providerMs = Math.max(0, now() - started);
+          genLog(jobId, "provider-error", `attempt ${kind} failed in ${providerMs}ms`, { code: safeCode(error) });
           repository.addAttempt(projectId, jobId, { id: attemptId, attemptNumber: providerCalls, kind, outcome: "failed", providerLabel: provider.safeLabel ?? (provider.configured ? "configured" : "disabled"), latencyMs: Math.max(0, now() - started), resultCode: safeCode(error), costStatus: "unpriced" });
           if (pass === 0 && repairable(error)) { validationCodes = [safeCode(error), ...(error.details ? [`${safeCode(error)}: ${JSON.stringify(error.details)}`] : [])]; genLog(jobId, "repair", `entering structure_repair pass`, { validationCodes }); continue; }
           throw error;
         }
       }
       if (!validated) throw proposalError("PROPOSAL_VALIDATION_FAILED", "模型输出未通过结构校验", 422);
-      const current = database.prepare("SELECT published_version_id AS id FROM projects WHERE id=?").get(projectId);
-      if (!current || Number(current.id) !== Number(job.baseVersionId)) throw proposalError("BASE_VERSION_STALE", "发布版本已变化", 409);
+      const current = database.prepare("SELECT published_version_id AS currentVersionId FROM projects WHERE id=?").get(projectId);
+      if (!current || Number(current.currentVersionId) !== Number(job.baseVersionId)) throw proposalError("BASE_VERSION_STALE", "发布版本已变化", 409);
       repository.saveProposal(projectId, jobId, validated);
-      genLog(jobId, "done", `processJob succeeded in ${Date.now() - t0}ms`, { state: "succeeded", totalAttempts: providerCalls });
+      genLog(jobId, "done", `processJob succeeded in ${Math.max(0, now() - t0)}ms`, { state: "succeeded", totalAttempts: providerCalls });
       return repository.getJob(projectId, jobId);
     } catch (error) {
       const code = safeCode(error); const state = ["BASE_VERSION_STALE", "GENERATION_CONTEXT_STALE"].includes(code) ? "stale" : retryable(error) ? "failed_retryable" : "failed_terminal";
-      genLog(jobId, "failed", `processJob failed in ${Date.now() - t0}ms`, { code, state, message: error?.message?.slice(0, 200) });
+      genLog(jobId, "failed", `processJob failed in ${Math.max(0, now() - t0)}ms`, { code, state });
       repository.updateJob(projectId, jobId, { state, attempts: providerCalls, errorCode: code, validation: error instanceof ProposalServiceError ? { status: "failed", code, details: error.details ?? null } : { status: "failed", code } });
       return repository.getJob(projectId, jobId);
     } finally { release?.(); }

@@ -1,4 +1,4 @@
-name: Build release packages
+name: Build Xugu release
 
 on:
   workflow_dispatch:
@@ -10,170 +10,55 @@ permissions:
   contents: write
 
 env:
-  NODE_RUNTIME_VERSION: "25.9.0"
+  NODE_RUNTIME_VERSION: "20.19.5"
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  linux-arm64:
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "25.9.0"
+          node-version: "20.19.5"
           cache: npm
-      - name: Download bundled Node.js runtime
-        shell: pwsh
+      - run: npm ci
+      - name: Verify bundled Xugu image
         run: |
-          Invoke-WebRequest "https://nodejs.org/dist/v$env:NODE_RUNTIME_VERSION/node-v$env:NODE_RUNTIME_VERSION-win-x64.zip" -OutFile "$env:RUNNER_TEMP\node.zip"
-          Expand-Archive "$env:RUNNER_TEMP\node.zip" -DestinationPath "$env:RUNNER_TEMP\node"
-      - name: Assemble Windows portable package
-        shell: pwsh
-        run: |
-          $version = node -p "require('./package.json').version"
-          $name = "ai-project-command-platform-$version-windows-x64"
-          node scripts/assemble-release.mjs --target windows-x64 --runtime "$env:RUNNER_TEMP\node\node-v$env:NODE_RUNTIME_VERSION-win-x64" --output "dist\$name"
-          New-Item -ItemType Directory -Force artifacts | Out-Null
-          Compress-Archive -Path "dist\$name" -DestinationPath "artifacts\$name.zip"
-      - name: Smoke test bundled Windows runtime
-        shell: pwsh
-        run: |
-          $version = node -p "require('./package.json').version"
-          $app = Resolve-Path "dist\ai-project-command-platform-$version-windows-x64"
-          $data = Join-Path $env:RUNNER_TEMP "windows-smoke-data"
-          New-Item -ItemType Directory -Force $data | Out-Null
-          $env:HOST = "127.0.0.1"
-          $env:PORT = "4173"
-          $env:PLATFORM_DATA_DIR = $data
-          $env:PLATFORM_BOOTSTRAP_PASSWORD = "release-smoke-password"
-          $process = Start-Process -FilePath "$app\runtime\node.exe" -ArgumentList "server.mjs" -WorkingDirectory $app -PassThru
-          try {
-            $ready = $false
-            for ($attempt = 0; $attempt -lt 40; $attempt++) {
-              Start-Sleep -Milliseconds 500
-              try {
-                $response = Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:4173/health" -TimeoutSec 2
-                if ($response.StatusCode -eq 200) { $ready = $true; break }
-              } catch {}
-            }
-            if (-not $ready) { throw "Windows release smoke test failed" }
-          } finally {
-            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
-          }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-x64
-          path: artifacts/*
-
-  linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "25.9.0"
-          cache: npm
+          archive="vendor/xugudb/image/xugudb-12.9.10-arm64.tar.gz"
+          expected="$(node -p "require('./vendor/xugudb/image/manifest.json').archiveSha256")"
+          echo "$expected  $archive" | sha256sum --check
+          docker load --input "$archive"
       - name: Download bundled Node.js runtime
         run: |
-          curl -fsSL "https://nodejs.org/dist/v${NODE_RUNTIME_VERSION}/node-v${NODE_RUNTIME_VERSION}-linux-x64.tar.xz" -o "$RUNNER_TEMP/node.tar.xz"
+          curl -fsSL "https://nodejs.org/dist/v${NODE_RUNTIME_VERSION}/node-v${NODE_RUNTIME_VERSION}-linux-arm64.tar.xz" -o "$RUNNER_TEMP/node.tar.xz"
           mkdir -p "$RUNNER_TEMP/node"
           tar -xJf "$RUNNER_TEMP/node.tar.xz" -C "$RUNNER_TEMP/node"
-      - name: Assemble Linux portable package
+      - name: Assemble portable release
         run: |
           version="$(node -p "require('./package.json').version")"
-          name="ai-project-command-platform-${version}-linux-x64"
-          node scripts/assemble-release.mjs --target linux-x64 --runtime "$RUNNER_TEMP/node/node-v${NODE_RUNTIME_VERSION}-linux-x64" --output "dist/$name"
+          name="ai-project-command-platform-${version}-linux-arm64"
+          node scripts/assemble-release.mjs --target linux-arm64 --runtime "$RUNNER_TEMP/node/node-v${NODE_RUNTIME_VERSION}-linux-arm64" --output "dist/$name"
           mkdir -p artifacts
           tar -czf "artifacts/$name.tar.gz" -C dist "$name"
-      - name: Smoke test bundled Linux runtime
+      - name: Smoke test complete Xugu stack
         run: |
           version="$(node -p "require('./package.json').version")"
-          app="$PWD/dist/ai-project-command-platform-${version}-linux-x64"
-          data="$RUNNER_TEMP/linux-smoke-data"
-          mkdir -p "$data"
-          (
-            cd "$app"
-            HOST=127.0.0.1 PORT=4173 PLATFORM_DATA_DIR="$data" PLATFORM_BOOTSTRAP_PASSWORD=release-smoke-password \
-              ./runtime/bin/node server.mjs >"$RUNNER_TEMP/linux-smoke.log" 2>&1 &
-            echo "$!" > "$RUNNER_TEMP/linux-smoke.pid"
-          )
-          trap 'kill "$(cat "$RUNNER_TEMP/linux-smoke.pid")" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:4173/health >/dev/null; then exit 0; fi
-            sleep 0.5
-          done
-          cat "$RUNNER_TEMP/linux-smoke.log"
-          exit 1
-      - name: Build RPM
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rpm
-          version="$(node -p "require('./package.json').version")"
-          topdir="$RUNNER_TEMP/rpmbuild"
-          mkdir -p "$topdir"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
-          cp "artifacts/ai-project-command-platform-${version}-linux-x64.tar.gz" "$topdir/SOURCES/"
-          cp packaging/linux/ai-project-command-platform.service packaging/linux/platform.env "$topdir/SOURCES/"
-          cp packaging/linux/ai-project-command-platform.spec "$topdir/SPECS/"
-          rpmbuild --define "_topdir $topdir" --define "app_version $version" -bb "$topdir/SPECS/ai-project-command-platform.spec"
-          cp "$topdir"/RPMS/x86_64/*.rpm artifacts/
+          app="$PWD/dist/ai-project-command-platform-${version}-linux-arm64"
+          cd "$app"
+          export HOST=127.0.0.1 PORT=4173 XUGU_PORT=55139
+          export XUGU_CONTAINER=ai-platform-release-smoke XUGU_VOLUME=ai-platform-release-smoke-data
+          export PLATFORM_BOOTSTRAP_PASSWORD=release-smoke-password
+          ./start.sh
+          trap './stop.sh || true; docker rm -f "$XUGU_CONTAINER" 2>/dev/null || true; docker volume rm "$XUGU_VOLUME" 2>/dev/null || true' EXIT
+          curl --fail --retry 20 --retry-delay 2 http://127.0.0.1:4173/health
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-x64
-          path: artifacts/*
-
-  macos:
-    strategy:
-      matrix:
-        include:
-          - runs-on: macos-13
-            arch: x64
-          - runs-on: macos-14
-            arch: arm64
-    runs-on: ${{ matrix.runs-on }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "25.9.0"
-          cache: npm
-      - name: Download bundled Node.js runtime
-        run: |
-          curl -fsSL "https://nodejs.org/dist/v${NODE_RUNTIME_VERSION}/node-v${NODE_RUNTIME_VERSION}-darwin-${{ matrix.arch }}.tar.gz" -o "$RUNNER_TEMP/node.tar.gz"
-          mkdir -p "$RUNNER_TEMP/node"
-          tar -xzf "$RUNNER_TEMP/node.tar.gz" -C "$RUNNER_TEMP/node"
-      - name: Assemble macOS portable package
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          name="ai-project-command-platform-${version}-macos-${{ matrix.arch }}"
-          node scripts/assemble-release.mjs --target macos-${{ matrix.arch }} --runtime "$RUNNER_TEMP/node/node-v${NODE_RUNTIME_VERSION}-darwin-${{ matrix.arch }}" --output "dist/$name"
-          mkdir -p artifacts
-          tar -czf "artifacts/$name.tar.gz" -C dist "$name"
-      - name: Smoke test bundled macOS runtime
-        run: |
-          version="$(node -p "require('./package.json').version")"
-          app="$PWD/dist/ai-project-command-platform-${version}-macos-${{ matrix.arch }}"
-          data="$RUNNER_TEMP/macos-smoke-data"
-          mkdir -p "$data"
-          (
-            cd "$app"
-            HOST=127.0.0.1 PORT=4173 PLATFORM_DATA_DIR="$data" PLATFORM_BOOTSTRAP_PASSWORD=release-smoke-password \
-              ./runtime/bin/node server.mjs >"$RUNNER_TEMP/macos-smoke.log" 2>&1 &
-            echo "$!" > "$RUNNER_TEMP/macos-smoke.pid"
-          )
-          trap 'kill "$(cat "$RUNNER_TEMP/macos-smoke.pid")" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:4173/health >/dev/null; then exit 0; fi
-            sleep 0.5
-          done
-          cat "$RUNNER_TEMP/macos-smoke.log"
-          exit 1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-${{ matrix.arch }}
+          name: linux-arm64
           path: artifacts/*
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [windows, linux, macos]
+    needs: [linux-arm64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -186,7 +71,4 @@ jobs:
         run: |
           cd artifacts
           sha256sum * > SHA256SUMS.txt
-          gh release create "${GITHUB_REF_NAME}" ./* \
-            --repo "${GITHUB_REPOSITORY}" \
-            --title "AI Project Command Platform ${GITHUB_REF_NAME}" \
-            --generate-notes
+          gh release create "${GITHUB_REF_NAME}" ./* --repo "${GITHUB_REPOSITORY}" --title "AI Project Command Platform ${GITHUB_REF_NAME}" --generate-notes

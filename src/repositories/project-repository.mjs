@@ -11,10 +11,6 @@ function parseNullableJson(value) {
   return value === null || value === undefined ? null : JSON.parse(value);
 }
 
-function rows(database, table, versionId) {
-  return database.prepare(`SELECT * FROM ${table} WHERE version_id = ? ORDER BY position`).all(versionId);
-}
-
 export function createProjectRepository(database) {
   function listProjects() {
     return database.prepare(`
@@ -50,61 +46,40 @@ export function createProjectRepository(database) {
     `).get(projectId, layer);
   }
 
-  function tableExists(name) {
-    try {
-      database.prepare(`SELECT 1 FROM ${name} LIMIT 1`).get();
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   function getSnapshot(projectId, layer) {
     const version = resolveVersion(projectId, layer);
     if (!version) return undefined;
-
-    // 旧表路径——getSnapshot 是 legacy 兼容层，保持精确字段输出
-    // insertVersionGraph 双写旧表+统一表，这里读旧表以保证向后兼容
-    const groups = rows(database, "project_units", version.id).map(row => ({
-      id: row.external_id, name: row.name, ...parseJson(row.data_json)
-    }));
-    const stages = rows(database, "project_stages", version.id).map(row => ({
-      id: row.external_id, title: row.title, date: row.date_label, ...parseJson(row.data_json)
-    }));
-    const closures = rows(database, "project_closures", version.id).map(row => ({
-      id: row.external_id, title: row.title, date: row.date_label, ...parseJson(row.data_json)
-    }));
+    const cardRows = database.prepare(`
+      SELECT external_id AS id, element_type AS elementType, title, start_date AS startDate,
+             end_date AS endDate, progress, unit_id AS unitId, parent_id AS parentId,
+             card_attrs AS cardAttrs
+      FROM project_cards WHERE version_id = ? ORDER BY element_type, position
+    `).all(version.id);
     const dependencyRows = database.prepare(`
-      SELECT task_external_id, depends_on_external_id
-      FROM task_links WHERE version_id = ? ORDER BY task_external_id, position
+      SELECT card_external_id AS cardId, depends_on_external_id AS dependencyId
+      FROM project_card_links WHERE version_id = ? ORDER BY card_external_id, position
     `).all(version.id);
     const dependencies = new Map();
     for (const row of dependencyRows) {
-      const values = dependencies.get(row.task_external_id) ?? [];
-      values.push(row.depends_on_external_id);
-      dependencies.set(row.task_external_id, values);
+      const values = dependencies.get(row.cardId) ?? [];
+      values.push(row.dependencyId);
+      dependencies.set(row.cardId, values);
     }
-    const tasks = rows(database, "project_tasks", version.id).map(row => ({
-      id: row.external_id, groupId: row.unit_external_id, title: row.title,
-      ...parseJson(row.data_json),
-      startDate: row.start_date, endDate: row.end_date, progress: row.progress,
-      parentId: row.parent_external_id ?? "",
-      dependsOn: dependencies.get(row.external_id) ?? []
+    const cards = type => cardRows.filter(row => row.elementType === type);
+    const groups = cards("unit").map(row => ({ id: row.id, name: row.title, ...parseJson(row.cardAttrs) }));
+    const stages = cards("stage").map(row => ({ id: row.id, title: row.title, date: row.startDate, ...parseJson(row.cardAttrs) }));
+    const closures = cards("outcome").map(row => ({ id: row.id, title: row.title, date: row.startDate, ...parseJson(row.cardAttrs) }));
+    const tasks = cards("task").map(row => ({
+      id: row.id, groupId: row.unitId, title: row.title, ...parseJson(row.cardAttrs),
+      startDate: row.startDate, endDate: row.endDate, progress: row.progress,
+      parentId: row.parentId ?? "", dependsOn: dependencies.get(row.id) ?? []
     }));
-    const workstreamTaskRows = database.prepare(`
-      SELECT workstream_external_id, task_external_id
-      FROM workstream_tasks WHERE version_id = ? ORDER BY workstream_external_id, position
-    `).all(version.id);
-    const workstreamTasks = new Map();
-    for (const row of workstreamTaskRows) {
-      const values = workstreamTasks.get(row.workstream_external_id) ?? [];
-      values.push(row.task_external_id);
-      workstreamTasks.set(row.workstream_external_id, values);
-    }
-    const companyWorkstreams = rows(database, "project_workstreams", version.id).map(row => ({
-      id: row.external_id, title: row.title, ...parseJson(row.data_json),
-      taskIds: workstreamTasks.get(row.external_id) ?? []
-    }));
+    const companyWorkstreams = cards("workstream").map(row => {
+      const attributes = parseJson(row.cardAttrs);
+      const taskIds = attributes.members ?? [];
+      delete attributes.members;
+      return { id: row.id, title: row.title, ...attributes, taskIds };
+    });
     return {
       ...parseJson(version.metadataJson),
       groups, stages, closures, tasks, companyWorkstreams
@@ -258,7 +233,12 @@ export function createProjectRepository(database) {
         WHERE version_id = ? AND external_id = ? AND module_type = ?
       `);
       for (const module of modules) {
-        const result = update.run(
+        const exists = database.prepare(`
+          SELECT 1 FROM project_modules
+          WHERE version_id = ? AND external_id = ? AND module_type = ?
+        `).get(version.id, module.type, module.type);
+        if (!exists) throw new Error(`Draft module ${module.type} was not found`);
+        update.run(
           module.position,
           module.enabled ? 1 : 0,
           JSON.stringify({ schemaVersion: module.schemaVersion, viewVariant: module.viewVariant }),
@@ -266,7 +246,6 @@ export function createProjectRepository(database) {
           module.type,
           module.type
         );
-        if (result.changes !== 1) throw new Error(`Draft module ${module.type} was not found`);
       }
       return getModuleVersionGraph(projectId, "draft");
     });
@@ -302,9 +281,9 @@ export function createProjectRepository(database) {
     const query = String(filters.q ?? "").trim().toLowerCase();
     const pattern = `%${query.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
     const orderBy = filters.sort === "name"
-      ? "p.name COLLATE NOCASE ASC, p.id ASC"
+      ? "p.name ASC, p.id ASC"
       : filters.sort === "updated"
-        ? "p.updated_at DESC, p.name COLLATE NOCASE ASC"
+        ? "p.updated_at DESC, p.name ASC"
         : "CASE WHEN recent.last_accessed_at IS NULL THEN 1 ELSE 0 END, recent.last_accessed_at DESC, p.updated_at DESC";
     const unitCountExpr =
       "(SELECT count(*) FROM project_cards c WHERE c.version_id = p.published_version_id AND c.element_type = 'unit')";
@@ -315,9 +294,8 @@ export function createProjectRepository(database) {
     const rows = database.prepare(`
       SELECT p.id, p.name, p.template_id AS templateId, p.template_version AS templateVersion,
              p.status, p.updated_at AS updatedAt, p.terminology_json AS terminologyJson,
-             published.version_label AS publishedVersion,
-             CASE WHEN ? = 1 THEN 'platform_admin' ELSE membership.role END AS role,
-             json_extract(published.metadata_json, '$.summary') AS summary,
+             published.metadata_json AS metadataJson,
+             published.version_label AS publishedVersion, membership.role,
              ${unitCountExpr} AS unitCount,
              ${taskCountExpr} AS taskCount,
              ${stageCountExpr} AS stageCount,
@@ -326,27 +304,25 @@ export function createProjectRepository(database) {
       JOIN project_versions published ON published.id = p.published_version_id AND published.project_id = p.id AND published.layer = 'published'
       LEFT JOIN project_members membership ON membership.project_id = p.id AND membership.user_id = ?
       LEFT JOIN recent_project_access recent ON recent.project_id = p.id AND recent.user_id = ?
-      WHERE (? = 1 OR membership.user_id IS NOT NULL)
+      WHERE ${principal.isPlatformAdmin ? "1 = 1" : "membership.user_id IS NOT NULL"}
         AND (? = 'all' OR p.status = ?)
         AND (? = '' OR lower(p.name) LIKE ? ESCAPE '\\' OR lower(p.id) LIKE ? ESCAPE '\\')
       ORDER BY ${orderBy}
     `).all(
-      principal.isPlatformAdmin ? 1 : 0,
       principal.id,
       principal.id,
-      principal.isPlatformAdmin ? 1 : 0,
       status,
       status,
       query,
       pattern,
       pattern
     ).map(row => {
-      const { terminologyJson, ...project } = row;
+      const { terminologyJson, metadataJson, ...project } = row;
       return {
         ...project,
         role: roleExpression(principal.isPlatformAdmin) ?? row.role,
         terminology: parseJson(terminologyJson),
-        summary: row.summary ?? "",
+        summary: parseJson(metadataJson).summary ?? "",
         isRecent: Boolean(row.lastAccessedAt)
       };
     });
@@ -368,13 +344,13 @@ export function createProjectRepository(database) {
       SELECT p.id, p.name, p.template_id AS templateId, p.template_version AS templateVersion,
              p.status, p.updated_at AS updatedAt, p.theme_json AS themeJson,
              p.terminology_json AS terminologyJson,
-             published.version_label AS publishedVersion,
-             CASE WHEN ? = 1 THEN 'platform_admin' ELSE membership.role END AS role
+             published.version_label AS publishedVersion, membership.role
       FROM projects p
       JOIN project_versions published ON published.id = p.published_version_id AND published.project_id = p.id
       LEFT JOIN project_members membership ON membership.project_id = p.id AND membership.user_id = ?
-      WHERE p.id = ? AND p.status = 'active' AND (? = 1 OR membership.user_id IS NOT NULL)
-    `).get(principal.isPlatformAdmin ? 1 : 0, principal.id, projectId, principal.isPlatformAdmin ? 1 : 0);
+      WHERE p.id = ? AND p.status = 'active'
+        AND ${principal.isPlatformAdmin ? "1 = 1" : "membership.user_id IS NOT NULL"}
+    `).get(principal.id, projectId);
     if (!row) return undefined;
     const role = roleExpression(principal.isPlatformAdmin) ?? row.role;
     if (capability === "draft" && !["platform_admin", "project_admin", "project_editor"].includes(role)) return undefined;
@@ -401,16 +377,20 @@ export function createProjectRepository(database) {
   }
 
   function updateProjectMetadata(projectId, values) {
-    return database.prepare(`
+    if (!getProject(projectId)) return 0;
+    database.prepare(`
       UPDATE projects SET name = ?, theme_json = ?, terminology_json = ?, updated_at = ?
       WHERE id = ?
-    `).run(values.name, JSON.stringify(values.theme), JSON.stringify(values.terminology), values.updatedAt, projectId).changes;
+    `).run(values.name, JSON.stringify(values.theme), JSON.stringify(values.terminology), values.updatedAt, projectId);
+    return 1;
   }
 
   function setProjectStatus(projectId, status, changedAt) {
-    return database.prepare(`
+    if (!getProject(projectId)) return 0;
+    database.prepare(`
       UPDATE projects SET status = ?, archived_at = ?, updated_at = ? WHERE id = ?
-    `).run(status, status === "archived" ? changedAt : null, changedAt, projectId).changes;
+    `).run(status, status === "archived" ? changedAt : null, changedAt, projectId);
+    return 1;
   }
 
   return {

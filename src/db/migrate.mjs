@@ -1,55 +1,13 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { withTransaction } from "./database.mjs";
-import { migrationsDir as packagedMigrationsDir, isPackaged } from "../paths.mjs";
+import { migrationsDir } from "../paths.mjs";
+import { listTemplates, templateConfigJson } from "../templates/catalog.mjs";
 
-// 两个 migrations 目录路径（在 applyMigrations 调用时按 database 后端选择）
-const sqliteMigrationsDir = isPackaged
-  ? packagedMigrationsDir
-  : fileURLToPath(new URL("./migrations", import.meta.url));
-
-const xuguMigrationsDir = isPackaged
-  ? join(packagedMigrationsDir, "..", "xugu-migrations")
-  : fileURLToPath(new URL("./xugu-migrations", import.meta.url));
-
-// 向后兼容导出：测试代码用它来拷贝 SQLite migration 文件。
-// 生产环境通过 applyMigrations(database) 自动根据 database._backend 选择目录。
-export const defaultMigrationsDir = sqliteMigrationsDir;
-export { sqliteMigrationsDir, xuguMigrationsDir };
+export const defaultMigrationsDir = migrationsDir;
 
 function checksum(value) {
   return createHash("sha256").update(value).digest("hex");
-}
-
-// sql.js (WASM SQLite) 默认不含 FTS5 模块。
-// 检测 FTS5 可用性：如果不可用，从 SQL 中移除 FTS5 相关语句。
-let _fts5Checked = false;
-let _fts5Available = false;
-
-function checkFts5(database) {
-  if (_fts5Checked) return _fts5Available;
-  try {
-    database.exec("CREATE VIRTUAL TABLE IF NOT EXISTS __fts5_probe USING fts5(x)");
-    database.exec("DROP TABLE IF EXISTS __fts5_probe");
-    _fts5Available = true;
-  } catch {
-    _fts5Available = false;
-  }
-  _fts5Checked = true;
-  return _fts5Available;
-}
-
-function stripFts5IfUnsupported(database, sql) {
-  if (checkFts5(database)) return sql;
-
-  // FTS5 不可用：移除 evidence_fts 相关语句（CREATE VIRTUAL TABLE + TRIGGER）
-  // 保留 INSERT/SELECT 等不涉及 evidence_fts 的语句
-  // evidence_blocks 表本身保留，搜索回退到 LIKE（在 evidence-service / retriever 中处理）
-  return sql
-    .replace(/CREATE\s+VIRTUAL\s+TABLE\s+evidence_fts[\s\S]*?;/gi, "-- [FTS5 stripped: evidence_fts virtual table]\n")
-    .replace(/CREATE\s+TRIGGER\s+evidence_blocks_fts_\w+[\s\S]*?END\s*;/gi, "-- [FTS5 stripped: evidence_blocks trigger]\n");
 }
 
 function migrationFiles(directory) {
@@ -58,32 +16,36 @@ function migrationFiles(directory) {
     .sort((left, right) => left.localeCompare(right, "en"));
 }
 
-export function applyMigrations(database, options = {}) {
-  // 基于 database 实例的后端标记决定 migrations 目录和语法
-  const isXugu = database._backend === "xugu";
-  const directory = options.migrationsDir ?? (isXugu ? xuguMigrationsDir : sqliteMigrationsDir);
-
-  // schema_migrations 表: 虚谷用 IDENTITY，SQLite 用 INTEGER PRIMARY KEY
-  if (isXugu) {
-    database.exec(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        version INTEGER PRIMARY KEY,
-        name VARCHAR(256) NOT NULL,
-        checksum VARCHAR(64) NOT NULL,
-        applied_at VARCHAR(40) NOT NULL,
-        CONSTRAINT uq_sm_name UNIQUE (name)
-      )
-    `);
-  } else {
-    database.exec(`
-      CREATE TABLE IF NOT EXISTS schema_migrations (
-        version INTEGER PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        checksum TEXT NOT NULL,
-        applied_at TEXT NOT NULL
-      ) STRICT
-    `);
+function syncTemplateCatalog(database) {
+  const find = database.prepare("SELECT 1 FROM templates WHERE id = ? AND version = ?");
+  const insert = database.prepare(
+    "INSERT INTO templates (id, version, name, config_json, created_at) VALUES (?, ?, ?, ?, ?)"
+  );
+  const update = database.prepare(
+    "UPDATE templates SET name = ?, config_json = ? WHERE id = ? AND version = ?"
+  );
+  const now = new Date().toISOString();
+  for (const template of listTemplates()) {
+    const config = templateConfigJson(template);
+    if (find.get(template.id, template.version)) {
+      update.run(template.name, config, template.id, template.version);
+    } else {
+      insert.run(template.id, template.version, template.name, config, now);
+    }
   }
+}
+
+export function applyMigrations(database, options = {}) {
+  const directory = options.migrationsDir ?? migrationsDir;
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY,
+      name VARCHAR(256) NOT NULL,
+      checksum VARCHAR(64) NOT NULL,
+      applied_at VARCHAR(40) NOT NULL,
+      CONSTRAINT uq_sm_name UNIQUE (name)
+    )
+  `);
 
   const findApplied = database.prepare(
     "SELECT version, name, checksum FROM schema_migrations WHERE version = ?"
@@ -94,8 +56,7 @@ export function applyMigrations(database, options = {}) {
   const applied = [];
 
   for (const name of migrationFiles(directory)) {
-    const match = name.match(/^(\d+)_/);
-    const version = Number(match[1]);
+    const version = Number(name.match(/^(\d+)_/)[1]);
     const sql = readFileSync(join(directory, name), "utf8");
     const digest = checksum(sql);
     const existing = findApplied.get(version);
@@ -105,20 +66,10 @@ export function applyMigrations(database, options = {}) {
       }
       continue;
     }
-    // 虚谷原生驱动在 transaction + 复杂 DDL 时会 crash (native segfault)
-    // 直接执行 migration SQL，不包 transaction
-    if (isXugu) {
-      database.exec(sql);
-      record.run(version, name, digest, new Date().toISOString());
-    } else {
-      // sql.js 可能不含 FTS5 模块，需要移除 FTS5 相关语句
-      const processedSql = stripFts5IfUnsupported(database, sql);
-      withTransaction(database, () => {
-        database.exec(processedSql);
-        record.run(version, name, digest, new Date().toISOString());
-      }, "EXCLUSIVE");
-    }
+    database.exec(sql);
+    record.run(version, name, digest, new Date().toISOString());
     applied.push(name);
   }
+  syncTemplateCatalog(database);
   return applied;
 }

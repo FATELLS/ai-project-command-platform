@@ -1,17 +1,5 @@
 -- ============================================================
--- 虚谷数据库版本 — 初始 Schema
--- 从 SQLite 001_initial.sql 转换
--- 转换规则:
---   STRICT 去掉（虚谷无此语法）
---   TEXT -> CLOB
---   INTEGER PRIMARY KEY -> INTEGER IDENTITY(1,1) PRIMARY KEY
---   AUTOINCREMENT -> SEQUENCE/IDENTITY
---   CHECK(json_valid()) -> 去掉（虚谷 JSON_VALID 在 CHECK 中不兼容）
---   GLOB -> LIKE (虚谷支持)
---   COLLATE NOCASE -> 去掉（用 UPPER() 代替）
---   ON CONFLICT -> MERGE
---   RAISE(ABORT,...) -> SIGNAL SQLSTATE
---   DEFERRABLE INITIALLY DEFERRED -> DEFERRABLE
+-- XuguDB v1 platform foundation schema.
 -- ============================================================
 
 CREATE TABLE templates (
@@ -94,95 +82,6 @@ CREATE TABLE project_modules (
   CONSTRAINT fk_pm_version FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE
 );
 
-CREATE TABLE project_units (
-  version_id INTEGER NOT NULL,
-  external_id VARCHAR(128) NOT NULL,
-  position INTEGER NOT NULL,
-  name VARCHAR(256) NOT NULL,
-  data_json CLOB NOT NULL DEFAULT '{}',
-  CONSTRAINT pk_project_units PRIMARY KEY (version_id, external_id),
-  CONSTRAINT uq_pu_pos UNIQUE (version_id, position),
-  CONSTRAINT fk_pu_version FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE
-);
-
-CREATE TABLE project_stages (
-  version_id INTEGER NOT NULL,
-  external_id VARCHAR(128) NOT NULL,
-  position INTEGER NOT NULL,
-  title VARCHAR(256) NOT NULL,
-  date_label VARCHAR(128) NOT NULL DEFAULT '',
-  data_json CLOB NOT NULL DEFAULT '{}',
-  CONSTRAINT pk_project_stages PRIMARY KEY (version_id, external_id),
-  CONSTRAINT uq_ps_pos UNIQUE (version_id, position),
-  CONSTRAINT fk_ps_version FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE
-);
-
-CREATE TABLE project_closures (
-  version_id INTEGER NOT NULL,
-  external_id VARCHAR(128) NOT NULL,
-  position INTEGER NOT NULL,
-  title VARCHAR(256) NOT NULL,
-  date_label VARCHAR(128) NOT NULL DEFAULT '',
-  data_json CLOB NOT NULL DEFAULT '{}',
-  CONSTRAINT pk_project_closures PRIMARY KEY (version_id, external_id),
-  CONSTRAINT uq_pc_pos UNIQUE (version_id, position),
-  CONSTRAINT fk_pc_version FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE
-);
-
-CREATE TABLE project_tasks (
-  version_id INTEGER NOT NULL,
-  external_id VARCHAR(128) NOT NULL,
-  unit_external_id VARCHAR(128) NOT NULL,
-  parent_external_id VARCHAR(128),
-  position INTEGER NOT NULL,
-  title VARCHAR(512) NOT NULL,
-  start_date VARCHAR(40) NOT NULL DEFAULT '',
-  end_date VARCHAR(40) NOT NULL DEFAULT '',
-  progress DOUBLE PRECISION,
-  data_json CLOB NOT NULL DEFAULT '{}',
-  CONSTRAINT pk_project_tasks PRIMARY KEY (version_id, external_id),
-  CONSTRAINT uq_pt_pos UNIQUE (version_id, position),
-  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
-  -- CONSTRAINT chk_pt_progress CHECK (progress IS NULL OR (progress >= 0 AND progress <= 100)),
-  CONSTRAINT fk_pt_version FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE,
-  CONSTRAINT fk_pt_unit FOREIGN KEY (version_id, unit_external_id) REFERENCES project_units(version_id, external_id),
-  CONSTRAINT fk_pt_parent FOREIGN KEY (version_id, parent_external_id) REFERENCES project_tasks(version_id, external_id) DEFERRABLE
-);
-
-CREATE TABLE task_links (
-  version_id INTEGER NOT NULL,
-  task_external_id VARCHAR(128) NOT NULL,
-  depends_on_external_id VARCHAR(128) NOT NULL,
-  relation_type VARCHAR(40) NOT NULL DEFAULT 'depends_on',
-  position INTEGER NOT NULL,
-  CONSTRAINT pk_task_links PRIMARY KEY (version_id, task_external_id, depends_on_external_id, relation_type),
-  -- [SKIPPED: 虚谷 CHECK 约束兼容性问题，校验在应用层]
-  -- CONSTRAINT chk_tl_rel CHECK (relation_type = 'depends_on'),
-  CONSTRAINT fk_tl_task FOREIGN KEY (version_id, task_external_id) REFERENCES project_tasks(version_id, external_id) ON DELETE CASCADE,
-  CONSTRAINT fk_tl_dep FOREIGN KEY (version_id, depends_on_external_id) REFERENCES project_tasks(version_id, external_id)
-);
-
-CREATE TABLE project_workstreams (
-  version_id INTEGER NOT NULL,
-  external_id VARCHAR(128) NOT NULL,
-  position INTEGER NOT NULL,
-  title VARCHAR(256) NOT NULL,
-  data_json CLOB NOT NULL DEFAULT '{}',
-  CONSTRAINT pk_project_workstreams PRIMARY KEY (version_id, external_id),
-  CONSTRAINT uq_pw_pos UNIQUE (version_id, position),
-  CONSTRAINT fk_pw_version FOREIGN KEY (version_id) REFERENCES project_versions(id) ON DELETE CASCADE
-);
-
-CREATE TABLE workstream_tasks (
-  version_id INTEGER NOT NULL,
-  workstream_external_id VARCHAR(128) NOT NULL,
-  task_external_id VARCHAR(128) NOT NULL,
-  position INTEGER NOT NULL,
-  CONSTRAINT pk_workstream_tasks PRIMARY KEY (version_id, workstream_external_id, task_external_id),
-  CONSTRAINT fk_wt_ws FOREIGN KEY (version_id, workstream_external_id) REFERENCES project_workstreams(version_id, external_id) ON DELETE CASCADE,
-  CONSTRAINT fk_wt_task FOREIGN KEY (version_id, task_external_id) REFERENCES project_tasks(version_id, external_id)
-);
-
 CREATE TABLE change_proposals (
   id VARCHAR(128) NOT NULL,
   project_id VARCHAR(128) NOT NULL,
@@ -200,8 +99,6 @@ CREATE TABLE change_proposals (
 );
 
 CREATE INDEX idx_project_versions_project ON project_versions(project_id, layer, id);
-CREATE INDEX idx_project_tasks_unit ON project_tasks(version_id, unit_external_id, position);
-CREATE INDEX idx_task_links_target ON task_links(version_id, depends_on_external_id);
 CREATE INDEX idx_change_proposals_project ON change_proposals(project_id, status, created_at);
 
 -- 触发器: 版本指针校验

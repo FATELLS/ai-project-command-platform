@@ -13,13 +13,13 @@ const target = argumentsMap.get("--target");
 const runtimeDirectory = argumentsMap.get("--runtime");
 const outputDirectory = argumentsMap.get("--output");
 const skipInstall = argumentsMap.has("--skip-install");
-if (!["windows-x64", "linux-x64", "macos-x64", "macos-arm64"].includes(target) || !runtimeDirectory || !outputDirectory) {
-  throw new Error("usage: node scripts/assemble-release.mjs --target windows-x64|linux-x64|macos-x64|macos-arm64 --runtime <directory> --output <directory> [--skip-install true]");
+if (!["linux-arm64", "macos-arm64"].includes(target) || !runtimeDirectory || !outputDirectory) {
+  throw new Error("usage: node scripts/assemble-release.mjs --target linux-arm64|macos-arm64 --runtime <directory> --output <directory> [--skip-install true]");
 }
 
 const output = resolve(outputDirectory);
 const runtime = resolve(runtimeDirectory);
-const runtimeNode = target === "windows-x64" ? join(runtime, "node.exe") : join(runtime, "bin", "node");
+const runtimeNode = join(runtime, "bin", "node");
 await stat(runtimeNode);
 
 await rm(output, { recursive: true, force: true });
@@ -28,14 +28,13 @@ await mkdir(output, { recursive: true });
 for (const entry of ["server.mjs", "package.json", "package-lock.json", "README.md", ".env.example", "public", "src"]) {
   await cp(join(root, entry), join(output, entry), { recursive: true });
 }
+await mkdir(join(output, "scripts"), { recursive: true });
+await cp(join(root, "scripts", "manage-server.mjs"), join(output, "scripts", "manage-server.mjs"));
+await cp(join(root, "vendor", "xugudb"), join(output, "vendor", "xugudb"), { recursive: true });
 await cp(runtime, join(output, "runtime"), { recursive: true, dereference: false, verbatimSymlinks: true });
 await mkdir(join(output, "data"), { recursive: true });
 
-if (target === "windows-x64") {
-  await cp(join(root, "packaging", "windows", "Start.ps1"), join(output, "Start.ps1"));
-  await cp(join(root, "packaging", "windows", "Stop.ps1"), join(output, "Stop.ps1"));
-  await cp(join(root, "packaging", "windows", "README-WINDOWS.txt"), join(output, "README-WINDOWS.txt"));
-} else if (target.startsWith("macos-")) {
+if (target === "macos-arm64") {
   await cp(join(root, "packaging", "macos", "start.sh"), join(output, "start.sh"));
   await cp(join(root, "packaging", "macos", "stop.sh"), join(output, "stop.sh"));
   await cp(join(root, "packaging", "macos", "README-MACOS.txt"), join(output, "README-MACOS.txt"));
@@ -71,12 +70,10 @@ const forbiddenNames = new Set([
   "test",
   "test-results",
   "playwright-report",
-  "platform.sqlite",
-  "phase6-browser.sqlite",
   "first-run-credentials.txt",
   "bootstrap-credentials.txt"
 ]);
-const forbiddenExtensions = [".sqlite", ".sqlite3", ".db", ".log"];
+const forbiddenExtensions = [".log"];
 
 async function audit(directory) {
   for (const entry of await readdir(directory, { withFileTypes: true })) {

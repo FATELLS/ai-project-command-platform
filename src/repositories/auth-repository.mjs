@@ -1,6 +1,5 @@
 export function createAuthRepository(database) {
-  // 虚谷 xgconsole 把所有列名（含 AS 别名）转大写，parseConsoleOutput 再转全小写。
-  // SQLite 路径保留驼峰别名。这里在查询函数里做映射，两条路径都安全。
+  // 官方驱动返回大写列名；适配层会恢复查询中的业务别名。
   const findUserByLoginStatement = database.prepare(`
   SELECT id, display_name AS displayName, status, login_name AS loginName,
          password_salt AS passwordSalt, password_hash AS passwordHash,
@@ -20,7 +19,6 @@ export function createAuthRepository(database) {
    WHERE s.token_hash = ?
  `);
 
-  // 虚谷适配层返回全小写属性名，映射到驼峰
   function mapUser(row) {
     if (!row) return row;
     return {
@@ -108,7 +106,10 @@ export function createAuthRepository(database) {
   }
 
   function deleteSessionByTokenHash(tokenHash) {
-    return database.prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash).changes;
+    const exists = database.prepare("SELECT 1 FROM sessions WHERE token_hash = ?").get(tokenHash);
+    if (!exists) return 0;
+    database.prepare("DELETE FROM sessions WHERE token_hash = ?").run(tokenHash);
+    return 1;
   }
 
   function insertAudit(event) {

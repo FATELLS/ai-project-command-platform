@@ -36,10 +36,16 @@ export function createMaterialProcessingService(database, options = {}) {
   const extractor = options.extractor ?? ((input) => extractMaterial(input, { ...options.extraction, capabilities }));
 
   function reconcileAbandonedJobs() {
-    return database.prepare(`
+    const timestamp = iso(now());
+    const count = database.prepare(`
+      SELECT count(*) AS count FROM material_jobs
+      WHERE state = 'leased' AND lease_expires_at <= ?
+    `).get(timestamp).count;
+    database.prepare(`
       UPDATE material_jobs SET state = 'queued', lease_owner = NULL, lease_expires_at = NULL, updated_at = ?
       WHERE state = 'leased' AND lease_expires_at <= ?
-    `).run(iso(now()), iso(now())).changes;
+    `).run(timestamp, timestamp);
+    return count;
   }
 
   function finishFailure(job, error) {

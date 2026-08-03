@@ -43,8 +43,6 @@ function deepMergeAttrs(currentAttrs,incomingAttrs){
   return merged;
 }
 
-function tableExists(database,name){try{database.prepare(`SELECT 1 FROM ${name} LIMIT 1`).get();return true;}catch{return false;}}
-
 function nextCardPosition(database,versionId){return database.prepare(`SELECT coalesce(max(position),-1)+1 AS position FROM project_cards WHERE version_id=?`).get(versionId).position;}
 
 function cardExists(database,versionId,id){return Boolean(database.prepare(`SELECT 1 FROM project_cards WHERE version_id=? AND external_id=?`).get(versionId,id));}

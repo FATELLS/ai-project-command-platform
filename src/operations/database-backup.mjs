@@ -1,55 +1,95 @@
-import { copyFile, mkdir, rename, stat, unlink } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { openDatabase } from "../db/database.mjs";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { mkdir, stat } from "node:fs/promises";
+import { basename, dirname, resolve } from "node:path";
 
-function explicitPath(value,label){if(!value)throw new TypeError(`${label} path is required`);return resolve(value);}
-function sqlString(value){return `'${value.replaceAll("'","''")}'`;}
+const DEFAULT_IMAGE = "ai-project-command-platform/xugudb:12.9.10-arm64";
+const DEFAULT_CONTAINER = "ai-project-command-platform-xugu";
+const DEFAULT_VOLUME = "ai-project-command-platform-xugu-data";
 
-export async function verifyDatabaseFile(path) {
-  const target=explicitPath(path,"Database");
-  const info=await stat(target);
-  if(!info.isFile()||info.size<1024)throw new Error("Database backup is empty or invalid");
-  const database=openDatabase(target,{readOnly:true});
-  try{
-    const quick=database.prepare("PRAGMA quick_check").all();
-    if(quick.length!==1||quick[0].quick_check!=="ok")throw new Error("SQLite quick_check failed");
-    const foreign=database.prepare("PRAGMA foreign_key_check").all();
-    if(foreign.length)throw new Error("SQLite foreign_key_check failed");
-    const latest=database.prepare("SELECT max(version) AS version FROM schema_migrations").get()?.version;
-    if(Number(latest)<6)throw new Error("Database migration history is incomplete");
-    return{path:target,bytes:info.size,migrationVersion:Number(latest),quickCheck:"ok"};
-  }finally{database.close();}
+function safeName(value, label) {
+  if (!/^[a-zA-Z0-9_.-]+$/.test(value)) throw new TypeError(`${label} is invalid`);
+  return value;
 }
 
-export async function backupDatabaseFile(sourcePath,targetPath) {
-  const source=explicitPath(sourcePath,"Source database"),target=explicitPath(targetPath,"Backup");
-  if(source===target)throw new TypeError("Backup target must differ from the source database");
-  await mkdir(dirname(target),{recursive:true});
-  try{await unlink(target);}catch(error){if(error.code!=="ENOENT")throw error;}
-  const database=openDatabase(source);
-  try{
-    if(database._backend==="xugu"){
-      throw new Error("Xugu backup should use Xugu native tools, not VACUUM INTO");
-    }
-    // sql.js (WASM SQLite) 不支持 VACUUM INTO（无法访问文件系统）
-    // 改为先 _persist 写盘，再 copyFile
-    if(database._persist) database._persist();
-    await copyFile(source,target);
-  }finally{database.close();}
-  return verifyDatabaseFile(target);
+function safeImage(value) {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_./:-]*$/.test(value)) throw new TypeError("Xugu image is invalid");
+  return value;
 }
 
-export async function restoreDatabaseFile(sourcePath,targetPath,options={}) {
-  const source=explicitPath(sourcePath,"Restore source"),target=explicitPath(targetPath,"Restore target");
-  if(source===target)throw new TypeError("Restore source and target must differ");
-  const verified=await verifyDatabaseFile(source);
-  await mkdir(dirname(target),{recursive:true});
-  const suffix=options.suffix??new Date().toISOString().replaceAll(":","-");
-  const preserved=`${target}.pre-restore-${suffix}.sqlite`;
-  try{await copyFile(target,preserved);}catch(error){if(error.code!=="ENOENT")throw error;}
-  const temporary=`${target}.restore-${suffix}.tmp`;
-  await copyFile(source,temporary);
-  await verifyDatabaseFile(temporary);
-  await rename(temporary,target);
-  return{...verified,target,preserved};
+function settings(options = {}) {
+  return {
+    image: safeImage(options.image ?? process.env.XUGU_IMAGE ?? DEFAULT_IMAGE),
+    container: safeName(options.container ?? process.env.XUGU_CONTAINER ?? DEFAULT_CONTAINER, "Xugu container"),
+    volume: safeName(options.volume ?? process.env.XUGU_VOLUME ?? DEFAULT_VOLUME, "Xugu volume")
+  };
+}
+
+function docker(args, options = {}) {
+  return execFileSync("docker", args, { encoding: "utf8", stdio: "pipe", timeout: options.timeout ?? 120_000 }).trim();
+}
+
+function assertContainerStopped(container) {
+  try {
+    const running = docker(["inspect", "--format", "{{.State.Running}}", container], { timeout: 5_000 });
+    if (running === "true") throw new Error("Xugu container must be stopped before backup or restore");
+  } catch (error) {
+    if (error.message.includes("must be stopped")) throw error;
+  }
+}
+
+async function sha256(path) {
+  const hash = createHash("sha256");
+  await new Promise((resolveHash, rejectHash) => {
+    const stream = createReadStream(path);
+    stream.on("data", chunk => hash.update(chunk));
+    stream.on("end", resolveHash);
+    stream.on("error", rejectHash);
+  });
+  return hash.digest("hex");
+}
+
+export async function verifyXuguBackup(path, options = {}) {
+  const archive = resolve(path);
+  const info = await stat(archive);
+  if (!info.isFile() || info.size < 1024) throw new Error("Xugu backup archive is empty or invalid");
+  const { image } = settings(options);
+  docker([
+    "run", "--rm", "--entrypoint", "tar",
+    "-v", `${archive}:/backup/archive.tar.gz:ro`,
+    image, "-tzf", "/backup/archive.tar.gz"
+  ]);
+  return { path: archive, bytes: info.size, sha256: await sha256(archive), backend: "xugu" };
+}
+
+export async function backupXuguVolume(targetPath, options = {}) {
+  const target = resolve(targetPath);
+  const { image, container, volume } = settings(options);
+  assertContainerStopped(container);
+  await mkdir(dirname(target), { recursive: true });
+  docker([
+    "run", "--rm", "--entrypoint", "tar",
+    "-v", `${volume}:/source:ro`,
+    "-v", `${dirname(target)}:/backup`,
+    image, "-czf", `/backup/${basename(target)}`, "-C", "/source", "."
+  ], { timeout: 600_000 });
+  return verifyXuguBackup(target, options);
+}
+
+export async function restoreXuguVolume(sourcePath, options = {}) {
+  const source = resolve(sourcePath);
+  const { image, container, volume } = settings(options);
+  assertContainerStopped(container);
+  const verified = await verifyXuguBackup(source, options);
+  const suffix = options.suffix ?? new Date().toISOString().replaceAll(":", "-");
+  const preserved = `${source}.pre-restore-${suffix}.tar.gz`;
+  await backupXuguVolume(preserved, options);
+  docker([
+    "run", "--rm", "--entrypoint", "sh",
+    "-v", `${volume}:/target`,
+    "-v", `${source}:/restore/archive.tar.gz:ro`,
+    image, "-c", "find /target -mindepth 1 -delete && tar -xzf /restore/archive.tar.gz -C /target"
+  ], { timeout: 600_000 });
+  return { ...verified, volume, preserved };
 }

@@ -2,130 +2,68 @@
 
 面向多项目、多团队的项目推进平台。路线图、作战单元、排期、健康度、材料、AI 结构化提案、人工审核与发布都在同一项目命名空间内运行。
 
-当前发布版本：`0.9.3`
+当前版本：`1.0.0`。
 
-## 快速开始（npx，一行命令）
+## 产品边界
 
-已安装 Node.js 22+ 的机器上，**无需 clone、无需解压**，一行命令即可启动：
+- 虚谷数据库是唯一持久化后端。
+- `project_cards` 与 `project_card_links` 是唯一版本化项目图模型。
+- LLM 只能生成有来源的结构化 `ChangeProposal`，不能生成页面代码，也不能审核、合并或发布。
+- 项目、材料、证据、问答、生成任务和权限按 `projectId` 隔离。
+- 页面由固定白名单 renderer 渲染，项目差异来自数据、模板、术语和主题。
 
-```bash
-npx ai-project-command-platform
-```
+## 运行要求
 
-npx 会自动下载最新版本并启动，浏览器打开 <http://127.0.0.1:4173> 即可使用。
+- Apple Silicon macOS 或 Linux ARM64。
+- Node.js `20.x`（源码运行；随包原生驱动按此 ABI 验证）。
+- Docker 或 Docker Desktop。
+- 至少 4 GB 可用内存和足够的 Docker volume 空间。
 
-> **数据存储位置**：npx 模式下，数据库和配置默认存储在 `~/.ai-project-command-platform/data/`（macOS/Linux）或 `%USERPROFILE%\.ai-project-command-platform\data\`（Windows），不会因清理 npm 缓存而丢失。也可通过环境变量 `PLATFORM_DATA_DIR` 自定义路径。
+仓库已包含：
 
-首次启动如果未设置 `PLATFORM_BOOTSTRAP_PASSWORD`，平台自动创建默认管理员 **admin / admin123**，首次登录后请立即修改密码。AI 生成功能默认禁用，启动后在网页后台「平台设置 → AI 配置」中填写 provider、baseUrl、apiKey、model 即可开启——保存时 allowedHosts 白名单会自动从 baseUrl 提取，无需手动填写。
+- 虚谷 `12.9.10-arm64` Docker 镜像归档与校验清单；
+- macOS ARM64 与 Linux ARM64 原生 Node.js 驱动；
+- 8 个有序虚谷迁移；
+- 应用与数据库统一启停、冷备份和恢复命令。
 
-## 核心边界
-
-- LLM 只能生成带来源的结构化 `ChangeProposal`，不能生成页面代码。
-- AI 不能审核、合并或发布，也不能直接写入 `draft` 或 `published`。
-- 项目、材料、证据、问答、生成任务和角色权限按 `projectId` 隔离。
-- 页面由固定白名单 renderer 渲染；项目差异来自数据、模板、术语与主题配置。
-- 项目路线图采用主任务时间线和两级副任务卡片，精确工期由独立甘特视图承担。
-
-## 安装包
-
-GitHub Release 提供五个不含项目数据的 x64/arm64 产物：
-
-| 系统 | 产物 | 启动方式 |
-| --- | --- | --- |
-| Windows 10/11 | `ai-project-command-platform-0.9.3-windows-x64.zip` | 解压后运行 `Start.ps1` |
-| Linux 通用版 | `ai-project-command-platform-0.9.3-linux-x64.tar.gz` | 解压后运行 `./start.sh` |
-| RHEL 系 RPM | `ai-project-command-platform-0.9.3-1.x86_64.rpm` | 安装即注册并启动 systemd 服务 |
-| macOS (Apple Silicon) | `ai-project-command-platform-0.9.3-macos-arm64.tar.gz` | 解压后运行 `./start.sh` |
-| macOS (Intel) | `ai-project-command-platform-0.9.3-macos-x64.tar.gz` | 解压后运行 `./start.sh` |
-
-安装包自带 Node.js 运行时，不要求目标机器预装 Node 或 npm。
-
-### RPM 一行安装并启动
-
-仓库默认为私有仓库，先用 `gh auth login` 登录一次，然后执行：
-
-```bash
-tmp="$(mktemp -d)" && gh release download v0.9.3 -R FATELLS/ai-project-command-platform -p '*.rpm' -D "$tmp" && sudo rpm -Uvh "$tmp"/*.rpm
-```
-
-适用于 RHEL、Rocky Linux、AlmaLinux、CentOS Stream 8 及以上版本。安装完成后：
-
-```bash
-sudo systemctl status ai-project-command-platform
-sudo cat /var/lib/ai-project-command-platform/bootstrap-credentials.txt
-```
-
-默认地址为 <http://127.0.0.1:4173>。RPM 首次安装会创建独立系统用户、空数据目录、管理员随机密码和 systemd 服务，并自动启动。首次登录后请立即修改密码并删除凭据文件。
-
-### Windows 一行安装并启动
-
-```powershell
-gh release download v0.9.3 -R FATELLS/ai-project-command-platform -p "*windows-x64.zip"; Expand-Archive .\ai-project-command-platform-0.9.3-windows-x64.zip; Set-ExecutionPolicy -Scope Process Bypass; .\ai-project-command-platform-0.9.3-windows-x64\Start.ps1
-```
-
-首次管理员凭据会显示在窗口中，并写入 `first-run-credentials.txt`。使用同目录的 `Stop.ps1` 停止服务。
-
-### macOS 一行安装并启动
-
-Apple Silicon (M1/M2/M3/M4)：
-
-```bash
-tmp="$(mktemp -d)" && gh release download v0.9.3 -R FATELLS/ai-project-command-platform -p '*macos-arm64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.3-macos-arm64/start.sh
-```
-
-Intel：
-
-```bash
-tmp="$(mktemp -d)" && gh release download v0.9.3 -R FATELLS/ai-project-command-platform -p '*macos-x64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.3-macos-x64/start.sh
-```
-
-使用 `stop.sh` 停止。运行数据位于解压目录的 `data/`。
-
-### Linux 通用版一行安装并启动
-
-```bash
-tmp="$(mktemp -d)" && gh release download v0.9.3 -R FATELLS/ai-project-command-platform -p '*linux-x64.tar.gz' -D "$tmp" && tar -xzf "$tmp"/*.tar.gz -C "$tmp" && "$tmp"/ai-project-command-platform-0.9.3-linux-x64/start.sh
-```
-
-使用 `stop.sh` 停止。运行数据位于解压目录的 `data/`。
-
-## 源码运行
-
-要求 Node.js 22 或更高版本：
+## 源码启动
 
 ```bash
 npm ci
 cp .env.example .env.local
-```
-
-首次启动时，如果未设置 `PLATFORM_BOOTSTRAP_PASSWORD`，平台会自动创建默认管理员 **admin / admin123**，首次登录后需立即修改密码。也可以手动设置：
-
-```dotenv
-PLATFORM_BOOTSTRAP_PASSWORD=请替换为强密码
-```
-
-然后启动：
-
-```bash
-npm start
-```
-
-`npm start` 是前台开发模式，使用 `Ctrl+C` 优雅停止。需要关闭终端后继续运行时，使用受管理后台模式：
-
-```bash
 npm run start:background
 npm run status
-npm run restart
+```
+
+打开 <http://127.0.0.1:4173>。
+
+默认 managed 模式会校验并按需加载内置镜像，创建专用容器与 volume，等待虚谷就绪后启动应用。停止顺序相反：
+
+```bash
 npm run stop
 ```
 
-`npm run stop` 只停止本平台 Node 进程，并按 HTTP、材料 worker、数据库连接的顺序收尾；不会停止虚谷数据库或任何 Docker 容器。
+前台开发可使用 `npm start`；该命令只启动应用进程，要求虚谷已经可连接。共享外部数据库必须显式设置：
 
-默认账号为 `admin`，默认地址为 <http://127.0.0.1:4173>。全新数据库不会自动导入任何公司项目；登录后可创建项目，或通过显式导入命令导入已经脱敏并确认可用的项目夹具。
+```dotenv
+PLATFORM_XUGU_LIFECYCLE=external
+XUGU_HOST=127.0.0.1
+XUGU_PORT=5138
+```
 
-## LLM 配置
+## 首次管理员
 
-LLM 默认禁用。真实密钥只能放在未跟踪的 `.env.local` 或部署平台的密钥系统中：
+portable 启动脚本会生成随机管理员密码并写入仅本机可读的首次凭据文件。源码运行应在 `.env.local` 中设置强密码：
+
+```dotenv
+PLATFORM_BOOTSTRAP_PASSWORD=replace-with-a-strong-password
+```
+
+首次登录后立即修改密码并删除首次凭据文件。
+
+## AI 配置与脱敏
+
+AI 默认关闭。真实密钥只能放在未跟踪的 `.env.local`、本地 API 配置或平台设置中：
 
 ```dotenv
 AI_GENERATION_PROVIDER=openai-compatible
@@ -135,53 +73,62 @@ AI_GENERATION_MODEL=replace-me
 AI_GENERATION_ALLOWED_HOSTS=example.com
 ```
 
-不要把密钥写进 README、源码、GitHub Actions 日志或诊断包。
+设置接口只返回是否已配置及脱敏摘要，不返回完整密钥。日志只记录稳定错误码、模型安全标签和计量信息，不记录凭据或原始 provider 异常。
 
-## 数据目录与隐私
+## 项目迁移
 
-源码仓库和 Release 安装包都不包含运行数据库、上传原件、预处理材料、API Key、日志或备份。
+仓库不在首次启动时导入任何公司项目。显式导入已脱敏夹具：
 
-- 源码默认数据：`data/platform.sqlite`
-- RPM 数据：`/var/lib/ai-project-command-platform/data`
-- RPM 配置：`/etc/ai-project-command-platform/platform.env`
-- Windows/Linux portable：解压目录内的 `data/` 与 `.env.local`
+```bash
+npm run import:xugu
+npm run export:xugu
+```
 
-以下内容已由 `.gitignore` 排除：
-
-- `.env`、`.env.local` 和所有真实凭据；
-- SQLite/DB/WAL 文件；
-- `uploads/`、`processed/`、`backups/`、`diagnostics/` 和导出文件；
-- Release 构建物、日志、浏览器会话与测试报告。
-
-仓库中的 Xugu 夹具仅用于迁移和语义等价测试，必须保持脱敏；正式安装包采用运行文件白名单，明确排除 `fixtures/`、`.planning/`、`test/` 和所有项目数据。
+稳定项目 ID 为 `xugu-agentic-group`。导入、导出和版本克隆全部走统一卡片模型。
 
 ## 备份与恢复
 
-源码运行：
+数据库使用 Docker volume 冷备份。先停止平台：
 
 ```bash
-npm run backup -- --output /secure/path/platform-backup.sqlite
-npm run restore -- --input /secure/path/platform-backup.sqlite
+npm run stop
+npm run backup -- --output /secure/path/xugu-backup.tar.gz
+npm run restore -- --source /secure/path/xugu-backup.tar.gz --confirm RESTORE
+npm run start:background
 ```
 
-RPM 部署应在停止服务后备份：
+备份会校验归档可读性、大小和 SHA-256。恢复前会自动保存当前 volume 的 pre-restore 备份。不要用复制材料目录代替数据库备份。
+
+## 验证
 
 ```bash
-sudo systemctl stop ai-project-command-platform
-sudo cp -a /var/lib/ai-project-command-platform /secure/backup/
-sudo systemctl start ai-project-command-platform
+npm run verify:code
+npm test
+npm run test:xugu
+npm run test:e2e
+npm run test:e2e:abnormal
 ```
 
-## 验证与构建
+真实虚谷集成测试在独立容器、端口和 volume 中执行；UI 套件也使用独立虚谷环境和真实浏览器，不复用开发数据库。
 
-```bash
-npm run verify
-```
+## 发布
 
-当前验证基线为 157 项后台测试和 35 项 Playwright 浏览器 E2E，并包含迁移、安全、项目隔离、浏览器证据与参考项目只读检查。
+唯一发布组装入口是 `scripts/assemble-release.mjs`。支持：
 
-Release 工作流位于 `.github/workflows/release.yml`。推送 `v*` 标签后自动构建 Windows ZIP、Linux tar.gz、RPM 和 macOS tar.gz（Apple Silicon + Intel），并上传到对应 GitHub Release。分发组装脚本采用运行文件白名单并执行数据泄漏检查。
+- `linux-arm64`
+- `macos-arm64`
 
-## 许可证
+产物包含 Node.js 运行时、虚谷镜像、对应原生驱动、应用代码和启停脚本，不包含项目数据、材料、密钥、日志、测试或规划目录。GitHub Release 工作流当前构建并烟测 Linux ARM64 完整栈。
 
-当前未配置开源许可证，默认仅供内部使用。仓库应保持为私有仓库。
+## 数据边界
+
+运行数据不进入 Git：
+
+- 虚谷数据位于专用 Docker volume；
+- 材料、处理结果和运行文件位于 `PLATFORM_DATA_DIR`；
+- `.env.local`、本地 API 配置、备份、日志、诊断和浏览器会话均被忽略；
+- 发布包不包含 `fixtures/`、`.planning/`、`test/` 或任何公司数据。
+
+## 授权
+
+项目仅供内部使用，未开放许可。

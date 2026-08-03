@@ -7,7 +7,8 @@ test.describe("路线图深链与就地详情", () => {
     await page.goto(PROJECT);
     await expect(page.locator(".roadmap-card-swimlane")).toBeVisible();
     await expect(page.locator(".swimlane-stage-card")).toHaveCount(6);
-    await expect(page.locator(".swimlane-task-card")).toHaveCount(0);
+    await expect(page.locator(".swimlane-card-row")).toHaveCount(0);
+    await expect(page.locator(".roadmap-unscheduled-cards .swimlane-task-card")).toHaveCount(1);
   });
 
   test("旧 view=timeline 深链回落到项目路线图", async ({ page }) => {
@@ -15,7 +16,7 @@ test.describe("路线图深链与就地详情", () => {
     await expect(page.locator(".roadmap-card-swimlane")).toBeVisible();
     await expect(page.locator(".roadmap-svg")).toHaveCount(0);
     await expect(page.locator(".roadmap-view-switcher a.active")).toContainText("项目路线图");
-    await expect(page.locator(".roadmap-view-switcher a")).toHaveCount(4);
+    await expect(page.locator(".roadmap-view-switcher a")).toHaveCount(2);
   });
 
   test("点击主任务写入 stage 深链并就地展开副任务", async ({ page }) => {

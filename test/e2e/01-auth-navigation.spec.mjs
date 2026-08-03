@@ -8,8 +8,11 @@ test.describe("认证与平台导航", () => {
     await page.goto("/projects");
     const results = page.locator(".project-grid[aria-live]");
     await expect(results).toBeVisible();
-    await expect(results.locator(".project-id", { hasText: "xugu-agentic-group" })).toBeVisible();
-    await expect(results.locator(".project-id", { hasText: "standard-project-sample" })).toBeVisible();
+    await expect(results.locator('a[href="/projects/xugu-agentic-group"]')).toHaveCount(1);
+    await expect(results.locator('a[href="/projects/standard-project-sample"]')).toHaveCount(1);
+    const technicalIds = results.locator("details:not([open]) .project-id");
+    await expect(technicalIds).toHaveCount(2);
+    for (let index = 0; index < 2; index += 1) await expect(technicalIds.nth(index)).toBeHidden();
   });
 
   test("未登录访问受保护路由会跳转登录", async ({ browser }) => {
@@ -47,7 +50,8 @@ test.describe("认证与平台导航", () => {
     await expect(page.getByText(/7\s*作战单元/).first()).toBeVisible();
     await page.goto("/projects/standard-project-sample");
     await expect(page).toHaveURL(/\/projects\/standard-project-sample/);
-    await expect(page.locator(".project-id", { hasText: "standard-project-sample" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "客户门户现代化项目", exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "切换项目" })).toHaveValue("standard-project-sample");
   });
 
   test("一级导航收敛为六个工作区并保留健康与资料二级入口", async ({ page }) => {

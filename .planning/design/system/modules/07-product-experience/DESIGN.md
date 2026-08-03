@@ -113,26 +113,35 @@ Phase 1–10 已实现：
 - 材料、问答、提案、审核、发布和设置。
 - 三种项目创建入口。
 
-## Accepted Target Evolution
+## Verified Current Experience
 
-Phase 11 设计位于：
+Phase 11 设计输入位于：
 
 - `.planning/phases/11-workflow-first-ui/11-SPEC.md`
 - `.planning/phases/11-workflow-first-ui/UI-SPEC.md`
 - `.planning/phases/11-workflow-first-ui/modules/`
 
-目标包括：
+截至 2026-08-02 已验证：
 
 - 紧凑平台壳和首屏有效性。
-- 注意力队列总览。
-- 统一 ProjectSkeleton 创建确认。
+- 六个一级工作区和项目更新独立流程。
+- 创建与项目更新入口共享材料模板目录和异常材料门阀。
 - 材料可行动状态机。
-- 业务变化优先审核和可恢复发布编排。
+- 业务变化优先审核。
+- 项目更新四步流程：本次材料、处理与生成、模拟路线图、审核与发布。
+- 模拟路线图只渲染一张复用正式 renderer 的路线图。
+- 正式路线图和 AI 节点预览共享卡片编辑器，且不直写 draft/published。
 - 移动端路线/甘特等价投影。
 - 设置渐进披露。
 - 字号、对比度、焦点和触摸目标。
 
-这些目标尚未实现，不属于当前 Result。
+仍待完成：
+
+- 总览“需要处理 / 当前进展 / 近期变化”的确定性注意力队列。
+- 三种创建方式扩展到团队、阶段和任务级 `ProjectSkeleton`。
+- 查看者服务端提案读取进一步收紧。
+- “确认并发布”的可恢复编排，覆盖 merge 成功但 publish 失败。
+- 全弹窗键盘 UAT 和两模板×四角色视觉矩阵。
 
 ## Error and Async States
 
@@ -162,3 +171,4 @@ Phase 11 设计位于：
 - Xugu/standard 两模板。
 - platform admin/project admin/editor/viewer。
 - Phase 11 第一切片已增加三视口和首屏 bounding-box 断言；完整两模板×四角色视觉/键盘矩阵仍待补齐。
+- 2026-08-02 全功能 UI 回归通过：82 项统一主流程/领域 Playwright、9 项异常材料/节点预览 Playwright、Phase 3–6 浏览器证据。

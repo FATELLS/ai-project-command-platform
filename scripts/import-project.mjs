@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { defaultDatabasePath, openDatabase } from "../src/db/database.mjs";
+import { openDatabase } from "../src/db/database.mjs";
 import { applyMigrations } from "../src/db/migrate.mjs";
 import { importLegacyProject } from "../src/migration/legacy-project.mjs";
 import { createProjectRepository } from "../src/repositories/project-repository.mjs";
@@ -10,19 +10,18 @@ function valueAfter(flag) {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-const databasePath = resolve(valueAfter("--database") ?? defaultDatabasePath());
 const fixturePath = resolve(valueAfter("--fixture") ?? "fixtures/projects/xugu-agentic-group.json");
 const projectId = valueAfter("--project") ?? "xugu-agentic-group";
 const templateId = valueAfter("--template") ?? "campaign-map-v1";
 const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
-const database = openDatabase(databasePath);
+const database = openDatabase();
 try {
   applyMigrations(database);
   const result = importLegacyProject(database, fixture, { projectId, templateId });
   const repository = createProjectRepository(database);
   const project = repository.getProject(projectId);
   console.log(JSON.stringify({
-    database: databasePath,
+    database: "xugu",
     fixture: fixturePath,
     ...result,
     published: repository.countVersion(project.publishedVersionId),

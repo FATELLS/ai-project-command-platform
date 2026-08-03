@@ -96,12 +96,17 @@ export function createMaterialRepository(database, options = {}) {
         ORDER BY created_at, id LIMIT 1
       `).get(projectId, projectId, iso(timestamp));
       if (!job) return null;
-      const changed = database.prepare(`
+      database.prepare(`
         UPDATE material_jobs SET state = 'leased', lease_owner = ?, lease_expires_at = ?,
           attempts = attempts + 1, updated_at = ?
         WHERE project_id = ? AND id = ? AND (state = 'queued' OR lease_expires_at <= ?)
-      `).run(workerId, iso(timestamp + leaseMs), iso(timestamp), job.projectId, job.id, iso(timestamp)).changes;
-      return changed ? { ...job, workerId, leaseExpiresAt: iso(timestamp + leaseMs) } : null;
+      `).run(workerId, iso(timestamp + leaseMs), iso(timestamp), job.projectId, job.id, iso(timestamp));
+      const lease = database.prepare(`
+        SELECT lease_owner AS leaseOwner FROM material_jobs WHERE project_id = ? AND id = ?
+      `).get(job.projectId, job.id);
+      return lease?.leaseOwner === workerId
+        ? { ...job, workerId, leaseExpiresAt: iso(timestamp + leaseMs) }
+        : null;
     });
   }
 

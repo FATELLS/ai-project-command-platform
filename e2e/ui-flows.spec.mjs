@@ -76,7 +76,7 @@ test.describe("02 项目列表页", () => {
   });
 
   test("搜索过滤项目", async ({ page }) => {
-    // 先记录初始项目数
+    await expect(page.locator("article.project-card").first()).toBeVisible();
     const initialCount = await page.locator("article.project-card").count();
 
     // 搜索一个关键词
@@ -192,17 +192,14 @@ test.describe("03 项目详情页 — 模块导航", () => {
 test.describe("04 项目资料 — 子分区导航", () => {
   test.beforeEach(async ({ page }) => {
     await login(page);
-    // 进入第一个项目
-    const firstCard = page.locator("article.project-card h3 a").first();
-    await firstCard.click();
+    const projectLink = page.locator('article.project-card h3 a[href="/projects/xugu-agentic-group"]').first();
+    await expect(projectLink).toBeVisible();
+    await projectLink.click();
     await page.waitForURL(/\/projects\/[^/]+/, { timeout: 10_000 });
 
-    // 导航到"项目资料"模块（路由是 outcomes）
-    const outcomesLink = page.locator('nav.project-nav a[href*="/modules/outcomes"]');
-    if (await outcomesLink.count() > 0) {
-      await outcomesLink.first().click();
-      await page.waitForURL(/\/modules\/outcomes/, { timeout: 10_000 });
-    }
+    // 直接走稳定路由，不耦合主导航内部 DOM 结构。
+    await page.goto("/projects/xugu-agentic-group/modules/outcomes");
+    await page.waitForURL(/\/modules\/outcomes/, { timeout: 10_000 });
   });
 
   test("子分区导航可见", async ({ page }) => {
@@ -666,6 +663,7 @@ test.describe("10 响应式布局", () => {
   test("手机尺寸正常显示", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await login(page);
+    await expect(page.locator("article.project-card").first()).toBeVisible();
     const cardCount = await page.locator("article.project-card").count();
     expect(cardCount).toBeGreaterThan(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

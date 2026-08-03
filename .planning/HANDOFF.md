@@ -1,241 +1,43 @@
-# 交接
+# Agent Handoff
 
-最后更新：2026-08-02（PMBOK 提示词改造 + 配置加载修复 + 生成管道可观测性 + AGENTS.md 留痕规则）
+日期：2026-08-03
+版本：`1.0.0`
 
-## 首先读取
+## 当前起点
 
-1. `AGENTS.md`（含新的强制留痕与 Agent 交接规则）
-2. `.planning/STATE.md`（平台当前状态）
-3. `.planning/PROCESS.md` 最近 3 条记录（2026-08-02 PMBOK 改造 + 配置修复 + 可观测性强化）
-4. `docs/RESULT.md`（已实现结果）
-5. `.planning/PROJECT.md`
-6. `.planning/REQUIREMENTS.md`（含 Phase 11 WUI-01–25）
-7. `.planning/ROADMAP.md`（含 Phase 11）
-8. `.planning/DECISIONS.md`（含 D-034 到 D-049）
-9. `.planning/design/system/README.md`
-10. `.planning/phases/11-workflow-first-ui/README.md`
-11. `.planning/phases/11-workflow-first-ui/11-SPEC.md`
-12. `.planning/phases/11-workflow-first-ui/UI-SPEC.md`
-13. `.planning/phases/11-workflow-first-ui/11-VERIFICATION.md`
-14. `AI-SPEC.md`
+- 工程已收口为虚谷单后端，唯一迁移目录 `src/db/xugu-migrations/`。
+- 项目图唯一模型为 `project_cards` / `project_card_links`。
+- 虚谷镜像与 ARM64 驱动位于 `vendor/xugudb/`。
+- managed 生命周期由 `scripts/manage-server.mjs` 负责。
+- 真实数据库桥接位于 `src/db/xugu-database.cjs` 与 `src/db/xugu-worker.cjs`。
+- 发布只支持 Linux ARM64 和 macOS Apple Silicon portable。
+- 本机旧 `xugu-dev` 容器已停止但未删除；隔离体验实例仍在运行。
+- V1.0 整合已提交为 `d28bc9b`；当前工作区干净，尚未推送远端。
 
-## 当前状态（2026-08-02）
+## 关键驱动结论
 
-### 平台基线
+- 必须使用 Node.js 20 ABI 与 `CHAR_SET=UTF8`。
+- 原生 query callback 由 Worker 独占消费，上层维持同步事务接口。
+- CLOB 返回值可能是 ArrayBuffer，必须按 UTF-8 解码。
+- 空字符串绑定需要适配，空值使用 SQL `NULL`。
+- 不要把数值型版本列重命名为同表字符串主键 `id`，驱动会发生结果类型解码冲突。
 
-- **版本**：`0.9.6`（npm 已发布），Git HEAD `15dd870` 已推送
-- **Node 版本**：`>=20.0 <23`（虚谷原生驱动 ABI 115）
-- **SQLite 后端**：`sql.js`（WASM，Node 20 兼容）
-- **测试基线**：194 项单元测试全通过（194 pass / 0 fail / 0 cancelled）+ 49 项主流程 E2E + 9 项异常材料 E2E
-- **虚谷 migration**：8 文件全量验证通过，111 语句执行，47 表创建成功
+## 本次已验证
 
-### 最近完成（本次会话）
+- 真实查询、命中更新、事务插入与回滚。
+- fake provider 生成成功并创建一个审核项。
+- 真实浏览器完成材料、生成、审核、合并、发布、回滚和审计闭环。
+- 最终 `npm run verify`：Node `67/67`、Chromium 主 UI `82/82`。
+- 独立异常输入 Chromium：`9/9`；`npm audit`：0 个已知漏洞。
 
-1. **PMBOK 七元素端到端贯通**（commit `f2c76b3`）：
-   - `boundedPublished()` 输出 objective/stakeholders/deliverables/risks/acceptanceCriteria/decisions/expectedOutput
-   - GENERATION_SYSTEM_PROMPT_V1 新增七元素提取框架（P0/P1/P2 三档优先级）
-   - writeCard PMBOK 数组字段深度合并去重
-   - 8 个新测试
+## 下一步
 
-2. **server.mjs 配置加载修复**（commit `15dd870`）：
-   - `loadEnvFiles()` 加载 `.env` / `.env.local`
-   - 三条启动路径行为一致（npm start / npx / node server.mjs）
-   - 4 个新测试
+1. 若继续 V1.1，优先拆分 `src/http/app.mjs` 与前端巨型模块，保持现有 82 条主浏览器契约。
+2. 增加 macOS CI 完整栈 smoke 和长期虚谷升级夹具。
+3. 发布前继续使用 Node 20.x 执行 `npm run verify` 与异常 UI 套件。
 
-3. **生成管道可观测性强化**（本次未提交）：
-   - `generation-service.mjs`：processJob 全链路结构化日志（context/prompt/provider-call/provider-done/validated/done/failed，每步带耗时）
-   - `proposal-service.mjs`：异步生成/批量生成/重试三路径 queued/processing/done/failed 日志
-   - `openai-compatible-provider.mjs`：HTTP 请求体大小+估算 token、响应状态码+耗时、解析结果
+## 禁止回退
 
-4. **AGENTS.md 强制留痕规则**（本次未提交）：
-   - 新增「强制留痕与 Agent 交接」章节
-   - 规定每次会话必须更新 6 类文档
-   - 规定新 Agent 接手必须按固定顺序读取
-
-### 未提交修改
-
-- `src/proposals/generation-service.mjs` — processJob 全链路可观测性日志
-- `src/services/proposal-service.mjs` — 异步生成/批量/重试日志
-- `src/ai/providers/openai-compatible-provider.mjs` — HTTP 请求/响应日志
-- `AGENTS.md` — 强制留痕与 Agent 交接规则
-
-### 关键代码路径（PMBOK + 生成管道）
-
-- **提示词**：`src/proposals/prompt-builder.mjs`（GENERATION_SYSTEM_PROMPT_V1 + OUTPUT_CONTRACT）
-- **上下文**：`src/proposals/context-builder.mjs`（`boundedPublished()` 输出 PMBOK 元素）
-- **模板存储映射**：`src/proposals/catalog.mjs`（`cardStorageMap`：columns vs attrs）
-- **写入合并**：`src/review/version-apply.mjs`（`writeCard` / `mergePmbokArray` / `deepMergeAttrs`）
-- **生成引擎**：`src/proposals/generation-service.mjs`（`processJob` 全链路日志）
-- **编排层**：`src/services/proposal-service.mjs`（异步生成 + 日志）
-- **AI Provider**：`src/ai/providers/openai-compatible-provider.mjs`（HTTP 日志）
-- **Provider 工厂**：`src/ai/provider-factory.mjs`（`createGenerationProviderFromEnv`）
-- **设置服务**：`src/services/settings-service.mjs`（`buildProviderEnvironment` DB 覆盖 env）
-- **配置加载**：`src/config/local-config.mjs`（`loadEnvFiles` + `loadLocalConfigToEnv`）
-
-### 下一个 Agent 应继续的工作
-
-1. **UI 端 PMBOK 生成验证**（最高优先级）：
-   - 启动平台（`npm run start:background`），登录，进入项目，上传材料，启动生成
-   - 观察控制台日志 `[gen]` 和 `[provider]` 输出，精确定位生成卡在哪个阶段
-   - 如果是 GLM-5.2 响应慢（provider-call 到 provider-done 之间），考虑给 prompt 瘦身或调参
-   - 如果是 context 构建慢或 prompt 构建慢，可能是数据量大需要优化查询
-
-2. **Phase 11 剩余切片**：查看者服务端边界收紧、总览注意力队列、ProjectSkeleton 扩展、可恢复发布编排、全弹窗键盘 UAT
-
-3. **前端保存 AI 配置到 DB**：当前 DB `platform_settings` 表为空，建议通过 UI 设置页保存一次，使配置持久化到 DB（而非仅依赖 .env.local）
-
-## 历史状态（Phase 1–11 背景）
-
-- Phase 1–9 已实现并通过验收，平台版本从 `0.8.0` 迭代到 `0.9.6`；Roadmap 以"卡片泳道"作为项目路线图。
-- Phase 10 已实现并通过验证；全项目 canonical system design 已按八个长期模块建立；Phase 11 是 Product Experience 模块的 `implementation in progress` 演进，第一实施切片已验证。
-- 首个项目 `xugu-agentic-group` 由参考 v4.2 脱敏种子迁移，当前通过 BM-08 人工发布到 `v4.3`。
-- 九类底层模块在前端组织为六个一级工作区：总览、项目路线图、作战单元/团队、排期甘特、项目健康和项目资料。
-- 独立 `/updates` 流程从本次更新材料开始，再进入处理与生成、模拟路线图、人工审核和发布，并直接复用正式路线图 renderer。
-- 正式路线图阶段/任务卡片均提供受控编辑并生成 interaction proposal；节点预览只允许编辑本次生成卡片。
-- 源码后台运行使用 `npm run start:background/status/stop/restart`；只管理平台 Node PID，严禁把虚谷数据库或 Docker 容器加入平台 `stop`。
-- GitHub 公开仓库：`https://github.com/FATELLS/ai-project-command-platform`。
-
-## Phase 11 当前进展
-
-Phase 11 的实现输入位于 `.planning/phases/11-workflow-first-ui/`：
-
-- `11-SPEC.md`：WUI-01–25、用户流程、状态映射、验收和 ambiguity gate。
-- `UI-SPEC.md`：页面骨架、首屏、字号、色彩、间距、响应式和无障碍契约。
-- `TRACEABILITY.md`：需求到模块、代码面和验证证据的映射。
-- `11-VERIFICATION.md`：第一实施切片的逐项结论、证据和剩余缺口。
-- `modules/*/ADR.md`：八个模块的关键取舍。
-- `modules/*/DESIGN.md`：页面层级、状态机、角色、数据契约和验收。
-
-已完成：
-
-1. 平台壳、项目入口、六工作区导航和单 H1 层级。
-2. 总览、材料、审核发布、创建确认和平台设置的第一轮工作流重排。
-3. 移动端核心内容保留、44px 点击目标和三视口自动化。
-4. 设置连接测试服务与前端状态反馈。
-5. 创建与全部更新入口的统一模板下载，以及异常材料无部分状态验证。
-6. AI 节点预览固定入口、业务化文案和默认路线图位置投影；人工材料生成资格保持无感自动开启。
-7. 正式路线图和节点预览共享卡片编辑器；正式节点变更走审核，预览仅本次卡片可编辑，删除采用精确短语确认。
-8. 项目资料与项目更新拆分；更新页仅保留一张复用正式 renderer 的路线图，旧专用预览 DOM/CSS 与重复控制台已删除。
-9. 共享线性图标语言和对象内卡片工具位；窄卡布局、移动触控与可访问名称已验证。
-10. 项目更新通用入口固定从本次材料开始；生成任务、具体 proposal 预览、逐项审核和人工发布组成可追踪四步流程，历史更新仅作为次级继续入口。
-
-下一切片按此顺序实施：
-
-1. 收紧查看者直接读取提案的服务端边界，并更新既有角色契约。
-2. 建立总览“需要处理 / 当前进展 / 近期变化”的确定性聚合投影。
-3. 扩展 `ProjectSkeleton` 到团队、阶段和任务，并完成三入口 E2E。
-4. 编排可恢复的“确认并发布”，覆盖 merge 成功但 publish 失败。
-5. 补齐尚未覆盖的 worker 终态失败动作、全弹窗键盘 UAT和两模板×四角色视觉矩阵。
-
-Phase 11 不改变 `proposal / draft / published`、固定九模块、六工作区、projectId 隔离、CSRF、审计和模板术语边界。
-
-## 全项目系统设计
-
-`.planning/design/system/` 是长期设计事实入口：
-
-- `SYSTEM-SPEC.md`：整个产品目标、角色、核心对象、系统能力、不变式、信任边界和系统级验收。
-- `ARCHITECTURE.md`：模块依赖、运行时、数据架构、主要数据流、版本模型、故障和安全语义。
-- `TRACEABILITY.md`：需求、中央决策、阶段、代码和测试映射。
-- `modules/*/ADR.md` 与 `DESIGN.md`：八个系统模块的关键取舍和完整设计。
-
-Phase 目录仍保留，用于记录历史演进和下一次实施输入；不能用单个 Phase 文档代替全项目设计。
-
-## Phase 10 历史上下文（已实施）
-
-用户在 2026-07-24 试用后提出四个方向性需求，已沉淀为正式需求编号和 Phase 10 规划。以下是原始需求和实施要点。
-
-### 需求一：项目创建三种方式（CRT-01–05，决策 D-030）
-
-当前只有表单创建（`openCreateDialog` in `public/app.js`：ID + 名称 + 模板）。用户要求三种入口：
-
-1. **对话式创建**：通过 AI 引导的对话逐步收集项目信息（名称、目标、团队、里程碑等），对话结束后生成项目骨架供确认。
-2. **上传材料创建**：直接上传项目启动会会议纪要等材料，系统自动提取项目信息并生成路线、团队、任务骨架供确认。
-3. **手动表单创建**：当前方式保留。
-
-无论哪种方式，最终都生成标准项目实体和模板配置，不绕过权限和数据隔离。
-
-**代码入口**：`public/app.js` `openCreateDialog`（当前唯一创建入口）、`src/services/project-service.mjs`、`src/http/app.mjs`（POST `/api/projects`）。
-
-### 需求二：材料到更新的流程去掉授权步骤（SIM-01–04，决策 D-031）
-
-**这是用户最核心的反馈。** 当前流程：上传材料 → 问答授权 → 生成授权 → 手动打开生成面板 → 生成建议 → 审核 → 合并 → 发布。
-
-用户要求：
-
-1. 材料处理完成后，直接可生成更新建议，**不需要任何手动授权**。
-2. 界面上**不再出现"问答授权""生成授权"这些概念和操作**。
-3. 生成更新建议后直接展示为**卡片预览**（新增了什么、修改了什么）。
-4. 用户**确认即发布**——发布就是新增卡片、修改卡片（删除卡片仍需手动操作）。
-5. 底层安全边界可保留（AI 仍不能直写 draft/published），但用户不应感知到。
-
-注意：上一轮（PROCESS.md 2026-07-24 第一轮）已经在 `processing-service.mjs` 里加了自动推断模板和自动开启生成授权（未提交的改动），但这只是减少摩擦，**用户要求的是从界面上彻底去掉授权概念**。
-
-**当前授权相关代码位置**：
-- `public/modules/renderers.js` 材料表格列 `item.qa?.enabled`（问答授权列）、`material-detail-meta`（问答授权/生成授权状态行）、`renderMaterialDetail` 的授权按钮（行 1622-1623）
-- `localTabs` 函数的 qa 标签（行 1238）
-- `src/services/material-service.mjs` 授权 API
-- 数据层：`material_qa_grants`、`material_generation_grants` 表（可保留默认开启，但 UI 不暴露）
-
-### 需求三：战情问答移到右侧独立浮动按钮（CHAT-04–05，决策 D-032）
-
-当前战情问答是材料工作区 `localTabs` 的一个标签（`renderQa` in `renderers.js` 行 1636）。用户要求改为**项目页面右侧的独立浮动按钮**（类似咨询入口），点击展开问答面板，所有项目页面都能用。
-
-**代码入口**：`public/modules/renderers.js` `renderQa`（当前问答渲染）、`public/app.js` 项目壳 `appFrame`（需加浮动组件）、`public/styles.css`（需加浮动按钮样式）。
-
-### 需求四：材料页面抬头重复（UX-01，决策 D-033）
-
-当前点击一级导航"项目资料"→二级"项目材料"后，页面内部 `localTabs` 又出现一行"项目材料 | 战情问答 | 更新建议"。用户感觉重复。
-
-**原因**：`moduleSectionNavigation`（`public/app.js` 行 522）和 `localTabs`（`renderers.js` 行 1234）都在渲染导航，层级重复。
-
-**修复方向**：合并两组导航为一组；问答移出后材料工作区标签简化。
-
-## Phase 10 实施优先级建议
-
-| 需求 | 复杂度 | 能否立即实施 | 备注 |
-|---|---|---|---|
-| 四：抬头重复（UX-01） | 低 | 是 | 合并 localTabs 与 sectionNav |
-| 三：问答右侧按钮（CHAT-04–05） | 中 | 是 | 从 localTabs 移出问答，改为项目级浮动入口 |
-| 二：去掉授权步骤（SIM-01–04） | 中高 | 需设计简化路径 | 去掉 UI 授权概念，设计"确认即发布"简化流程 |
-| 一：三种创建方式（CRT-01–05） | 高 | 需新流程设计 | 对话式和材料创建需要新流程，表单已有 |
-
-## 代码入口
-
-- HTTP/静态：`server.mjs`、`src/http/app.mjs`、`src/http/static.mjs`
-- 认证安全：`src/security/`、`src/services/auth-service.mjs`、`src/repositories/auth-repository.mjs`
-- 项目服务：`src/services/project-service.mjs`、`src/repositories/project-repository.mjs`
-- 模板与模块：`src/templates/`、`src/modules/`、`public/modules/`
-- SQLite：`src/db/`、`src/db/migrations/`
-- 前端：`public/index.html`、`public/styles.css`、`public/app.js`；桌面视觉以 Xugu 稳定应用为基线，不得恢复深色侧栏式 SaaS 壳
-- 项目表现配置：服务端目录提供 `theme`、`terminology`、`schemaVersion` 和 allowlist `viewVariant`
-- 验证：`scripts/verify.mjs`、`test/`
-- 结构化提案：`src/proposals/`、`src/services/proposal-service.mjs`
-- 审核与发布：`src/review/`、`src/release/`、`src/versions/`
-- 材料工作区：`public/modules/renderers.js`（`renderMaterials`→`renderLedger`/`renderQa`/`renderProposalWorkspace`/`renderReleaseCenter`/`renderOperationsCenter`）
-- 全自动浏览器 E2E：`playwright.config.mjs`、`test/e2e/`
-
-## 运行与验证
-
-```bash
-npm run verify
-```
-
-当前通过 180 项后台/静态测试、48 项主流程 Playwright E2E 和 9 项隔离异常材料与节点预览 E2E。`node --test` 显式限定 `test/*.test.mjs`。E2E 必须在可监听端口的环境运行。
-
-## 未提交的改动
-
-当前未提交改动为 2026-07-29 更新后验证修复，主要涉及：
-
-- 九模块契约恢复 `outcomes`：`src/templates/`、`src/modules/`、`public/modules/`、`public/app.js`
-- 登录限流恢复：`src/http/app.mjs`
-- PDF/图片无 vision provider 时的本地工具 fallback：`src/materials/extractors/pdf.mjs`、`src/materials/extractors/image.mjs`
-- 迁移 008–010 验证基线同步：`test/database-backup.test.mjs`、`scripts/verify.mjs`
-- 路线图/节点预览卡片编辑：`public/modules/renderers.js`、`public/styles.css`、`src/review/`、`src/proposals/`、`src/http/app.mjs`
-- 状态与结果文档同步：`docs/RESULT.md`、`.planning/STATE.md`、`.planning/PROCESS.md`、`.planning/HANDOFF.md`
-
-## 风险和边界
-
-- AI 仍不能直接写 draft/published；确认发布仍由人工触发（即使"确认即发布"简化流程也要保留这层）。
-- 仍按 projectId 隔离所有数据。
-- 仍保留 CSRF、角色权限和审计。
-- 参考项目 `xugu-agentic-group` 保持只读，不丢失路线、任务、甘特和成果。
+- 不得恢复第二数据库、第二迁移树、旧项目关系表或双写。
+- 不得恢复 Windows/x86/RPM 空壳发布。
+- 不得把密钥、项目数据或运行 volume 纳入仓库和 release。

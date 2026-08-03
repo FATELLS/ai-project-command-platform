@@ -37,7 +37,7 @@ export function createMemberService(database, options = {}) {
     return { items: database.prepare(`
       SELECT id,display_name AS displayName,login_name AS loginName,status,
              is_platform_admin AS isPlatformAdmin,created_at AS createdAt,updated_at AS updatedAt
-      FROM users ORDER BY display_name COLLATE NOCASE,id
+      FROM users ORDER BY display_name,id
     `).all().map(item => ({ ...item, isPlatformAdmin: Boolean(item.isPlatformAdmin) })) };
   }
 

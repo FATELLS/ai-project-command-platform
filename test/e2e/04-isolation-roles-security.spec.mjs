@@ -20,8 +20,9 @@ test.describe("项目隔离、角色边界与 CSRF", () => {
   test("editor 可见审核发布入口但不见运维自检", async ({ browser }) => {
     const context = await browser.newContext({ storageState: storageStatePath("editor") });
     const page = await context.newPage();
-    await page.goto("/projects/xugu-agentic-group/modules/materials");
-    await expect(page.getByRole("link", { name: "审核与发布" })).toBeVisible();
+    await page.goto("/projects/xugu-agentic-group/updates");
+    await expect(page.getByRole("heading", { name: "项目更新", exact: true })).toBeVisible();
+    await expect(page.locator(".project-update-flow-steps")).toContainText("审核与发布");
     await expect(page.getByRole("link", { name: "运维自检" })).toHaveCount(0);
     await context.close();
   });

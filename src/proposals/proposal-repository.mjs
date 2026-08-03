@@ -32,13 +32,87 @@ export function createProposalRepository(database, options = {}) {
   }
 
   function listJobs(projectId,limit=100){return database.prepare("SELECT id FROM generation_jobs WHERE project_id=? ORDER BY created_at DESC,id LIMIT ?").all(projectId,Math.min(100,Math.max(1,limit))).map(row=>getJob(projectId,row.id));}
-  function updateJob(projectId,id,fields){const allowed={state:"state",attempts:"attempts",leaseOwner:"lease_owner",leaseExpiresAt:"lease_expires_at",errorCode:"error_code",validation:"validation_json",proposalId:"proposal_id"};const entries=Object.entries(fields).filter(([key])=>allowed[key]);if(!entries.length)return getJob(projectId,id);const sql=entries.map(([key])=>`${allowed[key]}=?`).join(",");const values=entries.map(([key,value])=>key==="validation"?JSON.stringify(value):value);database.prepare(`UPDATE generation_jobs SET ${sql},updated_at=? WHERE project_id=? AND id=?`).run(...values,timestamp(),projectId,id);return getJob(projectId,id);}
-  function addAttempt(projectId,jobId,input){const id=input.id??randomUUID();database.prepare(`INSERT INTO generation_attempts (id,project_id,job_id,attempt_number,kind,outcome,provider_label,input_tokens,output_tokens,latency_ms,currency,price_version,cost_micros,cost_status,result_code,created_at,finished_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,projectId,jobId,input.attemptNumber,input.kind,input.outcome,input.providerLabel??"disabled",input.inputTokens??0,input.outputTokens??0,input.latencyMs??0,input.currency??null,input.priceVersion??null,input.costMicros??null,input.costStatus??"unpriced",input.resultCode??null,input.createdAt??timestamp(),input.finishedAt??(input.outcome==="started"?null:timestamp()));return id;}
+  function updateJob(projectId, id, fields) {
+    const allowed = { state: "state", attempts: "attempts", leaseOwner: "lease_owner", leaseExpiresAt: "lease_expires_at", errorCode: "error_code", validation: "validation_json", proposalId: "proposal_id" };
+    const entries = Object.entries(fields).filter(([key]) => allowed[key]);
+    if (!entries.length) return { id, projectId };
+    const sql = entries.map(([key]) => `${allowed[key]}=?`).join(",");
+    const values = entries.map(([key, value]) => key === "validation" ? JSON.stringify(value) : value);
+    database.prepare(`UPDATE generation_jobs SET ${sql},updated_at=? WHERE project_id=? AND id=?`)
+      .run(...values, timestamp(), projectId, id);
+    return { id, projectId, ...fields };
+  }
+  function addAttempt(projectId, jobId, input) {
+    const id = input.id ?? randomUUID();
+    const createdAt = input.createdAt ?? timestamp();
+    const finishedAt = input.finishedAt ?? (input.outcome === "started" ? null : timestamp());
+    const common = [
+      id, projectId, jobId, input.attemptNumber, input.kind, input.outcome,
+      input.providerLabel ?? "disabled", input.inputTokens ?? 0, input.outputTokens ?? 0,
+      input.latencyMs ?? 0
+    ];
+    if (input.costMicros === null || input.costMicros === undefined) {
+      database.prepare(`
+        INSERT INTO generation_attempts (
+          id,project_id,job_id,attempt_number,kind,outcome,provider_label,
+          input_tokens,output_tokens,latency_ms,currency,price_version,cost_micros,
+          cost_status,result_code,created_at,finished_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?,?,?)
+      `).run(...common, input.costStatus ?? "unpriced", input.resultCode ?? null, createdAt, finishedAt);
+    } else {
+      database.prepare(`
+        INSERT INTO generation_attempts (
+          id,project_id,job_id,attempt_number,kind,outcome,provider_label,
+          input_tokens,output_tokens,latency_ms,currency,price_version,cost_micros,
+          cost_status,result_code,created_at,finished_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      `).run(
+        ...common, input.currency, input.priceVersion, input.costMicros,
+        input.costStatus ?? "priced", input.resultCode ?? null, createdAt, finishedAt
+      );
+    }
+    return id;
+  }
 
-  function saveProposal(projectId,jobId,proposal){return withTransaction(database,()=>{const job=database.prepare("SELECT * FROM generation_jobs WHERE project_id=? AND id=?").get(projectId,jobId);if(!job)throw new Error("Generation job not found");if(job.proposal_id)return getProposal(projectId,job.proposal_id);const id=proposal.proposalId??randomUUID();const at=timestamp();database.prepare(`INSERT INTO change_proposals (id,project_id,base_version_id,status,schema_version,payload_json,created_at,updated_at) VALUES (?,?,?,'pending',?,?,?,?)`).run(id,projectId,job.base_version_id,proposal.schemaVersion,JSON.stringify({...proposal,proposalId:id}),at,at);const item=database.prepare(`INSERT INTO change_proposal_items (project_id,proposal_id,change_id,module_type,operation,target_external_id,semantic_type,patch_json,confidence,warnings_json,position) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);const ref=database.prepare(`INSERT INTO change_proposal_evidence (project_id,proposal_id,change_id,evidence_external_id,position) VALUES (?,?,?,?,?)`);proposal.changes.forEach((change,index)=>{item.run(projectId,id,change.changeId,change.module,change.operation,change.targetId,change.semanticType,JSON.stringify(change.patch),change.confidence,JSON.stringify(change.warnings),index);change.evidenceIds.forEach((evidenceId,position)=>ref.run(projectId,id,change.changeId,evidenceId,position));});database.prepare("UPDATE generation_jobs SET state='succeeded',proposal_id=?,validation_json=?,updated_at=? WHERE project_id=? AND id=?").run(id,JSON.stringify(proposal.validation??{}),at,projectId,jobId);return getProposal(projectId,id);});}
+  function persistProposalItems(projectId, proposalId, changes, at) {
+    const item = database.prepare(`INSERT INTO change_proposal_items (project_id,proposal_id,change_id,module_type,operation,target_external_id,semantic_type,patch_json,confidence,warnings_json,position) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+    const ref = database.prepare(`INSERT INTO change_proposal_evidence (project_id,proposal_id,change_id,evidence_external_id,position) VALUES (?,?,?,?,?)`);
+    const review = database.prepare(`INSERT INTO proposal_review_items (project_id,proposal_id,change_id,decision,note,updated_at) VALUES (?,?,?,'pending','',?)`);
+    changes.forEach((change, index) => {
+      item.run(projectId, proposalId, change.changeId, change.module, change.operation, change.targetId, change.semanticType, JSON.stringify(change.patch), change.confidence, JSON.stringify(change.warnings), index);
+      change.evidenceIds.forEach((evidenceId, position) => ref.run(projectId, proposalId, change.changeId, evidenceId, position));
+      review.run(projectId, proposalId, change.changeId, at);
+    });
+  }
+
+  function saveProposal(projectId, jobId, proposal) {
+    const proposalId = withTransaction(database, () => {
+      const job = database.prepare("SELECT * FROM generation_jobs WHERE project_id=? AND id=?").get(projectId, jobId);
+      if (!job) throw new Error("Generation job not found");
+      if (job.proposal_id) return job.proposal_id;
+      const id = proposal.proposalId ?? randomUUID();
+      const at = timestamp();
+      database.prepare(`INSERT INTO change_proposals (id,project_id,base_version_id,status,schema_version,payload_json,created_at,updated_at) VALUES (?,?,?,'pending',?,?,?,?)`)
+        .run(id, projectId, job.base_version_id, proposal.schemaVersion, JSON.stringify({ ...proposal, proposalId: id }), at, at);
+      persistProposalItems(projectId, id, proposal.changes, at);
+      database.prepare("UPDATE generation_jobs SET state='succeeded',proposal_id=?,validation_json=?,updated_at=? WHERE project_id=? AND id=?")
+        .run(id, JSON.stringify(proposal.validation ?? {}), at, projectId, jobId);
+      return id;
+    });
+    return getProposal(projectId, proposalId);
+  }
   function getProposal(projectId,id){const row=database.prepare(`SELECT p.*,j.id AS jobId,j.template_id AS templateId,j.template_version AS templateVersion,v.version_label AS baseVersionLabel FROM change_proposals p LEFT JOIN generation_jobs j ON j.project_id=p.project_id AND j.proposal_id=p.id JOIN project_versions v ON v.id=p.base_version_id WHERE p.project_id=? AND p.id=?`).get(projectId,id);if(!row)return undefined;const payload=parse(row.payload_json,{});const changes=database.prepare(`SELECT change_id AS changeId,module_type AS module,operation,target_external_id AS targetId,semantic_type AS semanticType,patch_json AS patchJson,confidence,warnings_json AS warningsJson,position FROM change_proposal_items WHERE project_id=? AND proposal_id=? ORDER BY position`).all(projectId,id).map(change=>({...change,patch:parse(change.patchJson,{}),warnings:parse(change.warningsJson,[]),evidenceIds:database.prepare("SELECT evidence_external_id AS id FROM change_proposal_evidence WHERE project_id=? AND proposal_id=? AND change_id=? ORDER BY position").all(projectId,id,change.changeId).map(item=>item.id)}));return {...payload,proposalId:id,projectId,status:row.status,baseVersionId:row.base_version_id,baseVersionLabel:row.baseVersionLabel,template:{id:row.templateId??payload.template?.id,version:row.templateVersion??payload.template?.version},jobId:row.jobId,createdAt:row.created_at,updatedAt:row.updated_at,changes};}
   function listProposals(projectId,limit=100){return database.prepare("SELECT id FROM change_proposals WHERE project_id=? ORDER BY created_at DESC,id LIMIT ?").all(projectId,Math.min(100,Math.max(1,limit))).map(row=>getProposal(projectId,row.id));}
-  // Phase 8：交互发起的 manual proposal，无 generation job；template 与 baseVersion 由服务端锁定。
-  function saveInteractionProposal(projectId,proposal){return withTransaction(database,()=>{const id=proposal.proposalId??randomUUID();const at=timestamp();database.prepare(`INSERT INTO change_proposals (id,project_id,base_version_id,status,schema_version,payload_json,created_at,updated_at) VALUES (?,?,?,'pending',?,?,?,?)`).run(id,projectId,proposal.baseVersionId,proposal.schemaVersion,JSON.stringify({...proposal,proposalId:id}),at,at);const item=database.prepare(`INSERT INTO change_proposal_items (project_id,proposal_id,change_id,module_type,operation,target_external_id,semantic_type,patch_json,confidence,warnings_json,position) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);const ref=database.prepare(`INSERT INTO change_proposal_evidence (project_id,proposal_id,change_id,evidence_external_id,position) VALUES (?,?,?,?,?)`);proposal.changes.forEach((change,index)=>{item.run(projectId,id,change.changeId,change.module,change.operation,change.targetId,change.semanticType,JSON.stringify(change.patch),change.confidence,JSON.stringify(change.warnings),index);change.evidenceIds.forEach((evidenceId,position)=>ref.run(projectId,id,change.changeId,evidenceId,position));});return getProposal(projectId,id);});}
+  // 交互发起的提案没有生成任务；模板与基准版本由服务端锁定。
+  function saveInteractionProposal(projectId, proposal) {
+    return withTransaction(database, () => {
+      const id = proposal.proposalId ?? randomUUID();
+      const at = timestamp();
+      database.prepare(`INSERT INTO change_proposals (id,project_id,base_version_id,status,schema_version,payload_json,created_at,updated_at) VALUES (?,?,?,'pending',?,?,?,?)`)
+        .run(id, projectId, proposal.baseVersionId, proposal.schemaVersion, JSON.stringify({ ...proposal, proposalId: id }), at, at);
+      persistProposalItems(projectId, id, proposal.changes, at);
+      return getProposal(projectId, id);
+    });
+  }
   return Object.freeze({createJob,getJob,listJobs,updateJob,addAttempt,saveProposal,saveInteractionProposal,getProposal,listProposals});
 }

@@ -1,103 +1,42 @@
-# Design S-01：Runtime & Persistence
+# Runtime & Persistence Design
 
-状态：`implemented baseline`
+## 职责
 
-## Responsibilities
+- 加载统一配置并定位应用资源。
+- 管理虚谷连接、事务、迁移和同步业务接口。
+- 管理专用 Docker 镜像、容器、volume 与应用生命周期。
+- 提供项目材料目录与运行文件路径。
 
-- 进程启动与优雅关闭。
-- 数据库路径、打开参数、迁移和事务。
-- SQLite dialect 和版本存储基础。
-- 材料 worker 生命周期。
-- 运行目录和打包路径解析。
+## 连接层
 
-## Runtime Lifecycle
+`openDatabase()` 只接受连接选项；传入文件路径会直接拒绝。`XuguDatabaseSync` 暴露 `prepare/get/all/run/exec` 和事务接口。
 
-```text
-open database
-  → apply migrations
-  → optional fixture import
-  → ensure bootstrap admin
-  → build provider environment
-  → start material worker
-  → start HTTP server
-```
+原生驱动运行在 `xugu-worker.cjs`：
 
-关闭顺序为 `stop accepting requests → stop worker → close database`。
+- Worker 独占连接并使用官方 callback API。
+- SharedArrayBuffer 只传输序列化结果，不传输密钥。
+- CLOB 与 typed array 按 UTF-8 转换。
+- 结果缓冲区上限 32 MiB，超限明确失败。
+- 初始化失败立即终止 Worker，避免冷启动重试泄漏线程。
+- 正常关闭执行 disconnect；异常会话可直接 discard，但事务中禁止重连。
 
-### Managed Source Runtime
+## 迁移
 
-| 操作 | 命令 | 行为 |
-|---|---|---|
-| 后台启动 | `npm run start:background` | 启动独立 Node 进程，写入 `server.pid`，等待 `/health` 成功 |
-| 查询状态 | `npm run status` | 校验 PID 存活和 `/health` |
-| 优雅停止 | `npm run stop` | 向已登记平台 PID 发送 SIGTERM，最多等待 20 秒 |
-| 重启 | `npm run restart` | 完成优雅停止后重新后台启动 |
+`applyMigrations()` 按文件名前缀执行 `src/db/xugu-migrations/001..008`，保存 ID 与 checksum。fresh install 和重复执行必须幂等；checksum 变化必须失败。
 
-`npm start` 保留为前台开发入口，可用 `Ctrl+C` 触发相同关闭流程。后台管理器使用 `app.log`，路径可由 `PLATFORM_RUNTIME_PID_FILE` 和 `PLATFORM_RUNTIME_LOG_FILE` 覆盖。
+## 项目图
 
-生命周期所有权边界：
+`project_cards` 存统一元素，`project_card_links` 存关系。导入、导出和版本克隆必须在一个显式事务内完成；同一项目版本的关系不能引用不存在或跨版本卡片。
 
-- 平台拥有 HTTP server、材料 worker 和自己建立的数据库连接。
-- 平台不拥有 SQLite 文件之外的数据库服务进程，也不拥有虚谷 Docker 容器。
-- `stop` 不执行 `docker stop/kill/rm`，不访问虚谷管理端口。
-- 20 秒内未完成时返回失败并保留人工排查机会，不自动 SIGKILL。
+## 生命周期
 
-## Database Rules
+- managed：镜像校验/加载 → 容器 → 数据库就绪 → 应用。
+- external：只连接，不执行 Docker 启停。
+- stop：HTTP/worker/连接 → 专用容器。
+- 首次 volume 冷启动等待上限 420 秒。
 
-- 启用外键。
-- 迁移在启动前应用，失败即退出。
-- migration version 和 checksum 持久化。
-- 仓储和 service 使用显式 SQL，不允许 UI 直接拼接查询。
-- 多实体写入使用 `withTransaction` 或等价封装。
-- 外部 ID 和内部 numeric version ID 分离。
+## 失败语义
 
-## Ownership
-
-| 数据 | 写入所有者 |
-|---|---|
-| users/sessions/projects/members | Identity & Project Access |
-| version graph/modules/cards | Project Model / Change Control |
-| materials/evidence/readiness | Materials & Evidence |
-| generation/proposals | AI Services / Change Control |
-| reviews/publications | Change Control |
-| traces/errors/test runs | Operations |
-
-模块可读其他模块的稳定投影，但不得直接写不属于自己的表，除非在已记录的跨模块事务服务中。
-
-## Transaction Boundaries
-
-- 创建项目：项目 + 初始 published/draft + 创建者成员关系。
-- 保存提案：proposal + items + evidence relations。
-- 合并：复制草稿 + 应用接受项 + 图校验 + 指针切换。
-- 发布：新 published + 新 draft baseline + publication event + 指针。
-- 回滚：新发布状态 + 新草稿 baseline + event。
-
-## Worker
-
-- 单 worker 轮询 queued material jobs。
-- 领取任务时写 lease/state。
-- 异常按 retryable/terminal 分类。
-- 启动恢复遗留任务。
-- 不允许 worker 直接创建 proposal 或发布版本。
-
-## Backup and Restore
-
-- backup：打开源库，`VACUUM INTO` 目标文件，运行 quick/foreign/migration 检查。
-- restore：验证源备份，保留目标 pre-restore 副本，复制到临时文件，再原子 rename。
-- 恢复要求应用离线。
-
-## Evolution Triggers
-
-以下任一情况出现时重新评估 PostgreSQL/多进程：
-
-- 单 worker 吞吐无法满足明确 SLA。
-- 需要多实例高可用。
-- SQLite 写锁成为经测量瓶颈。
-- 需要在线恢复或跨节点一致性。
-
-## Verification
-
-- migration checksum、外键、trigger 和版本指针测试。
-- 事务失败注入不留部分数据。
-- worker 重启恢复和重复领取测试。
-- backup/restore quick check、foreign key 和 migration 基线测试。
+- Docker、镜像、驱动、连接、迁移任一步失败，应用不宣称健康。
+- 参数数量、结果超限、事务误用和 SQL 错误原样失败。
+- 健康检查只暴露稳定状态，不回显凭据和底层连接串。

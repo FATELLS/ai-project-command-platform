@@ -1,59 +1,47 @@
-# Windows / Linux 分发说明
+# V1.0 分发说明
 
-## 目标
+## 支持目标
 
-- Windows 10/11 x64 解压即用；
-- Linux x64 portable 解压即用；
-- RHEL 系 x64 通过 RPM 安装、注册 systemd 并自动启动；
-- 所有安装包都自带 Node.js 运行时；
-- 所有安装包都不携带项目数据、数据库、材料或密钥。
+| 目标 | 产物 | 状态 |
+|---|---|---|
+| Linux ARM64 | `ai-project-command-platform-1.0.0-linux-arm64.tar.gz` | CI 构建与完整栈 smoke |
+| macOS Apple Silicon | `ai-project-command-platform-1.0.0-macos-arm64.tar.gz` | 本地组装与驱动支持 |
 
-## 产物
+Windows、x86 和 RPM 不属于 V1.0 支持边界。
 
-Git 标签 `v0.8.0` 触发 `.github/workflows/release.yml`：
+## 产物内容
 
-1. 下载固定版本的 Node.js Windows/Linux x64 运行时；
-2. 通过 `scripts/assemble-release.mjs` 复制运行白名单；
-3. 运行 `npm ci --omit=dev --ignore-scripts`；
-4. 检查产物中不存在 fixtures、planning、test、env.local、SQLite/DB 或日志；
-5. 生成 Windows ZIP、Linux tar.gz 和 RPM；
-6. 上传 GitHub Release。
+- Node.js 20.19.5 runtime
+- 虚谷 12.9.10 ARM64 Docker 镜像归档、manifest 和 SHA-256
+- 目标平台虚谷原生 Node.js 驱动
+- server、src、public、生产依赖
+- managed 启停脚本和 env 示例
 
-## RPM 行为
+## 明确排除
 
-- 程序：`/opt/ai-project-command-platform`
-- 配置：`/etc/ai-project-command-platform/platform.env`
-- 数据：`/var/lib/ai-project-command-platform/data`
-- 服务：`ai-project-command-platform.service`
-- 运行用户：`aipcp`
+- 项目夹具和公司数据
+- 运行数据库 volume
+- 上传材料、处理结果、备份和导出
+- `.env.local`、API Key、首次凭据和日志
+- test、规划目录和浏览器报告
 
-首次安装生成管理员随机密码并写入：
+## 组装
 
-```text
-/var/lib/ai-project-command-platform/bootstrap-credentials.txt
+```bash
+node scripts/assemble-release.mjs \
+  --target linux-arm64 \
+  --runtime /path/to/node-v20.19.5-linux-arm64 \
+  --output dist/ai-project-command-platform-1.0.0-linux-arm64
 ```
 
-服务成功启动后，配置文件中的明文 bootstrap password 会被清空；凭据文件仍以 root-only 权限保留，供管理员首次登录。首次登录后应修改密码并删除该文件。
+macOS 使用 `--target macos-arm64` 与对应 runtime。
 
-## 数据边界
+## 首次启动
 
-`server.mjs` 不再对全新数据库自动导入 Xugu 或任何项目夹具。仅在显式设置 `PLATFORM_SEED_FIXTURE` 时执行一次指定迁移；Release 默认配置不设置该变量。
+1. 确认 Docker 可用。
+2. 解压完整目录并执行 `./start.sh`。
+3. 启动脚本生成随机管理员密码与 `.env.local`。
+4. manager 校验/加载镜像、创建专用 volume、启动虚谷，再启动应用。
+5. 首次登录后修改密码并删除首次凭据文件。
 
-运行包只包含：
-
-- `server.mjs`
-- `package.json` / `package-lock.json`
-- `public/`
-- `src/`
-- 生产依赖
-- 目标平台 Node.js 运行时
-- 启停脚本与用户说明
-
-不会包含：
-
-- `.planning/`
-- `fixtures/`
-- `test/`
-- `data/`
-- `.env.local`
-- 上传、预处理、日志、备份、诊断或导出内容
+停止使用 `./stop.sh`，不要直接删除专用 volume。

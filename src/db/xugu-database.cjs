@@ -7,10 +7,10 @@
 // 驱动 API:
 //   - createConnection(connStr) → XGConnection
 //   - conn.connect()
-//   - conn.query(sql, params?, callback) — 回调同步触发
-//   - conn.beginTransaction(callback)
-//   - conn.commit(callback)
-//   - conn.rollback(callback)
+//   - conn.query(sql, params?, callback)
+//   - conn.beginTransaction()
+//   - conn.commit()
+//   - conn.rollback()
 //   - conn.disconnect()
 //
 // 返回值: 行数组 [{COL1: val, COL2: val}, ...]
@@ -20,12 +20,13 @@
 const { existsSync } = require("fs");
 const { join } = require("path");
 const { platform, arch } = require("os");
+const { Worker } = require("worker_threads");
 
 // ----------------------------------------------------------------
 // 加载原生驱动
 // ----------------------------------------------------------------
 
-function loadDriver() {
+function driverPath() {
   // 尝试按平台/架构选择正确的 .node 文件
   const candidates = [];
 
@@ -41,7 +42,7 @@ function loadDriver() {
   for (const p of candidates) {
     if (existsSync(p)) {
       try {
-        return require(p);
+        return p;
       } catch (e) {
         throw new Error(`Failed to load XuguDB native driver at ${p}: ${e.message}`);
       }
@@ -63,41 +64,105 @@ const XUGU_PORT = process.env.XUGU_PORT || "5138";
 const XUGU_USER = process.env.XUGU_USER || "SYSDBA";
 const XUGU_PASSWORD = process.env.XUGU_PASSWORD || "SYSDBA";
 const XUGU_DATABASE = process.env.XUGU_DATABASE || "SYSTEM";
+const XUGU_CHARSET = process.env.XUGU_CHARSET || "UTF8";
 
 // ----------------------------------------------------------------
 // 同步执行包装
-// 驱动的 callback 是同步触发的（C++ 层面阻塞执行）
-// 但为了防止极端异步场景，用 err/result 变量捕获
+// 上层仓储保持同步事务接口；Worker 独占连接并完整消费驱动回调，
+// 主线程通过 SharedArrayBuffer 等待结果，避免回调跨查询串扰。
 // ----------------------------------------------------------------
 
-function execSync(conn, sql, params) {
-  let error = null;
-  let result = null;
-
-  if (params && params.length > 0) {
-    conn.query(sql, params, function (err, rows) {
-      error = err;
-      result = rows;
+class XuguWorkerClient {
+  constructor(connectionString) {
+    this.controlBuffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 3);
+    this.outputBuffer = new SharedArrayBuffer(32 * 1024 * 1024);
+    this.control = new Int32Array(this.controlBuffer);
+    this.output = new Uint8Array(this.outputBuffer);
+    this.worker = new Worker(join(__dirname, "xugu-worker.cjs"), {
+      workerData: {
+        connectionString,
+        driverPath: driverPath(),
+        control: this.controlBuffer,
+        output: this.outputBuffer
+      }
     });
-  } else {
-    conn.query(sql, function (err, rows) {
-      error = err;
-      result = rows;
-    });
+    try {
+      this._wait();
+    } catch (error) {
+      this.worker.terminate();
+      throw error;
+    }
   }
 
-  if (error) {
-    // 虚谷驱动返回的错误格式是 { Error: "message string" }，不是标准 Error
-    const msg = error.message || error.Error || String(error);
-    const err = new Error(msg);
-    err.cause = error;
-    throw err;
+  _wait(timeout = 180_000) {
+    const status = Atomics.wait(this.control, 0, 0, timeout);
+    if (status === "timed-out") throw new Error("Xugu worker request timed out");
+    const length = Atomics.load(this.control, 1);
+    const failed = Atomics.load(this.control, 2) === 1;
+    const response = Buffer.from(this.output.slice(0, length)).toString("utf8");
+    Atomics.store(this.control, 0, 0);
+    const payload = JSON.parse(response);
+    if (failed) throw new Error(payload.message || "Xugu worker request failed");
+    return payload;
   }
-  return result;
+
+  request(action, payload = {}) {
+    this.worker.postMessage({ action, ...payload });
+    return this._wait();
+  }
+
+  close() {
+    try { this.request("close"); } finally { this.worker.terminate(); }
+  }
+
+  discard() {
+    this.worker.terminate();
+  }
+}
+
+function execSync(client, sql, params) {
+  const expanded = params?.length ? expandNullParameters(sql, params) : { sql, params: [] };
+  const encodedParams = expanded.params.map(value => value === "" ? " " : value);
+  return client.request("query", { sql: expanded.sql, params: encodedParams }).rows;
+}
+
+// The native driver is inconsistent when binding null. Keep SQL structure and
+// parameter order intact while emitting the standard NULL literal instead.
+function expandNullParameters(sql, params) {
+  let output = "";
+  let inSingleQuote = false;
+  let parameterIndex = 0;
+  const retained = [];
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index];
+    if (char === "'" && inSingleQuote && sql[index + 1] === "'") {
+      output += "''";
+      index += 1;
+      continue;
+    }
+    if (char === "'") {
+      inSingleQuote = !inSingleQuote;
+      output += char;
+      continue;
+    }
+    if (char === "?" && !inSingleQuote) {
+      if (parameterIndex >= params.length) throw new Error("Not enough Xugu query parameters");
+      const value = params[parameterIndex++];
+      if (value === null || value === undefined) output += "NULL";
+      else {
+        output += "?";
+        retained.push(value);
+      }
+      continue;
+    }
+    output += char;
+  }
+  if (parameterIndex !== params.length) throw new Error("Too many Xugu query parameters");
+  return { sql: output, params: retained };
 }
 
 // ----------------------------------------------------------------
-// 行处理: 大写列名 → 小写
+// 行处理: 大写列名 → 小写，并恢复业务层的空字符串语义。
 // ----------------------------------------------------------------
 
 function lowercaseRows(rows) {
@@ -105,7 +170,14 @@ function lowercaseRows(rows) {
   return rows.map((row) => {
     const out = {};
     for (const key of Object.keys(row)) {
-      out[key.toLowerCase()] = row[key];
+      const value = row[key];
+      if (value instanceof ArrayBuffer) {
+        out[key.toLowerCase()] = Buffer.from(value).toString("utf8");
+      } else if (ArrayBuffer.isView(value)) {
+        out[key.toLowerCase()] = Buffer.from(value.buffer, value.byteOffset, value.byteLength).toString("utf8");
+      } else {
+        out[key.toLowerCase()] = value === " " ? "" : value;
+      }
     }
     return out;
   });
@@ -128,7 +200,7 @@ function extractAliases(sql) {
 }
 
 // ----------------------------------------------------------------
-// XuguStatement — 兼容 SQLite StatementSync 接口
+// XuguStatement — 平台同步查询接口
 // ----------------------------------------------------------------
 
 class XuguStatement {
@@ -148,9 +220,19 @@ class XuguStatement {
   }
 
   run(...params) {
-    const rows = this._execute(params);
-    // 对于 INSERT/UPDATE/DELETE，rows 可能是空数组或受影响行数信息
-    return { changes: rows ? rows.length || 0 : 0, lastInsertRowid: null };
+    this._execute(params);
+    const command = this.sql.trimStart().match(/^([a-z]+)/i)?.[1]?.toUpperCase();
+    if (!["INSERT", "UPDATE", "DELETE", "MERGE"].includes(command)) {
+      return { changes: 0, lastInsertRowid: null };
+    }
+    if (command !== "INSERT") return { changes: 1, lastInsertRowid: null };
+    // LAST_INSERT_ID() is only valid after an INSERT into an identity table.
+    // Platform callers only consume it for immutable project versions.
+    if (!/^\s*INSERT\s+INTO\s+project_versions\b/i.test(this.sql)) {
+      return { changes: 1, lastInsertRowid: null };
+    }
+    const identityRows = lowercaseRows(execSync(this.conn, "SELECT LAST_INSERT_ID() AS last_insert_rowid"));
+    return { changes: 1, lastInsertRowid: identityRows[0]?.last_insert_rowid ?? null };
   }
 
   _execute(params) {
@@ -185,7 +267,7 @@ class XuguStatement {
 }
 
 // ----------------------------------------------------------------
-// XuguDatabaseSync — 兼容 SQLite DatabaseSync 接口
+// XuguDatabaseSync — 平台同步数据库接口
 // ----------------------------------------------------------------
 
 class XuguDatabaseSync {
@@ -193,18 +275,18 @@ class XuguDatabaseSync {
     this.isTransaction = false;
     this._backend = "xugu";
 
-    const driver = loadDriver();
-
     const host = options.host || XUGU_HOST;
     const port = options.port || XUGU_PORT;
     const user = options.user || XUGU_USER;
     const pwd = options.password || XUGU_PASSWORD;
     const db = options.database || XUGU_DATABASE;
+    const charset = options.charset || XUGU_CHARSET;
 
-    const connStr = `IP=${host};Port=${port};Database=${db};USER=${user};PWD=${pwd}`;
+    this._options = { host, port, user, password: pwd, database: db, charset };
 
-    this.conn = driver.createConnection(connStr);
-    this.conn.connect();
+    const connStr = `IP=${host};Port=${port};Database=${db};USER=${user};PWD=${pwd};CHAR_SET=${charset}`;
+
+    this.conn = new XuguWorkerClient(connStr);
 
     this._isOpen = true;
   }
@@ -221,7 +303,7 @@ class XuguDatabaseSync {
       const trimmed = stmt.trim();
       if (!trimmed) continue;
 
-      // 翻译 SQLite 事务语法 → 虚谷语法
+      // 将文本事务命令交给虚谷原生事务 API。
       const upper = trimmed.toUpperCase();
       if (upper === "BEGIN EXCLUSIVE" || upper === "BEGIN IMMEDIATE") {
         // 虚谷用原生驱动的事务 API
@@ -253,23 +335,17 @@ class XuguDatabaseSync {
   }
 
   _beginTx() {
-    let error = null;
-    this.conn.beginTransaction(function (err) { error = err; });
-    if (error) throw new Error(error.message || error.Error || String(error));
+    this.conn.request("begin");
     this.isTransaction = true;
   }
 
   _commitTx() {
-    let error = null;
-    this.conn.commit(function (err) { error = err; });
-    if (error) throw new Error(error.message || error.Error || String(error));
+    this.conn.request("commit");
     this.isTransaction = false;
   }
 
   _rollbackTx() {
-    let error = null;
-    this.conn.rollback(function (err) { error = err; });
-    if (error) throw new Error(error.message || error.Error || String(error));
+    this.conn.request("rollback");
     this.isTransaction = false;
   }
 
@@ -278,10 +354,24 @@ class XuguDatabaseSync {
     return new XuguStatement(this.conn, sql);
   }
 
+  fork() {
+    if (!this._isOpen) throw new Error("Connection is not open");
+    return new XuguDatabaseSync(this._options);
+  }
+
+  reconnect() {
+    if (this.isTransaction) throw new Error("Cannot reconnect Xugu during a transaction");
+    if (this.conn) this.conn.discard();
+    const { host, port, user, password, database, charset } = this._options;
+    const connStr = `IP=${host};Port=${port};Database=${database};USER=${user};PWD=${password};CHAR_SET=${charset}`;
+    this.conn = new XuguWorkerClient(connStr);
+    this._isOpen = true;
+  }
+
   close() {
     if (this._isOpen && this.conn) {
       try {
-        this.conn.disconnect();
+        this.conn.close();
       } catch {
         // ignore
       }
@@ -308,25 +398,28 @@ function splitSqlStatements(sql) {
     // Handle line comments (-- ...)
     if (!inSingleQuote && !inBlockComment && char === "-" && next === "-") {
       inLineComment = true;
+      i++;
+      continue;
     }
     if (inLineComment) {
-      current += char;
-      if (char === "\n") inLineComment = false;
+      if (char === "\n") {
+        inLineComment = false;
+        current += "\n";
+      }
       continue;
     }
 
     // Handle block comments (/* ... */)
     if (!inSingleQuote && !inLineComment && char === "/" && next === "*") {
       inBlockComment = true;
-      current += char;
+      i++;
       continue;
     }
     if (inBlockComment) {
-      current += char;
       if (char === "*" && next === "/") {
-        current += next;
         i++;
         inBlockComment = false;
+        current += " ";
       }
       continue;
     }

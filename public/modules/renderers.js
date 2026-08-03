@@ -260,7 +260,7 @@ function parseArrayField(value) {
 const roadmapCardFields = Object.freeze({
   stage: Object.freeze([
     { key: "title", label: "标题", type: "text", required: true, group: "基本属性" },
-    { key: "date", source: "dateLabel", label: "日期", type: "date", group: "基本属性" },
+    { key: "date", source: "dateLabel", label: "日期", type: "text", group: "基本属性" },
     { key: "state", label: "状态", type: "text", group: "基本属性" },
     { key: "description", label: "说明", type: "textarea", group: "内容" },
     { key: "expectedOutput", label: "预期产出", type: "textarea", group: "内容" }

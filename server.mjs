@@ -2,16 +2,15 @@
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
-import { loadEnvFiles, loadLocalConfigToEnv } from "./src/config/local-config.mjs";
+import { loadRuntimeConfig } from "./src/config/local-config.mjs";
 
 // 配置加载顺序（严格）：
 //   1. loadEnvFiles()  → .env / .env.local（已有的 process.env 值优先不被覆盖）
 //   2. loadLocalConfigToEnv() → .api-keys.local.json（仅在环境变量为空时注入）
-// 这确保所有启动路径（npm start / npx / node server.mjs）配置源一致。
-loadEnvFiles();
-loadLocalConfigToEnv();
+// 这确保源码运行和 portable 包使用同一配置源。
+loadRuntimeConfig();
 
-import { defaultDatabasePath, openDatabase } from "./src/db/database.mjs";
+import { openDatabase } from "./src/db/database.mjs";
 import { applyMigrations } from "./src/db/migrate.mjs";
 import { createApp } from "./src/http/app.mjs";
 import { importLegacyProject } from "./src/migration/legacy-project.mjs";
@@ -24,10 +23,24 @@ import { validateProviderConfig } from "./src/ai/providers/openai-compatible-pro
 
 const host = process.env.HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 4173);
-// 虚谷是唯一生产后端；集成测试通过 PLATFORM_DB_BACKEND=sqlite 走 SQLite
-const database = openDatabase(
-  process.env.PLATFORM_DB_BACKEND === "sqlite" ? defaultDatabasePath() : undefined
-);
+async function connectDatabase() {
+  const timeoutMs = Number(process.env.XUGU_CONNECT_TIMEOUT_MS || 420_000);
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    try {
+      return openDatabase();
+    } catch {
+      if (Date.now() >= deadline) {
+        const error = new Error("Xugu connection deadline exceeded");
+        error.code = "XUGU_CONNECT_TIMEOUT";
+        throw error;
+      }
+      await new Promise(resolveWait => setTimeout(resolveWait, 1_000));
+    }
+  }
+}
+
+const database = await connectDatabase();
 let server;
 let materialWorker;
 
@@ -43,7 +56,7 @@ try {
     }
   }
 
- const authService = createAuthService(database);
+  const authService = createAuthService(database);
   if (!authService.hasPlatformAdmin()) {
     const bootstrapPassword = process.env.PLATFORM_BOOTSTRAP_PASSWORD?.trim();
     const result = authService.ensureBootstrapAdmin({
@@ -83,7 +96,7 @@ try {
         });
         console.log(`  AI ${scope}: ${provider} / ${env[`${prefix}_MODEL`]} — 配置校验通过`);
       } catch (configError) {
-        console.warn(`  ⚠ AI ${scope} 配置有误: ${configError.message}`);
+        console.warn(`  ⚠ AI ${scope} 配置有误 | code=${configError?.code ?? "AI_PROVIDER_CONFIG_INVALID"}`);
         console.warn(`    请在设置页（/settings）检查并重新保存 AI ${scope} 配置，保存时系统会自动补全白名单。`);
       }
     }
@@ -98,7 +111,7 @@ try {
 
   materialWorker = startMaterialProcessingWorker(createMaterialProcessingService(database, { visionConfig }), {
     onError(error) {
-      console.error(`Material processing worker error: ${error?.message ?? error}`);
+      console.error(`Material processing worker error | code=${error?.code ?? "MATERIAL_WORKER_ERROR"}`);
     }
   });
   server = createServer(createApp({
@@ -108,12 +121,12 @@ try {
   }));
   server.listen(port, host, () => {
     console.log(`AI Project Command Platform listening on http://${host}:${port}`);
-    console.log(`  数据库后端: 虚谷数据库 (XuGu)`);
+    console.log("  数据库后端: 虚谷数据库 (XuGu)");
     console.log(`  配置入口: 平台设置 → AI 配置（首次使用请在网页后台填写 provider/baseUrl/apiKey/model）`);
   });
 } catch (error) {
   database.close?.();
-  console.error(error.message);
+  console.error(`Platform startup failed | code=${error?.code ?? "PLATFORM_STARTUP_FAILED"}`);
   process.exitCode = 1;
 }
 
@@ -142,7 +155,7 @@ async function shutdown(signal) {
     closeDatabase();
     console.log("平台服务已停止。");
   })().catch(error => {
-    console.error(`平台服务停止失败：${error.message}`);
+    console.error(`平台服务停止失败 | code=${error?.code ?? "PLATFORM_SHUTDOWN_FAILED"}`);
     process.exitCode = 1;
   });
   return shutdownPromise;

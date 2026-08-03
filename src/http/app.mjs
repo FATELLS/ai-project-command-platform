@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import { createAuthService, GENERIC_LOGIN_ERROR } from "../services/auth-service.mjs";
 import { createProjectService, ProjectServiceError } from "../services/project-service.mjs";
 import { createModuleService, ModuleServiceError } from "../modules/module-service.mjs";
@@ -16,12 +15,10 @@ import { createObservabilityService, createRequestId } from "../operations/obser
 import { createProductTestService } from "../operations/product-test-service.mjs";
 import { createSettingsService } from "../services/settings-service.mjs";
 import { createStaticHandler, securityHeaders } from "./static.mjs";
-import { publicDir as packagedPublicDir, isPackaged } from "../paths.mjs";
+import { publicDir } from "../paths.mjs";
 
 const projectIdPattern = /^[a-z0-9][a-z0-9._-]{2,63}$/;
-const defaultPublicDirectory = isPackaged
-  ? packagedPublicDir
-  : fileURLToPath(new URL("../../public", import.meta.url));
+const defaultPublicDirectory = publicDir;
 
 class HttpError extends Error {
   constructor(status, code, message) {
@@ -88,6 +85,7 @@ function sessionPayload(principal) {
 
 export function createApp(options) {
   const { database } = options;
+  const logger = options.logger ?? console;
   const auth = options.authService ?? createAuthService(database, options.authOptions);
   const projects = createProjectRepository(database);
   const projectService = options.projectService ?? createProjectService(database, options.projectOptions);
@@ -655,11 +653,11 @@ export function createApp(options) {
             error,
             context: { known }
           });
-        } catch (recordError) {
-          console.error("Could not record error event", recordError);
+        } catch {
+          logger.error("Could not record error event", { requestId, code: "ERROR_EVENT_RECORD_FAILED" });
         }
       }
-      if (!known) console.error("Request failed", error);
+      if (!known) logger.error("Request failed", { requestId, code, errorEventId: errorEvent?.id ?? null });
       return respond(response, status, {
         error: known ? error.message : "服务器处理请求时发生错误",
         code,

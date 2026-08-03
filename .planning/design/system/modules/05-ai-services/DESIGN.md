@@ -51,6 +51,8 @@ Provider adapter 负责网络、超时、响应大小和协议，不负责相信
 
 配置包含 base URL、模型、密钥、超时、max tokens、allowlist host 和有限 reasoning effort。密钥不返回浏览器。
 
+配置文件目标语义为：显式外部环境变量优先；随后 `.env.local` 覆盖 `.env`；数据库平台设置覆盖文件配置。当前实现中 `.env.local` 覆盖 `.env` 的行为仍需修正，见 Runtime Design 的实现漂移。
+
 ## Chat Flow
 
 1. authorize project member。
@@ -93,6 +95,18 @@ queued
 修复：repairing
 ```
 
+## Observability
+
+生成链路必须输出有界结构化日志：
+
+- `[gen]`：jobId、阶段、context/prompt/provider/validation/save 耗时、prompt 字符数和估算 token。
+- `[provider]`：目标 endpoint、模型、请求体大小、HTTP 状态码、响应大小、finish_reason 和 token 用量。
+
+日志不得包含 API key、Authorization、完整 prompt、材料正文、provider 原始响应正文或 Cookie/CSRF。2026-08-02 UAT 发现并修复了两个问题：
+
+- `processJob` 的 provider 耗时统一使用注入时钟，不再混用真实 `Date.now()`。
+- OpenAI-compatible provider 的 fetch 失败日志只记录稳定错误码，不再打印原始 `error.message`。
+
 ## Proposal Validation
 
 顺序：
@@ -123,9 +137,9 @@ queued
 - 全局 provider 并发有界。
 - 失败也记录 attempt/outcome，但不伪造成成功 usage。
 
-## Planned Experience
+## Current Experience
 
-Phase 11 只调整 Provider 设置和问答/生成 UI。AI 领域边界不变；连接测试若新增，必须返回脱敏状态而非原始 provider 响应。
+Phase 11 已实现平台设置中的 Chat/Generation/Vision 连接测试、渐进披露和不回显密钥。AI 领域边界不变；连接测试只返回脱敏状态，不返回原始 provider body 或密钥。
 
 ## Verification
 
@@ -136,3 +150,4 @@ Phase 11 只调整 Provider 设置和问答/生成 UI。AI 领域边界不变；
 - quota/concurrency。
 - stale base/evidence hash 和跨项目证据。
 - provider 失败不改变 draft/published。
+- 可观测日志耗时必须可信，敏感内容必须脱敏。

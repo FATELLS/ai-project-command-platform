@@ -1,5 +1,5 @@
 -- 虚谷版本 — Password Reset & Platform Settings
--- 从 SQLite 008 + 009 转换
+-- Platform settings schema.
 
 ALTER TABLE users ADD COLUMN must_reset_password INTEGER NOT NULL DEFAULT 0;
 

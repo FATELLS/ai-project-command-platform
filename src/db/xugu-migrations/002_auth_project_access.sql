@@ -1,5 +1,5 @@
 -- 虚谷版本 — Auth & Project Access
--- 从 SQLite 002 转换
+-- Authentication and project access schema.
 
 ALTER TABLE users ADD COLUMN login_name VARCHAR(128);
 ALTER TABLE users ADD COLUMN password_salt VARCHAR(256);

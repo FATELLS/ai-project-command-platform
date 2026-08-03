@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { spawn, execSync } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -13,42 +14,30 @@ import {
 } from "node:fs";
 import { dirname, join, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadEnvFiles } from "../src/config/local-config.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const command = process.argv[2] ?? "status";
-
-// 虚谷容器名称——与 src/db/xugu-database.cjs 的默认值保持一致
-const XUGU_CONTAINER = process.env.XUGU_CONTAINER || "xugu-dev";
-
-function readEnvFile(path) {
-  if (!existsSync(path)) return {};
-  return Object.fromEntries(readFileSync(path, "utf8")
-    .split(/\r?\n/)
-    .map(line => line.trim())
-    .filter(line => line && !line.startsWith("#"))
-    .map(line => line.startsWith("export ") ? line.slice(7).trim() : line)
-    .map(line => {
-      const separator = line.indexOf("=");
-      if (separator < 1) return null;
-      const key = line.slice(0, separator).trim();
-      let value = line.slice(separator + 1).trim();
-      if ((value.startsWith("\"") && value.endsWith("\""))
-        || (value.startsWith("'") && value.endsWith("'"))) {
-        value = value.slice(1, -1);
-      }
-      return [key, value];
-    })
-    .filter(Boolean));
-}
-
-const fileEnvironment = {
-  ...readEnvFile(resolve(rootDir, ".env")),
-  ...readEnvFile(resolve(rootDir, ".env.local"))
-};
+loadEnvFiles({ rootDir, quiet: true });
 
 function setting(name, fallback) {
-  return process.env[name] ?? fileEnvironment[name] ?? fallback;
+  return process.env[name] ?? fallback;
 }
+
+const xuguLifecycle = setting("PLATFORM_XUGU_LIFECYCLE", "managed");
+const validXuguLifecycle = new Set(["managed", "external"]).has(xuguLifecycle);
+const managesXugu = xuguLifecycle === "managed";
+const XUGU_CONTAINER = setting("XUGU_CONTAINER", "ai-project-command-platform-xugu");
+const XUGU_VOLUME = setting("XUGU_VOLUME", `${XUGU_CONTAINER}-data`);
+const XUGU_PORT = setting("XUGU_PORT", "5138");
+const xuguManifestPath = resolve(rootDir, "vendor/xugudb/image/manifest.json");
+const xuguManifest = existsSync(xuguManifestPath)
+  ? JSON.parse(readFileSync(xuguManifestPath, "utf8"))
+  : null;
+const XUGU_IMAGE = setting("XUGU_IMAGE", xuguManifest?.image ?? "ai-project-command-platform/xugudb:12.9.10-arm64");
+const xuguImageArchive = xuguManifest
+  ? resolve(dirname(xuguManifestPath), xuguManifest.archive)
+  : null;
 
 function runtimePath(name, fallback) {
   const configured = setting(name, fallback);
@@ -82,7 +71,7 @@ function processIsAlive(pid) {
 
 function dockerAvailable() {
   try {
-    execSync("docker info", { stdio: "pipe", timeout: 5_000 });
+    execFileSync("docker", ["info"], { stdio: "pipe", timeout: 5_000 });
     return true;
   } catch {
     return false;
@@ -91,8 +80,9 @@ function dockerAvailable() {
 
 function xuguContainerStatus() {
   try {
-    const output = execSync(
-      `docker ps -a --filter name=^${XUGU_CONTAINER}$ --format "{{.Status}}"`,
+    const output = execFileSync(
+      "docker",
+      ["ps", "-a", "--filter", `name=^${XUGU_CONTAINER}$`, "--format", "{{.Status}}"],
       { encoding: "utf8", stdio: "pipe", timeout: 5_000 }
     ).trim();
     return output || null;
@@ -101,11 +91,57 @@ function xuguContainerStatus() {
   }
 }
 
+function xuguImageExists() {
+  try {
+    execFileSync("docker", ["image", "inspect", XUGU_IMAGE], { stdio: "pipe", timeout: 5_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function ensureXuguImage() {
+  if (xuguImageExists()) return true;
+  if (!xuguManifest || !xuguImageArchive || !existsSync(xuguImageArchive)) {
+    console.log("  ⚠ 虚谷镜像包不存在 | code=XUGU_IMAGE_ARCHIVE_MISSING");
+    return false;
+  }
+  const digest = createHash("sha256").update(readFileSync(xuguImageArchive)).digest("hex");
+  if (digest !== xuguManifest.archiveSha256) {
+    console.log("  ⚠ 虚谷镜像包校验失败 | code=XUGU_IMAGE_ARCHIVE_INVALID");
+    return false;
+  }
+  try {
+    execFileSync("docker", ["load", "-i", xuguImageArchive], { stdio: "pipe", timeout: 120_000 });
+    return xuguImageExists();
+  } catch {
+    console.log("  ⚠ 无法加载虚谷镜像 | code=XUGU_IMAGE_LOAD_FAILED");
+    return false;
+  }
+}
+
+function createXuguContainer() {
+  if (!ensureXuguImage()) return false;
+  try {
+    execFileSync("docker", [
+      "run", "-d",
+      "--name", XUGU_CONTAINER,
+      "-p", `127.0.0.1:${XUGU_PORT}:5138`,
+      "-v", `${XUGU_VOLUME}:/opt/database/Server`,
+      XUGU_IMAGE
+    ], { stdio: "pipe", timeout: 120_000 });
+    console.log(`  已创建平台专用虚谷容器 ${XUGU_CONTAINER}。`);
+    return true;
+  } catch {
+    console.log("  ⚠ 无法创建虚谷容器 | code=XUGU_CONTAINER_CREATE_FAILED");
+    return false;
+  }
+}
+
 function ensureXuguContainer() {
   const status = xuguContainerStatus();
   if (!status) {
-    console.log(`  ⚠ 虚谷容器 ${XUGU_CONTAINER} 不存在，请先创建（docker run ...）。`);
-    return false;
+    return createXuguContainer();
   }
   if (/^Up\b/.test(status)) {
     console.log(`  虚谷容器 ${XUGU_CONTAINER} 已在运行（${status}）。`);
@@ -114,28 +150,12 @@ function ensureXuguContainer() {
   // 容器存在但未运行——自动启动
   console.log(`  虚谷容器 ${XUGU_CONTAINER} 状态为 "${status}"，正在自动启动...`);
   try {
-    execSync(`docker start ${XUGU_CONTAINER}`, { stdio: "pipe", timeout: 30_000 });
-    // 等待容器内 xgconsole 可用（最多重试 3 次，每次等 2 秒）
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        execSync(
-          `docker exec ${XUGU_CONTAINER} /XGDBMS/BIN/xgconsole-linux-arm64 nssl 127.0.0.1 5138 SYSTEM SYSDBA SYSDBA -c "SELECT 1"`,
-          { stdio: "pipe", timeout: 10_000 }
-        );
-        console.log(`  虚谷容器 ${XUGU_CONTAINER} 已启动并就绪。`);
-        return true;
-      } catch {
-        if (attempt < 3) {
-          const { sleepSync } = { sleepSync: ms => execSync(`sleep ${ms / 1000}`) };
-          sleepSync(2_000);
-        }
-      }
-    }
-    // xgconsole 可能还在初始化，但容器已启动——继续走，让数据库连接层自己重试
-    console.log(`  虚谷容器 ${XUGU_CONTAINER} 已启动（数据库初始化中）。`);
+    execFileSync("docker", ["start", XUGU_CONTAINER], { stdio: "pipe", timeout: 30_000 });
+    // 应用只有在数据库迁移完成后才会通过 /health；避免把数据库凭据放入进程参数。
+    console.log(`  虚谷容器 ${XUGU_CONTAINER} 已启动，等待平台健康检查确认数据库就绪。`);
     return true;
-  } catch (error) {
-    console.log(`  ⚠ 无法启动虚谷容器：${error.message}`);
+  } catch {
+    console.log("  ⚠ 无法启动虚谷容器 | code=XUGU_CONTAINER_START_FAILED");
     return false;
   }
 }
@@ -144,10 +164,10 @@ function stopXuguContainer() {
   const status = xuguContainerStatus();
   if (!status || !/^Up\b/.test(status)) return;
   try {
-    execSync(`docker stop ${XUGU_CONTAINER}`, { stdio: "pipe", timeout: 20_000 });
+    execFileSync("docker", ["stop", XUGU_CONTAINER], { stdio: "pipe", timeout: 20_000 });
     console.log(`  虚谷容器 ${XUGU_CONTAINER} 已停止。`);
-  } catch (error) {
-    console.log(`  ⚠ 无法停止虚谷容器：${error.message}`);
+  } catch {
+    console.log("  ⚠ 无法停止虚谷容器 | code=XUGU_CONTAINER_STOP_FAILED");
   }
 }
 
@@ -184,29 +204,29 @@ async function start() {
   const existingPid = readPid();
   if (processIsAlive(existingPid)) {
     console.log(`平台服务已在后台运行（PID ${existingPid}）。`);
-    ensureXuguContainer();
+    if (managesXugu && dockerAvailable()) ensureXuguContainer();
+    else if (xuguLifecycle === "external") console.log("虚谷数据库：外部共享模式（只连接，不管理生命周期）。");
     return;
   }
   if (existsSync(pidFile)) removePidFile();
 
-  // 先确保虚谷容器在运行（SQLite 后端跳过）
-  const isSqliteBackend = process.env.PLATFORM_DB_BACKEND === "sqlite";
-  if (!isSqliteBackend && dockerAvailable()) {
-    ensureXuguContainer();
-  } else if (!isSqliteBackend) {
-    console.log(`  ⚠ Docker 未运行或不可用，跳过虚谷容器检查。`);
-    console.log(`    如果后端是虚谷数据库，平台启动后将无法连接。`);
+  if (managesXugu && dockerAvailable()) {
+    if (!ensureXuguContainer()) {
+      const error = new Error("managed Xugu container unavailable");
+      error.code = "XUGU_CONTAINER_UNAVAILABLE";
+      throw error;
+    }
+  } else if (managesXugu) {
+    const error = new Error("Docker unavailable");
+    error.code = "DOCKER_UNAVAILABLE";
+    throw error;
+  } else {
+    console.log("虚谷数据库：外部共享模式（只连接，不管理生命周期）。");
   }
 
   mkdirSync(dirname(logFile), { recursive: true });
   const logDescriptor = openSync(logFile, "a");
-  // 构建 Node 启动参数，兼容 Node 20（无 --env-file-if-exists）
-  const nodeArgs = [];
-  const envFiles = [".env", ".env.local"].filter(f => existsSync(join(rootDir, f)));
-  for (const f of envFiles) nodeArgs.push(`--env-file=${f}`);
-  nodeArgs.push("server.mjs");
-
-  const child = spawn(process.execPath, nodeArgs, {
+  const child = spawn(process.execPath, ["server.mjs"], {
     cwd: rootDir,
     detached: true,
     env: process.env,
@@ -219,12 +239,15 @@ async function start() {
   const ready = await waitUntil(async () => {
     if (!processIsAlive(child.pid)) return true;
     return healthIsReady();
-  }, 15_000);
+  }, 420_000);
 
   if (!ready || !processIsAlive(child.pid) || !(await healthIsReady())) {
     if (processIsAlive(child.pid)) process.kill(child.pid, "SIGTERM");
     removePidFile();
-    throw new Error(`平台服务启动失败，请查看日志：${logFile}`);
+    if (managesXugu && dockerAvailable()) stopXuguContainer();
+    const error = new Error("platform did not become healthy");
+    error.code = "PLATFORM_START_HEALTH_FAILED";
+    throw error;
   }
 
   console.log(`平台服务已在后台启动（PID ${child.pid}，${healthUrl}）。`);
@@ -235,27 +258,24 @@ async function stop() {
   if (!pid) {
     if (existsSync(pidFile)) removePidFile();
     console.log("平台服务未通过后台管理器运行。");
-    return;
-  }
-  if (!processIsAlive(pid)) {
+  } else if (!processIsAlive(pid)) {
     removePidFile();
     console.log(`已清理失效的 PID 文件（原 PID ${pid}）。`);
-    return;
+  } else {
+    process.kill(pid, "SIGTERM");
+    const stopped = await waitUntil(() => !processIsAlive(pid), 20_000);
+    if (!stopped) {
+      throw new Error(`平台服务未能在 20 秒内优雅停止（PID ${pid}）；未执行强制终止。`);
+    }
+    removePidFile();
+    console.log(`平台服务已优雅停止（原 PID ${pid}）。`);
   }
 
-  process.kill(pid, "SIGTERM");
-  const stopped = await waitUntil(() => !processIsAlive(pid), 20_000);
-  if (!stopped) {
-    throw new Error(`平台服务未能在 20 秒内优雅停止（PID ${pid}）；未执行强制终止。`);
-  }
-  removePidFile();
-  console.log(`平台服务已优雅停止（原 PID ${pid}）。`);
-
-  // 如果是虚谷后端且平台启动了容器，一并关闭
-  // SQLite 后端不碰虚谷容器
-  const isSqliteBackend = process.env.PLATFORM_DB_BACKEND === "sqlite";
-  if (!isSqliteBackend && dockerAvailable() && process.env.PLATFORM_STOP_XUGU !== "0") {
+  // 虚谷是默认产品运行栈的一部分；即使应用进程已退出，stop 也收口数据库状态。
+  if (managesXugu && dockerAvailable()) {
     stopXuguContainer();
+  } else if (xuguLifecycle === "external") {
+    console.log("虚谷数据库：外部共享模式，未执行停止操作。");
   }
 }
 
@@ -265,24 +285,30 @@ async function status() {
     if (existsSync(pidFile)) removePidFile();
     console.log("平台服务未通过后台管理器运行。");
     process.exitCode = 1;
-    return;
+  } else {
+    const health = await healthIsReady();
+    console.log(`平台服务正在运行（PID ${pid}，健康检查：${health ? "正常" : "异常"}）。`);
+    if (!health) process.exitCode = 1;
   }
-  const health = await healthIsReady();
-  console.log(`平台服务正在运行（PID ${pid}，健康检查：${health ? "正常" : "异常"}）。`);
-  if (!health) process.exitCode = 1;
 
   // 显示虚谷容器状态
-  if (dockerAvailable()) {
+  if (managesXugu && dockerAvailable()) {
     const xuguStatus = xuguContainerStatus();
     if (xuguStatus) {
       console.log(`虚谷容器 ${XUGU_CONTAINER}：${xuguStatus}`);
     } else {
       console.log(`虚谷容器 ${XUGU_CONTAINER}：未创建`);
     }
-  }
+  } else if (managesXugu) console.log("虚谷数据库：Docker 不可用");
+  else console.log("虚谷数据库：外部共享模式（只连接，不管理生命周期）。");
 }
 
 try {
+  if (!validXuguLifecycle) {
+    const error = new Error("invalid Xugu lifecycle mode");
+    error.code = "XUGU_LIFECYCLE_INVALID";
+    throw error;
+  }
   if (command === "start") await start();
   else if (command === "stop") await stop();
   else if (command === "status") await status();
@@ -293,6 +319,6 @@ try {
     throw new Error("用法：node scripts/manage-server.mjs <start|stop|status|restart>");
   }
 } catch (error) {
-  console.error(error.message);
+  console.error(`平台生命周期命令失败 | code=${error?.code ?? "PLATFORM_LIFECYCLE_FAILED"}`);
   process.exitCode = 1;
 }

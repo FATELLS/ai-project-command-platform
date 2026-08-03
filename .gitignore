@@ -7,6 +7,7 @@ coverage/
 *.log
 *.zip
 *.tar.gz
+!vendor/xugudb/image/*.tar.gz
 *.tgz
 *.rpm
 *.msi
@@ -15,9 +16,6 @@ coverage/
 # Local runtime and credentials
 data/*
 !data/.gitkeep
-*.sqlite
-*.sqlite-shm
-*.sqlite-wal
 .env
 .env.*
 !.env.example
@@ -58,4 +56,3 @@ e2e-report/
 
 # 临时凭据
 session-cookie.txt
-

@@ -7,3 +7,26 @@ test("generation provider is disabled without a dedicated key",()=>{const provid
 test("generation provider uses a dedicated allowlisted no-tools bounded profile",async()=>{let captured;const provider=createGenerationProviderFromEnv({AI_GENERATION_PROVIDER:"openai-compatible",AI_GENERATION_API_KEY:"server-only",AI_GENERATION_BASE_URL:"https://ai.example.test/v1",AI_GENERATION_MODEL:"structured-model",AI_GENERATION_ALLOWED_HOSTS:"ai.example.test",AI_GENERATION_MAX_OUTPUT_TOKENS:"9000",AI_GENERATION_REASONING_EFFORT:"none",AI_GENERATION_PROVIDER_LABEL:"internal-structured"},{fetchImpl:async(url,init)=>{captured={url,body:JSON.parse(init.body),authorization:init.headers.authorization};return new Response(JSON.stringify({choices:[{finish_reason:"stop",message:{content:"{}"}}],usage:{prompt_tokens:10,completion_tokens:2}}),{status:200});}});const result=await provider.generate({messages:[{role:"system",content:"strict"}],responseFormat:{type:"json_object"}});assert.equal(captured.url,"https://ai.example.test/v1/chat/completions");assert.equal(captured.body.max_tokens,8000);assert.equal(captured.body.reasoning_effort,"none");assert.equal("tools" in captured.body,false);assert.equal(captured.authorization,"Bearer server-only");assert.equal(result.providerLabel,"internal-structured");assert.deepEqual(result.usage,{input:10,output:2});});
 
 test("generation provider configuration rejects HTTP and non-allowlisted hosts",()=>{for(const environment of [{AI_GENERATION_PROVIDER:"openai-compatible",AI_GENERATION_API_KEY:"key",AI_GENERATION_BASE_URL:"http://ai.example.test/v1",AI_GENERATION_MODEL:"model",AI_GENERATION_ALLOWED_HOSTS:"ai.example.test"},{AI_GENERATION_PROVIDER:"openai-compatible",AI_GENERATION_API_KEY:"key",AI_GENERATION_BASE_URL:"https://evil.example.test/v1",AI_GENERATION_MODEL:"model",AI_GENERATION_ALLOWED_HOSTS:"ai.example.test"}])assert.throws(()=>createGenerationProviderFromEnv(environment));});
+
+test("generation provider logs only a stable error code and never raw error text", async () => {
+  const lines = [];
+  const original = console.error;
+  console.error = line => lines.push(String(line));
+  try {
+    const provider = createGenerationProviderFromEnv({
+      AI_GENERATION_PROVIDER: "openai-compatible",
+      AI_GENERATION_API_KEY: "server-only",
+      AI_GENERATION_BASE_URL: "https://ai.example.test/v1",
+      AI_GENERATION_MODEL: "structured-model",
+      AI_GENERATION_ALLOWED_HOSTS: "ai.example.test"
+    }, {
+      fetchImpl: async () => { throw new Error("top-secret-provider-detail"); },
+      sleep: async () => {}
+    });
+    await assert.rejects(provider.generate({ messages: [] }), error => error.code === "AI_PROVIDER_NETWORK_ERROR");
+  } finally {
+    console.error = original;
+  }
+  assert.match(lines.join("\n"), /code=AI_PROVIDER_NETWORK_ERROR/);
+  assert.doesNotMatch(lines.join("\n"), /top-secret-provider-detail/);
+});

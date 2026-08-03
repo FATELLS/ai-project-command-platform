@@ -1,5 +1,5 @@
 -- 虚谷版本 — Structured Change Proposals
--- 从 SQLite 005 转换
+-- Structured change proposal schema.
 
 CREATE UNIQUE INDEX idx_project_versions_project_id ON project_versions(project_id, id);
 CREATE unique index idx_change_proposals_project_id ON change_proposals(project_id, id);

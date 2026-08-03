@@ -1,5 +1,5 @@
 -- 虚谷版本 — Materials & Evidence
--- 从 SQLite 004 转换
+-- Project materials and evidence schema.
 -- FTS5 -> 虚谷全文索引（CONTAINS）
 
 CREATE TABLE project_materials (

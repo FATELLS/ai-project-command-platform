@@ -1,5 +1,5 @@
 -- 虚谷版本 — Review, Publish & Operations
--- 从 SQLite 006 + 007 转换
+-- Review, publication, and operations schema.
 
 CREATE TABLE proposal_review_items (
   project_id VARCHAR(128) NOT NULL,

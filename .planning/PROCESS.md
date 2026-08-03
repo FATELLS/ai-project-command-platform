@@ -140,3 +140,11 @@ V1.0 全工程整合、虚谷完整栈、UI 全功能测试、代码审查和设
 ### 最终决策
 
 - V1.0 在全新隔离环境中完整验证通过，产品代码无缺陷，仅修复测试代码竞态。
+
+### 补充：managed 生命周期启停验证
+
+- `npm run start:background`：创建虚谷容器 `ai-project-command-platform-xugu` → 应用后启动 → health 通过（PID 93238）。
+- `npm run status`：服务运行中、健康检查正常、虚谷容器 Up。
+- `curl /health`：返回 `{"status":"ok"}`。
+- `npm run stop`：应用先优雅停止（PID 93238）→ 虚谷容器后停止（Exited 137）。
+- 停止后 status 确认两者均不可达；隔离体验实例 `ai-platform-isolated-ui` 未受影响。

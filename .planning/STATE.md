@@ -2,9 +2,9 @@
 
 日期：2026-08-03
 版本：`1.0.0`
-数据库：XuguDB `12.9.10-arm64`
+数据库：XuguDB `12.9.10-arm64` / `12.10.13-amd64`
 迁移：`001..008`
-Git HEAD：`015b37e`（多架构虚谷支持：manifest v2 + driverPath 多平台 + manage-server/fixture 按架构选镜像）
+Git HEAD：`ff8eda1`（amd64 Docker 镜像 + Linux/Windows 驱动二进制全部到位）
 
 ## 已实现
 
@@ -13,9 +13,10 @@ Git HEAD：`015b37e`（多架构虚谷支持：manifest v2 + driverPath 多平�
 - 人工审核、草稿合并、发布、回滚和审计。
 - 虚谷 Worker 适配、UTF-8/CLOB、事务、导入导出。
 - 镜像和驱动随包、managed/external 生命周期、冷备恢复。
-- manifest v2 多架构格式（arm64 完整、amd64 占位）；driverPath 支持 darwin/arm64、linux/arm64、linux/x64、win32/x64。
+- manifest v2 多架构格式（arm64 + amd64 均完整）；driverPath 支持 darwin/arm64、linux/arm64、linux/x64、win32/x64。
+- 四个平台原生驱动二进制全部到位：macOS ARM64、Linux ARM64、Linux x86_64、Windows x64。
 - manage-server 按运行时 arch 自动选择镜像。
-- Linux ARM64 发布 workflow；macOS ARM64 本地组装路径；Linux x86_64 代码路径就绪。
+- Linux ARM64 发布 workflow；macOS ARM64 本地组装路径；Linux x86_64 镜像和驱动就绪。
 - 设置与日志密钥脱敏。
 
 ## 当前验证
@@ -36,8 +37,7 @@ Git HEAD：`015b37e`（多架构虚谷支持：manifest v2 + driverPath 多平�
 
 ## 已知后续
 
-- 获取虚谷 Linux x86 Docker 镜像和 x86_64 原生驱动，填入 manifest amd64 条目。
-- Windows 原生支持需要独立进程管理生命周期。
+- Windows 原生支持需要独立进程管理生命周期（不走 Docker）。
 - 大型 HTTP/前端文件仍需按领域拆分，但当前行为由浏览器契约保护。
 - macOS 发布尚缺 CI 完整栈 smoke。
 - 需要长期维护真实虚谷升级夹具和兼容窗口。

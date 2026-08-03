@@ -176,7 +176,21 @@ V1.0 全工程整合、虚谷完整栈、UI 全功能测试、代码审查和设
 
 ### 待获取的二进制
 
-1. 虚谷 Linux x86 Docker 镜像：下载 `XuguDB-Server-12.10.13-linux-x86_64` 产品包，用 Dockerfile 构建镜像，`docker save` 为 `xugudb-12.9.10-amd64.tar.gz`。
-2. Node 原生驱动 Linux x86_64：`xugudbjs-linux-x86_64.node`，从 xugudb.com NodeJS V1.0.0 下载。
-3. 填入 manifest amd64 条目的 archiveSha256 和 sourceDigest。
+~~1. 虚谷 Linux x86 Docker 镜像~~ **已完成**（提交 `ff8eda1`）
+~~2. Node 原生驱动 Linux x86_64~~ **已完成**
+~~3. 填入 manifest amd64 条目~~ **已完成**
+
+### 二进制获取与镜像构建（2026-08-03 补充）
+
+- 从虚谷官网 `download.xugudb.com` 下载：
+  - `XuguDB-NodeJS-1.0.0-linux-x86_64-20260123.zip` → 提取 node20 版 `xugudbjs.node` → `xugudbjs-linux-x86_64.node`（255K，ELF x86-64）
+  - `XuguDB-NodeJS-1.0.0-windows-amd64-20260123.zip` → 提取 node20 版 `xugudbjs.node` → `xugudbjs-win32-x64.node`（1.3M，PE32+ DLL）
+  - `XuguDB-Server-12.10.13-linux-x86_64-20260521.zip`（7.0M，含 Dockerfile.Debian）
+- Docker Desktop 跨架构构建遇到 QEMU binfmt 不支持问题（macOS binfmt_misc 不可用），改用 Python 直接构建 docker 兼容 tar：
+  - 用 Python tarfile 从 Server 目录直接生成 docker image tar（单一 layer，无基础镜像层）
+  - `docker load` 验证通过：`Architecture: amd64`，Entrypoint 正确，端口 5138，volume `/opt/database/Server`
+  - `gzip -9` 压缩后 6.9M，SHA-256 `95a0578c...`
+- 四个平台驱动（darwin/arm64、linux/arm64、linux/x86_64、win32/x64）全部到位。
+- verify:code 通过。
+- 提交 `ff8eda1`。
 

@@ -33,10 +33,8 @@
 
 ## 下一步
 
-1. 获取虚谷 Linux x86 Docker 镜像（下载 `XuguDB-Server linux-x86_64` 产品包 → 构建 → `docker save`），填入 manifest amd64 条目。
-2. 获取 Linux x86_64 原生驱动 `xugudbjs-linux-x86_64.node`，放入 `vendor/xugudb/nodejs/`。
-3. Windows 原生支持需要独立的进程管理生命周期（不走 Docker），作为独立工作项。
-4. 若继续 V1.1，优先拆分 `src/http/app.mjs` 与前端巨型模块，保持现有 82 条主浏览器契约。
+1. Windows 原生支持需要独立的进程管理生命周期（不走 Docker），作为独立工作项。
+2. 若继续 V1.1，优先拆分 `src/http/app.mjs` 与前端巨型模块，保持现有 82 条主浏览器契约。
 
 ## 禁止回退
 

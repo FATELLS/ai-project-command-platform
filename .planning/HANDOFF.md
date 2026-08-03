@@ -12,7 +12,7 @@
 - 真实数据库桥接位于 `src/db/xugu-database.cjs` 与 `src/db/xugu-worker.cjs`。
 - 发布只支持 Linux ARM64 和 macOS Apple Silicon portable。
 - 本机旧 `xugu-dev` 容器已停止但未删除；隔离体验实例仍在运行。
-- V1.0 整合已提交为 `d28bc9b`；当前工作区干净，尚未推送远端。
+- V1.0 整合最终提交为 `5aea6f0`，已推送至 `origin/main`；完整服务使用 `npm run start:background`，不是 `npx serve`。
 
 ## 关键驱动结论
 

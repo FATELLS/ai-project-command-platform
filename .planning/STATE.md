@@ -29,6 +29,7 @@ Git HEAD：`d28bc9b`（V1.0 整合提交）
 
 - `xugu-dev` 已于 2026-08-03 按用户要求停止，容器和匿名 volume 保留。
 - V1.0 隔离体验实例 `ai-platform-isolated-ui` 继续运行，健康检查为 `ok`。
+- `origin/main` 已同步到提交 `5aea6f0`；GitHub 对 70 MB 虚谷镜像给出大文件建议但未阻止推送。
 
 ## 已知后续
 

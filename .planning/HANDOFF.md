@@ -13,6 +13,7 @@
 - 发布只支持 Linux ARM64 和 macOS Apple Silicon portable。
 - 本机旧 `xugu-dev` 容器已停止但未删除；隔离体验实例仍在运行。
 - V1.0 整合最终提交为 `5aea6f0`，已推送至 `origin/main`；完整服务使用 `npm run start:background`，不是 `npx serve`。
+- 2026-08-03 全新隔离环境完整复验通过；修复 E2E 测试竞态后提交 `d9aac1e`（尚未推送）。
 
 ## 关键驱动结论
 
@@ -35,6 +36,8 @@
 1. 若继续 V1.1，优先拆分 `src/http/app.mjs` 与前端巨型模块，保持现有 82 条主浏览器契约。
 2. 增加 macOS CI 完整栈 smoke 和长期虚谷升级夹具。
 3. 发布前继续使用 Node 20.x 执行 `npm run verify` 与异常 UI 套件。
+4. E2E 运行前需清空 `test-results/` 目录，避免安全删除机制拦截 Playwright 的批量清理。
+5. E2E 需通过 `PATH` 前缀确保 Node 20 优先于 Node 22（Playwright webServer 继承 PATH）。
 
 ## 禁止回退
 

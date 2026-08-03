@@ -4,7 +4,7 @@
 版本：`1.0.0`
 数据库：XuguDB `12.9.10-arm64`
 迁移：`001..008`
-Git HEAD：`d28bc9b`（V1.0 整合提交）
+Git HEAD：`d9aac1e`（V1.0 隔离环境验证后修复测试竞态）
 
 ## 已实现
 
@@ -24,6 +24,7 @@ Git HEAD：`d28bc9b`（V1.0 整合提交）
 - 独立异常输入 UI：`9/9` 通过。
 - 真实虚谷集成包含 8 版迁移、中文 CLOB、事务、冷备份与 volume 恢复。
 - `npm audit`：0 个已知漏洞。
+- 2026-08-03 全新隔离环境复验：全部通过（容器 `ai-platform-playwright-xugu` / `ai-platform-playwright-abnormal-xugu`，端口 55140/55142）。
 
 ## 本机运行状态
 

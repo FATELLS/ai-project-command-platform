@@ -111,3 +111,32 @@ V1.0 全工程整合、虚谷完整栈、UI 全功能测试、代码审查和设
 - GitHub 提示随包虚谷镜像约 70 MB，超过推荐的 50 MB，但本次推送成功。
 - 项目没有 `npx server` 脚本；完整服务入口是 `npm run start:background`，由 managed 模式同时管理应用和虚谷。
 - 当前隔离体验服务健康检查通过：`http://127.0.0.1:54173/health` 返回 `status: ok`。
+
+## 2026-08-03 全新隔离环境验证
+
+### 用户需求
+
+- 在全新隔离环境中对项目做一次完整验证。
+
+### Agent 分析与方案
+
+- 按 V1.0 测试矩阵分层执行：静态门禁 → Node 单元 → Chromium 主 UI → 异常输入 → 安全审计。
+- E2E fixture server 自动创建独立虚谷容器（端口 55140/55142）、独立 volume 和临时材料目录，确保环境完全隔离。
+- 运行环境需绑定 Node 20.x（原生驱动 ABI 要求），不能使用 PATH 中默认的 Node 22。
+
+### 执行结果
+
+- `verify:code` 静态门禁：通过（必需文件、镜像校验、禁止模式、SQL 方言、语法检查、Git 跟踪安全）。
+- Node 单元测试：`67/67` 全通过（含真实虚谷 schema、session/audit/masked settings、冷备份恢复）。
+- Chromium 主 UI E2E：首轮 81/82，发现并修复登录测试中自引用 `toHaveCount` 竞态断言，重跑 `82/82` 全通过。
+- 异常输入 Chromium：`9/9` 全通过。
+- `npm audit`：0 个已知漏洞。
+- 修复提交为 `d9aac1e`。
+
+### 修复内容
+
+- `e2e/ui-flows.spec.mjs:36`：移除自引用 `toHaveCount(count())` 竞态断言，保留有意义的 `cardCount > 0` 验证。
+
+### 最终决策
+
+- V1.0 在全新隔离环境中完整验证通过，产品代码无缺陷，仅修复测试代码竞态。

@@ -170,7 +170,9 @@ function startNativeXugu() {
   mkdirSync(xuguDataDir, { recursive: true });
   mkdirSync(dirname(xuguNativeLogFile), { recursive: true });
   const logFd = openSync(xuguNativeLogFile, "a");
-  const child = spawn(binary, ["--child"], {
+  // 使用 --service 模式启动：虚谷自身以后台服务方式运行，
+  // 关闭终端不影响数据库。日志通过 stdio 重定向到文件。
+  const child = spawn(binary, ["--service"], {
     cwd: xuguDataDir,
     detached: true,
     stdio: ["ignore", logFd, logFd]
@@ -178,7 +180,7 @@ function startNativeXugu() {
   closeSync(logFd);
   child.unref();
   writeNativePid(child.pid);
-  console.log(`  虚谷原生服务已启动（PID ${child.pid}，监听 ${XUGU_PORT}）。`);
+  console.log(`  虚谷原生服务已启动（PID ${child.pid}，监听 ${XUGU_PORT}，service 模式）。`);
   console.log(`  工作目录: ${xuguDataDir}`);
   console.log(`  二进制: ${binary}`);
   return true;

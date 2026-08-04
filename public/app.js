@@ -1370,6 +1370,112 @@ async function renderSettings() {
     return;
   }
 
+  /**
+   * model selector component:
+   *   - select dropdown (initially empty or with current value only)
+   *   - fetch models button: uses URL+Key to call API for available models
+   *   - manual input toggle: when fetch fails or custom value needed
+   */
+  function createModelSelector(label, config, scopeName) {
+    const currentModel = config.model ?? "";
+    const wrapper = element("div", { className: "model-selector" });
+    const modelSelect = element("select", { id: `${label}-model`, name: `${label}-model` });
+    // Populate initial option based on current model
+    if (currentModel) {
+      modelSelect.append(element("option", { value: currentModel, text: currentModel, selected: true }));
+    } else {
+      modelSelect.append(element("option", { value: "", text: "（请获取或手动输入）" }));
+    }
+    const modelInput = element("input", { type: "text", id: `${label}-model-input`, placeholder: "手动输入模型名称", value: "" });
+    modelInput.style.display = "none";
+    const fetchBtn = element("button", { type: "button", className: "secondary-button model-fetch-btn", text: "获取模型列表" });
+    const modelErr = element("small", { className: "form-hint model-fetch-hint" });
+    const toggleInput = element("a", { href: "#", className: "model-toggle-input", text: "手动输入", onClick: (e) => {
+      e.preventDefault();
+      const isInput = modelInput.style.display !== "none";
+      if (isInput) {
+        modelInput.style.display = "none";
+        modelSelect.style.display = "";
+        toggleInput.textContent = "手动输入";
+        // 如果手输入了值，同步回下拉
+        if (modelInput.value.trim()) {
+          const existing = [...modelSelect.options].find(o => o.value === modelInput.value.trim());
+          if (!existing) {
+            modelSelect.replaceChildren(element("option", { value: modelInput.value.trim(), text: modelInput.value.trim(), selected: true }));
+          } else {
+            modelSelect.value = modelInput.value.trim();
+          }
+        }
+      } else {
+        modelSelect.style.display = "none";
+        modelInput.style.display = "";
+        toggleInput.textContent = "下拉选择";
+        modelInput.value = modelSelect.value;
+        modelInput.focus();
+      }
+    }});
+
+    fetchBtn.addEventListener("click", async () => {
+      const baseUrlEl = document.getElementById(`${label}-base-url`);
+      const apiKeyEl = document.getElementById(`${label}-api-key`);
+      const baseUrl = baseUrlEl?.value?.trim() || config.baseUrl || "";
+      const apiKey = apiKeyEl?.value?.trim() || "";
+      if (!baseUrl) {
+        modelErr.textContent = "请先填写 API 地址";
+        return;
+      }
+      fetchBtn.disabled = true;
+      fetchBtn.textContent = "获取中…";
+      modelErr.textContent = "";
+      try {
+        const result = await api("/api/settings/fetch-models", {
+          method: "POST",
+          mutation: true,
+          body: { scope: scopeName, baseUrl, apiKey }
+        });
+        const models = result.models || [];
+        if (models.length === 0) {
+          modelErr.textContent = "API 返回了空列表，可手动输入模型名";
+          modelSelect.replaceChildren(element("option", { value: "", text: "（空列表，请手动输入）", selected: true }));
+        } else {
+          const prev = modelSelect.value || currentModel;
+          modelSelect.replaceChildren(
+            element("option", { value: "", text: "（请选择）" }),
+            ...models.map(m => element("option", { value: m, text: m, selected: m === prev }))
+          );
+          if (prev && models.includes(prev)) modelSelect.value = prev;
+          modelErr.textContent = `获取到 ${models.length} 个模型`;
+        }
+        // 确保下拉模式可见
+        modelInput.style.display = "none";
+        modelSelect.style.display = "";
+        toggleInput.textContent = "手动输入";
+      } catch (err) {
+        modelErr.textContent = err.message || "获取失败，可手动输入";
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.textContent = "获取模型列表";
+      }
+    });
+
+    // 提供一个 getValue 方法，供表单提交时调用
+    wrapper.getModelValue = () => {
+      if (modelInput.style.display !== "none") return modelInput.value.trim();
+      return modelSelect.value.trim();
+    };
+
+    wrapper.replaceChildren(
+      element("div", { className: "model-selector-controls" }, [
+        modelSelect,
+        modelInput,
+        fetchBtn,
+        toggleInput
+      ]),
+      modelErr
+    );
+    return wrapper;
+  }
+
   function providerForm(label, config, endpoint) {
     const providerSelect = element("select", { id: `${label}-provider` }, [
       element("option", { value: "disabled", text: "未启用", selected: config.provider === "disabled" }),
@@ -1377,7 +1483,7 @@ async function renderSettings() {
     ]);
     const baseUrl = element("input", { type: "url", id: `${label}-base-url`, name: `${label}-base-url`, autoComplete: "url", value: config.baseUrl ?? "", placeholder: ["https:", "//api.example.com/v1"].join("") });
     const apiKey = element("input", { type: "password", id: `${label}-api-key`, name: `${label}-api-key`, autoComplete: "new-password", value: "", placeholder: config.apiKeySet ? `已配置（${config.apiKeyMasked}）` : "输入 API Key" });
-    const model = element("input", { type: "text", id: `${label}-model`, name: `${label}-model`, autoComplete: "off", value: config.model ?? "", placeholder: "glm-5.2 / gpt-4o 等" });
+    const modelSelector = createModelSelector(label, config, label === "gen" ? "generation" : label);
     const allowedHosts = element("input", { type: "text", id: `${label}-hosts`, name: `${label}-hosts`, autoComplete: "off", value: config.allowedHosts ?? "", placeholder: "api.example.com" });
     const err = element("p", { className: "form-error", role: "alert" });
     const save = element("button", { type: "submit", className: "primary-button", text: "保存" });
@@ -1418,7 +1524,7 @@ async function renderSettings() {
             provider: providerSelect.value,
             baseUrl: baseUrl.value.trim(),
             apiKey: apiKey.value.trim(),
-            model: model.value.trim(),
+            model: modelSelector.getModelValue(),
             allowedHosts: allowedHosts.value.trim()
           }
         });
@@ -1450,7 +1556,9 @@ async function renderSettings() {
         config.apiKeySet ? element("small", { className: "form-hint", text: `当前: ${config.apiKeyMasked}，留空则不修改` }) : null
       ]),
       element("div", { className: "field" }, [
-        element("label", { htmlFor: `${label}-model`, text: "模型名称" }), model
+        element("label", { htmlFor: `${label}-model`, text: "模型名称" }),
+        element("small", { className: "form-hint", text: '先填好 API 地址和 Key，再点「获取模型列表」' }),
+        modelSelector
       ]),
       element("details", { className: "settings-advanced" }, [
         element("summary", { text: "高级设置" }),
@@ -1506,7 +1614,11 @@ async function renderSettings() {
             provider: form.querySelector(`#${label}-provider`).value,
             baseUrl: form.querySelector(`#${label}-base-url`).value.trim(),
             apiKey: form.querySelector(`#${label}-api-key`).value.trim(),
-            model: form.querySelector(`#${label}-model`).value.trim(),
+            model: (() => {
+              const sel = form.querySelector(`#${label}-model`);
+              const inp = form.querySelector(`#${label}-model-input`);
+              return (inp && inp.style.display !== "none") ? inp.value.trim() : (sel?.value?.trim() || "");
+            })(),
             allowedHosts: form.querySelector(`#${label}-hosts`).value.trim(),
             timeoutMs: Number(form.querySelector(`#${label}-timeout`).value),
             maxOutputTokens: Number(form.querySelector(`#${label}-tokens`).value),
@@ -1533,24 +1645,8 @@ async function renderSettings() {
     const baseUrl = element("input", { type: "url", id: `${label}-base-url`, name: `${label}-base-url`, autoComplete: "url", value: config.baseUrl ?? "", placeholder: ["https:", "//open.bigmodel.cn/api/paas/v4"].join("") });
     const apiKey = element("input", { type: "password", id: `${label}-api-key`, name: `${label}-api-key`, autoComplete: "new-password", value: "", placeholder: config.apiKeySet ? `已配置（${config.apiKeyMasked}）` : "输入 API Key（留空则复用上方项目更新 AI 的 Key）" });
 
-    // 模型下拉菜单：Coding Plan 内置的视觉模型优先，需要单独充值的标注在后
-    const VISION_MODELS = [
-      { value: "glm-4.6v", text: "GLM-4.6V（Coding Plan 内置·128K 视觉 SOTA·推荐）" },
-      { value: "glm-4v-flash", text: "GLM-4V-Flash（免费版·能力有限）" },
-      { value: "glm-5v-turbo", text: "GLM-5V-Turbo（需标准端点单独充值）" },
-      { value: "glm-4.5v", text: "GLM-4.5V（需标准端点单独充值）" },
-      { value: "glm-4v-plus", text: "GLM-4V-Plus（需标准端点单独充值）" },
-      { value: "glm-ocr", text: "GLM-OCR（文档专用 OCR·需标准端点）" }
-    ];
-    const currentModel = config.model ?? "";
-    const modelMatched = VISION_MODELS.some(m => m.value === currentModel);
-    const model = element("select", { id: `${label}-model` }, [
-      ...VISION_MODELS.map(m => element("option", { value: m.value, text: m.text, selected: currentModel === m.value })),
-      // 如果当前模型不在列表中（自定义/其他），追加一项
-      ...(modelMatched ? [] : [element("option", { value: currentModel, text: currentModel ? `自定义: ${currentModel}` : "（请选择）", selected: true })])
-    ]);
-    // 默认选中 Coding Plan 内置的最佳视觉模型
-    if (!currentModel) model.value = "glm-4.6v";
+    // 模型选择器：填好 URL+Key 后点"获取模型列表"动态加载，也可手动输入
+    const modelSelector = createModelSelector(label, config, "vision");
 
     const allowedHosts = element("input", { type: "text", id: `${label}-hosts`, name: `${label}-hosts`, autoComplete: "off", value: config.allowedHosts ?? "", placeholder: "open.bigmodel.cn" });
     const timeout = element("input", { type: "number", id: `${label}-timeout`, value: config.timeoutMs ?? 120000, min: 1000, max: 600000, step: 1000 });
@@ -1590,7 +1686,7 @@ async function renderSettings() {
             provider: providerSelect.value,
             baseUrl: baseUrl.value.trim(),
             apiKey: apiKey.value.trim(),
-            model: model.value,
+            model: modelSelector.getModelValue(),
             allowedHosts: allowedHosts.value.trim(),
             timeoutMs: Number(timeout.value),
             maxOutputTokens: Number(maxTokens.value)
@@ -1615,8 +1711,9 @@ async function renderSettings() {
         element("label", { htmlFor: `${label}-provider`, text: "服务类型" }), providerSelect
       ]),
       element("div", { className: "field" }, [
-        element("label", { htmlFor: `${label}-model`, text: "视觉模型" }), model,
-        element("small", { className: "form-hint", text: "Coding Plan 内置 GLM-4.6V（推荐）；其他视觉模型需在标准端点 /paas/v4 单独充值" })
+        element("label", { htmlFor: `${label}-model`, text: "视觉模型" }),
+        element("small", { className: "form-hint", text: '先填好 API 地址和 Key，再点「获取模型列表」' }),
+        modelSelector
       ]),
       element("div", { className: "field" }, [
         element("label", { htmlFor: `${label}-base-url`, text: "API 地址" }), baseUrl,

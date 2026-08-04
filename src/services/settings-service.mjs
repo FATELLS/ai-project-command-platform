@@ -229,12 +229,113 @@ export function createSettingsService(database, options = {}) {
     }
   }
 
+  /**
+   * 调用 OpenAI 兼容的 /v1/models 或 /models 端点获取可用模型列表。
+   * 支持两种调用方式：
+   *   1. 临时凭据模式：前端传入 baseUrl + apiKey（用于"保存前预览"）
+   *   2. 已保存配置模式：从数据库读取已保存的配置
+   */
+  async function fetchModels(principal, { scope, baseUrl, apiKey } = {}) {
+    if (!principal?.isPlatformAdmin) {
+      const error = new Error("仅平台管理员可获取模型列表");
+      error.status = 403;
+      error.code = "FORBIDDEN";
+      throw error;
+    }
+
+    // 确定使用哪个配置的凭据
+    let url, key, hosts;
+    if (baseUrl) {
+      // 临时凭据模式：使用前端传入的值
+      url = baseUrl.trim();
+      key = (apiKey || "").trim();
+      if (!url) {
+        const error = new Error("请先填写 API 地址");
+        error.status = 400;
+        error.code = "MODELS_FETCH_NO_URL";
+        throw error;
+      }
+    } else {
+      // 已保存配置模式：从数据库读取
+      if (!["chat", "generation", "vision"].includes(scope)) {
+        const error = new Error("未知的 AI 服务类型");
+        error.status = 400;
+        error.code = "INVALID_AI_SCOPE";
+        throw error;
+      }
+      const config = scope === "generation" ? getAiGenerationConfig()
+        : scope === "vision" ? getAiVisionConfig()
+        : getAiChatConfig();
+      url = config.baseUrl || "";
+      key = config.apiKey || "";
+      hosts = config.allowedHosts || "";
+      if (!url) {
+        const error = new Error("请先填写并保存 API 地址");
+        error.status = 400;
+        error.code = "MODELS_FETCH_NO_URL";
+        throw error;
+      }
+    }
+
+    // 构建 models 端点 URL
+    // baseUrl 通常是 https://api.example.com/v1，models 端点是 /v1/models
+    // 如果 baseUrl 已经以 /v1 结尾，则追加 /models；否则追加 /v1/models
+    const modelsUrl = url.endsWith("/") ? `${url}models` : `${url}/models`;
+
+    // 检查域名白名单（安全校验）
+    if (hosts) {
+      const allowedHosts = hosts.split(",").map(h => h.trim()).filter(Boolean);
+      try {
+        const hostname = new URL(modelsUrl).hostname;
+        if (allowedHosts.length > 0 && !allowedHosts.includes(hostname)) {
+          const error = new Error(`域名 ${hostname} 不在允许列表中`);
+          error.status = 400;
+          error.code = "MODELS_FETCH_HOST_BLOCKED";
+          throw error;
+        }
+      } catch { /* URL 无效时让 fetch 报错 */ }
+    }
+
+    try {
+      const headers = { "Content-Type": "application/json" };
+      if (key) headers["Authorization"] = `Bearer ${key}`;
+      const response = await fetch(modelsUrl, {
+        method: "GET",
+        headers,
+        signal: AbortSignal.timeout(10_000)
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        const error = new Error(`获取模型列表失败 (${response.status}): ${text.slice(0, 200)}`);
+        error.status = 400;
+        error.code = "MODELS_FETCH_FAILED";
+        throw error;
+      }
+      const data = await response.json();
+      // OpenAI 兼容格式: { data: [{ id: "model-name", ... }, ...] }
+      const models = Array.isArray(data?.data)
+        ? data.data.map(m => m.id).filter(Boolean).sort()
+        : Array.isArray(data?.models)
+          ? data.models.map(m => typeof m === "string" ? m : m.id).filter(Boolean).sort()
+          : [];
+      return { models };
+    } catch (cause) {
+      if (cause?.code === "MODELS_FETCH_FAILED") throw cause;
+      const error = new Error(`获取模型列表失败: ${cause.message || cause}`);
+      error.status = 400;
+      error.code = "MODELS_FETCH_FAILED";
+      error.cause = cause;
+      throw error;
+    }
+  }
+
   return Object.freeze({
     getAllSettings,
     updateAiChatConfig,
     updateAiGenerationConfig,
     updateAiVisionConfig,
     testConnection,
+    fetchModels,
     buildProviderEnvironment,
     getAiChatConfig,
     getAiGenerationConfig,

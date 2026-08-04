@@ -2535,6 +2535,16 @@ button, a, select, input { min-height: 44px; }
 .settings-advanced .field:last-child { padding-bottom: 12px; }
 .settings-form-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+/* 模型选择器：下拉 + 获取按钮 + 手动输入切换 */
+.model-selector { width: 100%; }
+.model-selector-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.model-selector-controls select,
+.model-selector-controls input[type="text"] { flex: 1 1 200px; min-width: 160px; }
+.model-selector-controls .model-fetch-btn { flex: 0 0 auto; white-space: nowrap; }
+.model-selector-controls .model-toggle-input { font-size: 12px; color: var(--accent, #4a9); text-decoration: none; white-space: nowrap; cursor: pointer; }
+.model-selector-controls .model-toggle-input:hover { text-decoration: underline; }
+.model-fetch-hint { display: block; margin-top: 4px; font-size: 12px; color: var(--text-muted, #999); }
+
 .create-dialog { width: min(100%, 620px); }
 .create-choice-card { min-height: 104px; padding: 16px; border-width: 1px; border-radius: 6px; }
 .create-choice-icon { width: 40px; }

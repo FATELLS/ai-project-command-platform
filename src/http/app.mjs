@@ -242,6 +242,13 @@ export function createApp(options) {
         return respond(response, 200, await settingsService.testConnection(principal, (await readJson(request, 4 * 1024)).scope));
       }
 
+      if (request.method === "POST" && url.pathname === "/api/settings/fetch-models") {
+        const principal = requirePrincipal(request);
+        if (!principal.isPlatformAdmin) throw new HttpError(403, "FORBIDDEN", "仅平台管理员可获取模型列表");
+        requireCsrf(request, principal);
+        return respond(response, 200, await settingsService.fetchModels(principal, await readJson(request, 4 * 1024)));
+      }
+
       if (request.method === "PUT" && url.pathname === "/api/settings/ai-chat") {
         const principal = requirePrincipal(request);
         if (!principal.isPlatformAdmin) throw new HttpError(403, "FORBIDDEN", "仅平台管理员可修改设置");

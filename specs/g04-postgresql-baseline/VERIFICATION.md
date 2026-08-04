@@ -23,10 +23,10 @@
 | Metric | V1 (XuguDB) | V2 (PostgreSQL) |
 |---|---|---|
 | Tables | 37 | 37 |
-| Active CHECK constraints | 2 | 50+ |
-| FK constraints | 45 | 45 |
-| UNIQUE constraints | 18 | 18 |
-| Indexes | 38 | 38 |
+| Active CHECK constraints | 2 | 59 |
+| FK constraints | 45 | 74 (3 deferred) |
+| UNIQUE constraints | 18 | 21 (18 inline + 3 unique indexes) |
+| Indexes | 38 | 39 |
 | CLOB columns | 22 | 0 (→ JSONB/TEXT) |
 | VARCHAR(40) timestamps | ~80+ | 0 (→ TIMESTAMPTZ) |
 | INTEGER booleans | 6 | 0 (→ BOOLEAN) |

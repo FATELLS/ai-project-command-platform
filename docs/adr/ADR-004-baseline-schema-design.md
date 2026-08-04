@@ -59,10 +59,10 @@ Seed data uses synthetic names and mock password hashes. The stable external ID 
 ## Validation
 
 - 37 tables created (same domain coverage as V1)
-- 50+ CHECK constraints active
-- 45 FK constraints
-- 18 UNIQUE constraints
-- 38 indexes
-- 22 JSONB columns (replacing CLOB)
+- 59 CHECK constraints active
+- 74 FK constraints (3 deferred for circular dependencies)
+- 21 UNIQUE constraints (18 inline + 3 unique indexes)
+- 39 indexes (including partial indexes)
+- 28 JSONB columns (replacing CLOB)
 - All timestamps are TIMESTAMPTZ
 - All booleans are BOOLEAN

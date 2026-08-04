@@ -20,7 +20,7 @@
 | G01 | Engineering governance | ✅ complete | Constitution, standards, ADRs, AGENTS/README rewrite, .planning migration |
 | G02 | Baseline freeze | ✅ complete | BASELINE.md: 69 API endpoints, 37 tables, 5 journeys, 9 gaps |
 | G03 | Workspace skeleton | ✅ complete | 6 workspaces, TS strict, structure verify PASS |
-| G04 | PostgreSQL data baseline | ✅ complete | 37 tables, Kysely client, migration runner, fixtures, compose.yaml |
+| G04 | PostgreSQL data baseline | ✅ complete | 37 tables, 59 CHECK, 74 FK, Kysely client, migration runner, fixtures, compose.yaml |
 | G05 | Fastify platform base | ⏳ pending | — |
 | G06 | Identity & projects module | ⏳ pending | — |
 | G07 | Project graph module | ⏳ pending | — |

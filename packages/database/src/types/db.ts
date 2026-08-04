@@ -12,6 +12,8 @@
  * - Nullable columns use `| null`.
  */
 
+import type { Generated } from "kysely";
+
 // ==================== IDENTITY DOMAIN ====================
 
 export interface UsersTable {
@@ -518,8 +520,3 @@ export interface Database {
   product_test_case_results: ProductTestCaseResultsTable;
   platform_settings: PlatformSettingsTable;
 }
-
-// ==================== Utility Types ====================
-
-/** Omit the Generated wrapper for insert types. */
-import type { Generated } from "kysely";

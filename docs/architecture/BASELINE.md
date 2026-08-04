@@ -88,7 +88,7 @@
 | Generation | 4 | `generation_jobs`, `generation_job_materials`, `generation_job_evidence`, `generation_attempts` |
 | Change Proposals | 7 | `change_proposals`, `change_proposal_items`, `change_proposal_evidence`, `material_generation_grants`, `proposal_review_items`, `proposal_merges` |
 | Release | 2 | `publication_events`, `material_readiness_snapshots` |
-| Operations | 4 | `audit_events`, `operation_traces`, `error_events`, `product_test_runs`, `product_test_case_results` |
+| Operations | 5 | `audit_events`, `operation_traces`, `error_events`, `product_test_runs`, `product_test_case_results` |
 | Settings | 1 | `platform_settings` |
 
 ### Schema Characteristics (V1 → V2 Migration Notes)

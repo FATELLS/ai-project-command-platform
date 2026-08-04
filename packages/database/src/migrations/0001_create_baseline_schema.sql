@@ -444,8 +444,7 @@ CREATE TABLE generation_jobs (
         REFERENCES project_versions(project_id, id),
     CONSTRAINT fk_gj_template FOREIGN KEY (template_id, template_version)
         REFERENCES templates(id, version),
-    CONSTRAINT fk_gj_proposal FOREIGN KEY (project_id, proposal_id)
-        REFERENCES change_proposals(project_id, id),
+    -- fk_gj_proposal added post-creation (change_proposals defined in §7)
     CONSTRAINT fk_gj_retry FOREIGN KEY (project_id, retry_of_job_id)
         REFERENCES generation_jobs(project_id, id)
 );
@@ -822,15 +821,22 @@ ALTER TABLE projects
 
 -- recent_project_access was forward-declared; FK is already active.
 
+-- generation_jobs references change_proposals which is defined later (§7).
+ALTER TABLE generation_jobs
+    ADD CONSTRAINT fk_gj_proposal
+    FOREIGN KEY (project_id, proposal_id)
+    REFERENCES change_proposals(project_id, id)
+    DEFERRABLE INITIALLY DEFERRED;
+
 -- ==========================================================================
 -- SUMMARY
 -- ==========================================================================
 -- Tables created: 37 (same domain coverage as V1)
--- CHECK constraints: 50+ (V1 had 2 active, 70+ skipped)
--- FK constraints: 45
--- UNIQUE constraints: 18
--- Indexes: 38
--- JSONB columns: 22 (replacing V1 CLOB)
+-- CHECK constraints: 59 (V1 had 2 active, 70+ skipped)
+-- FK constraints: 74 (includes 3 DEFERRABLE INITIALLY DEFERRED)
+-- UNIQUE constraints: 18 inline + 3 unique indexes = 21
+-- Indexes: 39 (including partial indexes)
+-- JSONB columns: 28 (replacing V1 CLOB)
 -- TIMESTAMPTZ columns: all timestamps (replacing V1 VARCHAR(40))
--- BOOLEAN columns: 6 (replacing V1 INTEGER)
+-- BOOLEAN columns: 7 (replacing V1 INTEGER)
 -- GENERATED ALWAYS AS IDENTITY: 5 (replacing V1 IDENTITY(1,1))

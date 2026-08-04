@@ -8,7 +8,7 @@ coverage/
 *.zip
 *.tar
 *.tar.gz
-!vendor/xugudb/image/*.tar.gz
+!vendor/xugudb/image/manifest.json
 *.tgz
 *.rpm
 *.msi

@@ -57,7 +57,7 @@ has_native_binary() {
   return 1
 }
 
-# 安装 Linux 虚谷原生运行依赖（libaio）
+# 安装 Linux 虚谷原生运行依赖（libaio, libssl1.1）
 install_linux_deps() {
   log "检测虚谷原生依赖..."
   if command -v apt-get &>/dev/null; then
@@ -66,16 +66,42 @@ install_linux_deps() {
       log "安装 libaio..."
       sudo apt-get update -qq 2>/dev/null
       sudo apt-get install -y -qq libaio1 2>/dev/null || sudo apt-get install -y -qq libaio1t64 2>/dev/null || true
+      # Ubuntu 24.04 t64 transition: symlink libaio.so.1t64 → libaio.so.1
+      arch_lib_dir=$(ldconfig -C 2>/dev/null; dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null || echo "aarch64-linux-gnu")
+      for libdir in /usr/lib/$arch_lib_dir /usr/lib/aarch64-linux-gnu /usr/lib/x86_64-linux-gnu; do
+        if [[ -f "$libdir/libaio.so.1t64" && ! -f "$libdir/libaio.so.1" ]]; then
+          sudo ln -s "$libdir/libaio.so.1t64" "$libdir/libaio.so.1" 2>/dev/null || true
+        fi
+      done
+    fi
+    # libssl1.1: 虚谷需要 OpenSSL 1.1，Ubuntu 22.04+ 默认只有 3.x
+    if ! ldconfig -p 2>/dev/null | grep -q "libcrypto.so.1.1"; then
+      log "安装 libssl1.1..."
+      sudo apt-get install -y -qq libssl1.1 2>/dev/null || true
+      # Ubuntu 24.04: 从 22.04 仓库下载
+      if ! ldconfig -p 2>/dev/null | grep -q "libcrypto.so.1.1"; then
+        arch=$(dpkg --print-architecture 2>/dev/null || echo "arm64")
+        wget -q "http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_${arch}.deb" -O /tmp/libssl11.deb 2>/dev/null && \
+        sudo dpkg -i /tmp/libssl11.deb 2>/dev/null && rm -f /tmp/libssl11.deb || true
+      fi
     fi
   elif command -v yum &>/dev/null; then
     if ! ldconfig -p 2>/dev/null | grep -q libaio; then
       log "安装 libaio..."
       sudo yum install -y libaio 2>/dev/null || true
     fi
+    if ! ldconfig -p 2>/dev/null | grep -q "libcrypto.so.1.1"; then
+      log "安装 compat-openssl11..."
+      sudo yum install -y compat-openssl11 2>/dev/null || true
+    fi
   elif command -v dnf &>/dev/null; then
     if ! ldconfig -p 2>/dev/null | grep -q libaio; then
       log "安装 libaio..."
       sudo dnf install -y libaio 2>/dev/null || true
+    fi
+    if ! ldconfig -p 2>/dev/null | grep -q "libcrypto.so.1.1"; then
+      log "安装 compat-openssl11..."
+      sudo dnf install -y compat-openssl11 2>/dev/null || true
     fi
   fi
 }

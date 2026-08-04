@@ -23,14 +23,21 @@ jobs:
           node-version: "20.19.5"
           cache: npm
       - run: npm ci
-      - name: Install libaio (Xugu native runtime dependency)
+      - name: Install native runtime dependencies (libaio, OpenSSL 1.1)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libaio1t64 || sudo apt-get install -y -qq libaio1
-          # Ubuntu 24.04 renames libaio.so.1 to libaio.so.1t64 — create symlink
-          if [ -f /usr/lib/aarch64-linux-gnu/libaio.so.1t64 ] && [ ! -f /usr/lib/aarch64-linux-gnu/libaio.so.1 ]; then
-            sudo ln -s /usr/lib/aarch64-linux-gnu/libaio.so.1t64 /usr/lib/aarch64-linux-gnu/libaio.so.1
-          fi
+          sudo apt-get install -y -qq libaio1t64 libssl1.1 || {
+            sudo apt-get install -y -qq libaio1 || true
+            # Ubuntu 24.04: libaio1t64 renames libaio.so.1 to libaio.so.1t64
+            if [ -f /usr/lib/aarch64-linux-gnu/libaio.so.1t64 ] && [ ! -f /usr/lib/aarch64-linux-gnu/libaio.so.1 ]; then
+              sudo ln -s /usr/lib/aarch64-linux-gnu/libaio.so.1t64 /usr/lib/aarch64-linux-gnu/libaio.so.1
+            fi
+            # Ubuntu 24.04: no libssl1.1 package, download from Ubuntu 22.04
+            if [ ! -f /usr/lib/aarch64-linux-gnu/libcrypto.so.1.1 ]; then
+              wget -q http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_arm64.deb -O /tmp/libssl11.deb && \
+              sudo dpkg -i /tmp/libssl11.deb || true
+            fi
+          }
       - name: Download Node.js runtime
         run: |
           curl -fsSL "https://nodejs.org/dist/v${NODE_RUNTIME_VERSION}/node-v${NODE_RUNTIME_VERSION}-linux-arm64.tar.xz" -o "$RUNNER_TEMP/node.tar.xz"

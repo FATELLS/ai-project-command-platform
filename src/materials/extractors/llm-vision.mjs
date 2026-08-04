@@ -22,7 +22,7 @@ const MAX_FILE_BYTES = 15 * 1024 * 1024;
  * - PDF：先上传到智谱文件服务拿到 file_id，再用 file_url 传给模型
  *   （GLM-4V 的 file_url 不支持 base64 data URL，必须先上传）
  *
- * 视觉提取使用独立的多模态模型（如 glm-4.6v），不是文本生成模型（如 glm-5.2）。
+ * 视觉提取使用独立的多模态模型，不是文本生成模型。
  * 多模态调用的消息格式和返回处理与文本生成差异较大（content 是数组、容许 length 截断、
  * 容许非 JSON 返回），因此这里直接调 fetch 而不走 openai-compatible-provider 的 generate。
  *
@@ -121,17 +121,23 @@ export async function extractWithVision(input, limits, deps = {}) {
 }
 
 /**
- * 上传文件到智谱文件服务，返回可用于 file_url 的标识符。
+ * 上传文件到 AI 服务商的文件服务，返回可用于 file_url 的标识符。
  *
- * 智谱的 /paas/v4/files 接口返回 { id }，但 GLM-4V 的 file_url 需要的是
- * 智谱内部的文件 URL 格式。经过测试，file_url 的 url 字段需要填上传返回的 id。
+ * 从 vision config 的 baseUrl 推导文件上传端点：
+ *   /coding/paas/v4 → /paas/v4/files（去掉 coding 路径段）
+ *   /paas/v4      → /paas/v4/files
+ *   /v1           → /v1/files
  *
- * 注意：文件上传走标准端点 /paas/v4（不是 coding 端点），因为 coding 端点不支持文件上传。
- * 上传后再用 coding 端点的 chat/completions 调用模型。
+ * 注意：部分供应商的 coding 端点不支持文件上传，需用标准端点。
  */
 async function uploadFileForVision(fileBuffer, filePath, config) {
-  // 文件上传走标准端点（coding 端点不支持文件上传 API）
-  const uploadEndpoint = "https://open.bigmodel.cn/api/paas/v4/files";
+  // 文件上传走标准端点（从 vision baseUrl 推导，去掉 coding/ 路径段）
+  // 例：https://provider.com/api/coding/paas/v4 → https://provider.com/api/paas/v4/files
+  //     https://provider.com/api/paas/v4      → https://provider.com/api/paas/v4/files
+  const baseForUpload = config.baseUrl
+    .replace(/\/$/, "")
+    .replace(/\/coding\//, "/");
+  const uploadEndpoint = baseForUpload + "/files";
   const filename = basename(filePath);
 
   const formData = new FormData();

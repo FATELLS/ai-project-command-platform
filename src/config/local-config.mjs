@@ -42,12 +42,13 @@ function getConfigPath() {
 const CONFIG_TEMPLATE = {
   _comment: "本文件包含敏感 API 配置，已被 .gitignore 排除。填写后重启服务生效。",
   _comment2: "provider: disabled 或 openai-compatible",
+  _comment3: "baseUrl / model / allowedHosts 请填写您使用的 AI 服务商信息",
   aiGeneration: {
-    provider: "openai-compatible",
-    baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+    provider: "disabled",
+    baseUrl: "",
     apiKey: "",
-    model: "glm-4.6",
-    allowedHosts: "open.bigmodel.cn",
+    model: "",
+    allowedHosts: "",
     reasoningEffort: "",
     providerLabel: ""
   },
@@ -62,7 +63,7 @@ const CONFIG_TEMPLATE = {
     provider: "disabled",
     baseUrl: "",
     apiKey: "",
-    model: "glm-4.6v",
+    model: "",
     allowedHosts: ""
   }
 };

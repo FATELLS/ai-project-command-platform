@@ -74,7 +74,6 @@ try {
   }
 
   // 构建 vision 配置给材料提取器（PDF/图片走 LLM 多模态，不依赖 pdftotext/tesseract）
-  // Coding Plan 在 /coding/paas/v4 端点上直接支持 glm-4.6v，无需切到 /paas/v4
   // 优先从 DB settings 读（前端保存的），fallback 到 .env.local 的 AI_VISION_*，再 fallback 到 generation 配置
   const settingsService = createSettingsService(database);
   const visionEnv = settingsService.buildProviderEnvironment("vision");
@@ -104,7 +103,7 @@ try {
   const visionConfig = {
     baseUrl: visionEnv.AI_VISION_BASE_URL || process.env.AI_VISION_BASE_URL || genEnv.AI_GENERATION_BASE_URL || "",
     apiKey: visionEnv.AI_VISION_API_KEY || process.env.AI_VISION_API_KEY || genEnv.AI_GENERATION_API_KEY || "",
-    model: visionEnv.AI_VISION_MODEL || process.env.AI_VISION_MODEL || "glm-4.6v",
+    model: visionEnv.AI_VISION_MODEL || process.env.AI_VISION_MODEL || genEnv.AI_GENERATION_MODEL || "",
     timeoutMs: Number(visionEnv.AI_VISION_TIMEOUT_MS ?? process.env.AI_VISION_TIMEOUT_MS ?? 120_000),
     maxOutputTokens: Number(visionEnv.AI_VISION_MAX_OUTPUT_TOKENS ?? process.env.AI_VISION_MAX_OUTPUT_TOKENS ?? 4_000)
   };

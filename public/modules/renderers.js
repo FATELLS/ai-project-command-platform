@@ -1553,7 +1553,7 @@ function generationErrorMessage(error, resetTime = "配额重置") {
     AI_PROVIDER_HOST_NOT_ALLOWED: "AI 服务地址域名未加入白名单。请在「设置」页填写或重新保存 AI 配置，系统会自动补全。",
     AI_PROVIDER_CONFIG_INCOMPLETE: "AI 配置不完整。请在「设置」页检查 API 地址、密钥和模型是否都已填写。",
     AI_PROVIDER_CONFIG_INVALID: "AI 配置有误。请在「设置」页检查 provider 类型和推理强度等参数。",
-    AI_PROVIDER_CONFIG_INVALID_URL: "AI 服务地址格式有误。请填写完整的 HTTPS 地址（例如 open.bigmodel.cn），包含协议前缀。",
+    AI_PROVIDER_CONFIG_INVALID_URL: "AI 服务地址格式有误。请填写完整的 HTTPS 地址（例如 https://api.example.com/v1），包含协议前缀。",
     AI_PROVIDER_NETWORK_ERROR: "无法连接 AI 服务，请检查网络或代理设置后重试。",
     AI_PROVIDER_TIMEOUT: "AI 服务响应超时，请稍后重试或增加超时时间。",
     AI_PROVIDER_HTTP_401: "AI 密钥无效或已过期，请在「设置」页更新密钥。",

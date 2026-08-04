@@ -1642,13 +1642,13 @@ async function renderSettings() {
       element("option", { value: "disabled", text: "未启用", selected: config.provider === "disabled" }),
       element("option", { value: "openai-compatible", text: "OpenAI 兼容", selected: config.provider === "openai-compatible" })
     ]);
-    const baseUrl = element("input", { type: "url", id: `${label}-base-url`, name: `${label}-base-url`, autoComplete: "url", value: config.baseUrl ?? "", placeholder: ["https:", "//open.bigmodel.cn/api/paas/v4"].join("") });
+    const baseUrl = element("input", { type: "url", id: `${label}-base-url`, name: `${label}-base-url`, autoComplete: "url", value: config.baseUrl ?? "", placeholder: "https://api.example.com/v1" });
     const apiKey = element("input", { type: "password", id: `${label}-api-key`, name: `${label}-api-key`, autoComplete: "new-password", value: "", placeholder: config.apiKeySet ? `已配置（${config.apiKeyMasked}）` : "输入 API Key（留空则复用上方项目更新 AI 的 Key）" });
 
     // 模型选择器：填好 URL+Key 后点"获取模型列表"动态加载，也可手动输入
     const modelSelector = createModelSelector(label, config, "vision");
 
-    const allowedHosts = element("input", { type: "text", id: `${label}-hosts`, name: `${label}-hosts`, autoComplete: "off", value: config.allowedHosts ?? "", placeholder: "open.bigmodel.cn" });
+    const allowedHosts = element("input", { type: "text", id: `${label}-hosts`, name: `${label}-hosts`, autoComplete: "off", value: config.allowedHosts ?? "", placeholder: "api.example.com" });
     const timeout = element("input", { type: "number", id: `${label}-timeout`, value: config.timeoutMs ?? 120000, min: 1000, max: 600000, step: 1000 });
     const maxTokens = element("input", { type: "number", id: `${label}-tokens`, value: config.maxOutputTokens ?? 4000, min: 100, max: 16000, step: 100 });
     const err = element("p", { className: "form-error", role: "alert" });
@@ -1717,7 +1717,7 @@ async function renderSettings() {
       ]),
       element("div", { className: "field" }, [
         element("label", { htmlFor: `${label}-base-url`, text: "API 地址" }), baseUrl,
-        element("small", { className: "form-hint", text: "智谱标准端点（非 coding 端点）" })
+        element("small", { className: "form-hint", text: "填写您的 AI 服务商 API 地址" })
       ]),
       element("div", { className: "field" }, [
         element("label", { htmlFor: `${label}-api-key`, text: "API Key" }), apiKey,

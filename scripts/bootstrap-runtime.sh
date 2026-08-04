@@ -81,7 +81,13 @@ install_linux_deps() {
       # Ubuntu 24.04: 从 22.04 仓库下载
       if ! ldconfig -p 2>/dev/null | grep -q "libcrypto.so.1.1"; then
         arch=$(dpkg --print-architecture 2>/dev/null || echo "arm64")
-        wget -q "http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_${arch}.deb" -O /tmp/libssl11.deb 2>/dev/null && \
+        # ARM64 包在 ports.ubuntu.com，x86_64 在 archive.ubuntu.com
+        if [[ "$arch" == "arm64" ]]; then
+          url="http://ports.ubuntu.com/ubuntu-ports/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_${arch}.deb"
+        else
+          url="http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_${arch}.deb"
+        fi
+        wget -q "$url" -O /tmp/libssl11.deb 2>/dev/null && \
         sudo dpkg -i /tmp/libssl11.deb 2>/dev/null && rm -f /tmp/libssl11.deb || true
       fi
     fi

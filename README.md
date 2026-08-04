@@ -4,6 +4,29 @@
 
 当前版本：`1.0.0`。
 
+## 一行安装
+
+**Linux / macOS：**
+
+```bash
+curl -fsSL https://github.com/FATELLS/ai-project-command-platform/releases/latest/download/install.sh | bash
+```
+
+**Windows（PowerShell）：**
+
+```powershell
+irm https://github.com/FATELLS/ai-project-command-platform/releases/latest/download/install.ps1 | iex
+```
+
+脚本自动检测操作系统和架构，下载对应的发布包，安装系统依赖，启动平台并打印管理员凭据。
+
+| 平台 | 虚谷运行方式 | 需要容器？ |
+|------|------------|-----------|
+| Linux ARM64 | native（直接跑二进制） | 否 |
+| Linux x86_64 | native | 否 |
+| Windows amd64 | native | 否 |
+| macOS Apple Silicon | 容器 VM（自动装 Colima） | 是 |
+
 ## 产品边界
 
 - 虚谷数据库是唯一持久化后端。

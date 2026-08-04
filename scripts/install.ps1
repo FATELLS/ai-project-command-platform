@@ -18,7 +18,7 @@ $GithubBase = "https://github.com/$Repo/releases"
 function Write-Info  { Write-Host "[INFO]  $_" -ForegroundColor Green }
 function Write-Warn  { Write-Host "[WARN]  $_" -ForegroundColor Yellow }
 function Write-Err   { Write-Host "[ERROR] $_" -ForegroundColor Red; exit 1 }
-function Write-Step  { Write-Host "▶ $_" -ForegroundColor Cyan }
+function Write-Step  { Write-Host "> $_" -ForegroundColor Cyan }
 
 Write-Host ""
 Write-Host "================================================" -ForegroundColor White
@@ -60,66 +60,65 @@ if ($Version -eq "latest") {
 $packageName = "ai-project-command-platform-windows-amd64.zip"
 $downloadUrl = "$GithubBase/$versionPath/$packageName"
 
-# ── download ──────────────────────────────────────────────────
-Write-Step "Downloading $packageName..."
-Write-Info "URL: $downloadUrl"
-
 $tempDir = Join-Path $env:TEMP "aicp-install-$(Get-Random)"
 New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
 try {
-  Invoke-WebRequest -Uri $downloadUrl -OutFile (Join-Path $tempDir $packageName) -ErrorAction Stop
-} catch {
-  Write-Err "Download failed: $_`nURL: $downloadUrl"
-}
+  # ── download ──────────────────────────────────────────────────
+  Write-Step "Downloading $packageName..."
+  Write-Info "URL: $downloadUrl"
 
-$downloadedFile = Join-Path $tempDir $packageName
-$fileSize = [math]::Round((Get-Item $downloadedFile).Length / 1MB, 1)
-Write-Info "Download complete (${fileSize} MB)"
-Write-Host ""
+  try {
+    Invoke-WebRequest -Uri $downloadUrl -OutFile (Join-Path $tempDir $packageName) -ErrorAction Stop
+  } catch {
+    Write-Err "Download failed: $_`nURL: $downloadUrl"
+  }
 
-# ── extract ───────────────────────────────────────────────────
-Write-Step "Extracting to $InstallDir..."
+  $downloadedFile = Join-Path $tempDir $packageName
+  $fileSize = [math]::Round((Get-Item $downloadedFile).Length / 1MB, 1)
+  Write-Info "Download complete (${fileSize} MB)"
+  Write-Host ""
 
-$absoluteDir = if ([System.IO.Path]::IsPathRooted($InstallDir)) {
-  $InstallDir
-} else {
-  Join-Path (Get-Location) $InstallDir
-}
+  # ── extract ───────────────────────────────────────────────────
+  Write-Step "Extracting to $InstallDir..."
 
-New-Item -ItemType Directory -Path $absoluteDir -Force | Out-Null
-Expand-Archive -Path $downloadedFile -DestinationPath $tempDir -Force
+  $absoluteDir = if ([System.IO.Path]::IsPathRooted($InstallDir)) {
+    $InstallDir
+  } else {
+    Join-Path (Get-Location) $InstallDir
+  }
 
-# Find the top-level directory in the zip
-$extractedTop = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
-if ($extractedTop) {
-  $sourceDir = $extractedTop.FullName
-} else {
-  $sourceDir = $tempDir
-}
+  New-Item -ItemType Directory -Path $absoluteDir -Force | Out-Null
+  Expand-Archive -Path $downloadedFile -DestinationPath $tempDir -Force
 
-# Copy contents to install dir
-Copy-Item -Path (Join-Path $sourceDir "*") -Destination $absoluteDir -Recurse -Force
-Write-Info "Extraction complete"
-Write-Host ""
+  # Find the top-level directory in the zip
+  $extractedTop = Get-ChildItem -Path $tempDir -Directory | Select-Object -First 1
+  if ($extractedTop) {
+    $sourceDir = $extractedTop.FullName
+  } else {
+    $sourceDir = $tempDir
+  }
 
-# ── start ─────────────────────────────────────────────────────
-Write-Step "Starting platform..."
-Set-Location $absoluteDir
+  # Copy contents to install dir
+  Copy-Item -Path (Join-Path $sourceDir "*") -Destination $absoluteDir -Recurse -Force
+  Write-Info "Extraction complete"
+  Write-Host ""
 
-$env:PLATFORM_XUGU_LIFECYCLE = if ($env:PLATFORM_XUGU_LIFECYCLE) { $env:PLATFORM_XUGU_LIFECYCLE } else { "native" }
-Write-Info "Windows native mode: Xugu runs directly, no container needed"
+  # ── start ─────────────────────────────────────────────────────
+  Write-Step "Starting platform..."
+  Set-Location $absoluteDir
 
-Write-Host ""
-Write-Host "================================================" -ForegroundColor Green
-Write-Host "  Installation complete! Starting..." -ForegroundColor Green
-Write-Host "================================================" -ForegroundColor Green
-Write-Host ""
+  $env:PLATFORM_XUGU_LIFECYCLE = if ($env:PLATFORM_XUGU_LIFECYCLE) { $env:PLATFORM_XUGU_LIFECYCLE } else { "native" }
+  Write-Info "Windows native mode: Xugu runs directly, no container needed"
 
-& ".\start.bat"
+  Write-Host ""
+  Write-Host "================================================" -ForegroundColor Green
+  Write-Host "  Installation complete! Starting..." -ForegroundColor Green
+  Write-Host "================================================" -ForegroundColor Green
+  Write-Host ""
 
-# ── cleanup ───────────────────────────────────────────────────
-finally {
+  & ".\start.bat"
+} finally {
   if (Test-Path $tempDir) {
     Remove-Item -Path $tempDir -Recurse -Force -ErrorAction SilentlyContinue
   }

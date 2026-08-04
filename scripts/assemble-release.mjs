@@ -46,8 +46,56 @@ await mkdir(join(output, "scripts"), { recursive: true });
 await cp(join(root, "scripts", "manage-server.mjs"), join(output, "scripts", "manage-server.mjs"));
 await cp(join(root, "scripts", "bootstrap-runtime.sh"), join(output, "scripts", "bootstrap-runtime.sh"));
 
-// ── 复制 vendor（虚谷二进制 + 驱动 + 镜像）──────────────────
-await cp(join(root, "vendor", "xugudb"), join(output, "vendor", "xugudb"), { recursive: true });
+// ── 复制 vendor（按平台裁剪：只放该平台需要的虚谷二进制/驱动/镜像）──
+await mkdir(join(output, "vendor", "xugudb", "nodejs"), { recursive: true });
+await mkdir(join(output, "vendor", "xugudb", "image"), { recursive: true });
+
+// 1) Node.js 原生驱动：只复制该平台需要的
+const driverMap = {
+  "linux-arm64":    "xugudbjs-linux-aarch64.node",
+  "linux-x86_64":   "xugudbjs-linux-x86_64.node",
+  "windows-amd64":  "xugudbjs-win32-x64.node",
+  "macos-arm64":    "xugudbjs.node",
+  "macos-x86_64":   "xugudbjs.node"
+};
+const driverFile = driverMap[target];
+const driverSrc = join(root, "vendor", "xugudb", "nodejs", driverFile);
+if (await stat(driverSrc).then(() => true).catch(() => false)) {
+  await cp(driverSrc, join(output, "vendor", "xugudb", "nodejs", driverFile));
+}
+
+// 2) Docker 镜像：Linux/macOS managed 模式需要，Windows native 模式不需要
+const imageArch = target.includes("arm64") ? "arm64" : "amd64";
+const manifestSrc = join(root, "vendor", "xugudb", "image", "manifest.json");
+if (await stat(manifestSrc).then(() => true).catch(() => false)) {
+  const manifest = JSON.parse(await readFile(manifestSrc, "utf8"));
+  // 复制 manifest.json
+  await cp(manifestSrc, join(output, "vendor", "xugudb", "image", "manifest.json"));
+  // 复制对应架构的镜像 tar.gz
+  for (const [archName, entry] of Object.entries(manifest.images || {})) {
+    if (archName !== imageArch) continue;
+    const archiveSrc = join(root, "vendor", "xugudb", "image", entry.archive);
+    if (await stat(archiveSrc).then(() => true).catch(() => false)) {
+      await cp(archiveSrc, join(output, "vendor", "xugudb", "image", entry.archive));
+    }
+  }
+}
+
+// 3) 虚谷服务端二进制：native 模式需要，只复制对应平台
+const [targetOs, targetArch] = target.split("-");
+if (targetOs === "linux") {
+  const archDir = targetArch === "arm64" ? "aarch64" : "x86_64";
+  const serverSrc = join(root, "vendor", "xugudb", "server", "linux", archDir);
+  if (await stat(serverSrc).then(() => true).catch(() => false)) {
+    await cp(serverSrc, join(output, "vendor", "xugudb", "server", "linux", archDir), { recursive: true });
+  }
+} else if (targetOs === "windows") {
+  const serverSrc = join(root, "vendor", "xugudb", "server", "windows", "amd64");
+  if (await stat(serverSrc).then(() => true).catch(() => false)) {
+    await cp(serverSrc, join(output, "vendor", "xugudb", "server", "windows", "amd64"), { recursive: true });
+  }
+}
+// macOS 无 native 服务端二进制，不复制 server 目录
 
 // ── 复制 Node.js runtime ─────────────────────────────────────
 await cp(runtime, join(output, "runtime"), { recursive: true, dereference: false, verbatimSymlinks: true });

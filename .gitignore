@@ -28,8 +28,9 @@ data/*
 first-run-credentials.txt
 bootstrap-credentials.txt
 server.pid
+session-cookie.txt
 
-# Runtime project/company data and generated operational material
+# Runtime project/company data
 uploads/
 processed/
 backups/
@@ -38,27 +39,30 @@ exports/
 *.backup
 *.dump
 _capture_*.mjs
-.planning/sketches/
 
+# 测试产物（不纳入版本控制）
+outputs/
+e2e-report/
+test-results/
+test-reports/
+playwright-report/
+.e2e-auth/
+mock-materials/
+fixtures/projects/*.json
+
+# .planning 内部产物（规划文档本身在 git 中，子产物排除）
+.planning/sketches/
+.planning/benchmarks/
+.planning/phases/
+.planning/evidence/
+
+# 废弃目录
+xugu-config/
+
+# IDE
 .idea/
 .vscode/
 *.swp
 
-# Playwright E2E 会话与产物
-.e2e-auth/
-test-results/
-playwright-report/
-
-# 测试报告和截图（开发期产物，不纳入版本控制）
-outputs/
-e2e-report/
-test-reports/
-fixtures/projects/*.json
-mock-materials/
-.planning/benchmarks/
-
 # WorkBuddy 工作目录
 .workbuddy/
-
-# 临时凭据
-session-cookie.txt

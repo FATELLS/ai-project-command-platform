@@ -6,75 +6,61 @@
 
 ## Current Position
 
-**Goal**: G01 complete
-**Next**: G02 — Baseline Freeze
+**Goal**: G02 complete
+**Next**: G03 — Workspace Walking Skeleton
 
-## What Was Done in G01
+## What Was Done in G02
 
-1. **Constitution** (`.specify/memory/constitution.md`): 18 non-negotiable engineering principles covering workflow, architecture, naming, testing, security, and automation gates.
+1. **BASELINE.md** (`docs/architecture/BASELINE.md`): Complete V1 behavior snapshot.
+   - 70 API endpoints (14 groups, with auth levels and route patterns)
+   - 37 database tables (schema, indexes, unique constraints, relationships)
+   - 5 core business journeys
+   - Code size: 8,556 lines across 6 key files, 227 tracked files
+   - 0 tracked forbidden artifacts
+   - 9 known gaps with V2 resolution mapping
+   - V1→V2 schema migration notes (types, constraints, naming)
 
-2. **Engineering standards** (`docs/engineering/`): Testing (4-layer), Performance (budgets), Security (9 sections).
+2. **VERIFICATION.md**: PASS — all exit criteria met.
 
-3. **ADRs** (`docs/adr/`): ADR-001 PostgreSQL, ADR-002 Modular Monolith, ADR-003 Two-Service Budget.
-
-4. **Product docs migrated** to `docs/product/` (PRODUCT.md, REQUIREMENTS.md, ROADMAP.md — all updated for PostgreSQL).
-
-5. **Architecture docs migrated** to `docs/architecture/` (SYSTEM.md, TRACEABILITY.md, README.md).
-
-6. **AGENTS.md and README.md rewritten** for V2 architecture.
-
-7. **Obsolete docs deleted**: PROCESS.md, MIGRATION.md, VUE-MIGRATION-PLAN.md, V1-CONSOLIDATION.md, old architecture/result docs, config.json.
-
-8. **Spec Kit templates** (`specs/TEMPLATES.md`): Goal workflow and file templates.
-
-## Exact Starting Point for G02
+## Exact Starting Point for G03
 
 Read the following in order (AGENTS.md mandatory reading order):
 
 1. `AGENTS.md`
-2. `docs/REFACTOR-PLAN.md` §G02
+2. `docs/REFACTOR-PLAN.md` §G03
 3. `.specify/memory/constitution.md`
 4. `docs/architecture/PROJECT-STRUCTURE.md`
-5. `docs/architecture/MIGRATION-MAP.md`
-6. `docs/changes/EXECUTION-STATE.md` (this file's companion)
-7. `docs/changes/DESIGN-CHANGELOG.md` (latest entries)
+5. `docs/architecture/BASELINE.md` (regression target)
+6. `docs/changes/DESIGN-CHANGELOG.md`
 
-### G02 Objective (from REFACTOR-PLAN.md)
+### G03 Objective (from REFACTOR-PLAN.md)
 
-Freeze current V1 behavior as the regression baseline:
-- Record current API surface (all routes, request/response shapes)
-- Record current UI flows (screens, transitions, validations)
-- Establish performance baseline (memory, response times)
-- Create snapshot tests for critical paths
-- This baseline is the parity target for G10 (backend switch) and G16 (frontend switch)
+Create minimal Node22/TypeScript/npm workspaces skeleton:
+- `apps/api/`, `apps/web/`, `packages/` directory structure
+- TypeScript strict, ESLint, Prettier
+- Build/lint/typecheck/test/structure/doc/artifact gates
+- npm workspaces configuration
+- CI pipeline skeleton
+- No business logic migration
 
-### G02 Allowed
+### G03 Allowed
 
-- `tests/baseline/` directory creation
-- Baseline snapshot/recording files
-- Documentation of current behavior
+- `apps/`, `packages/`, `tests/`, `ops/` directory creation
+- Root `package.json` → workspace root
+- `tsconfig.json`, `eslint.config.js`, `.prettierrc`
+- CI workflow files
+- New `.github/workflows/` CI config
 
-### G02 Forbidden
+### G03 Forbidden
 
-- Any source code modification
-- Any dependency changes
-- Any database changes
-- Any UI changes
+- Business logic migration (no module code)
+- Database changes
+- V1 code modification
+- Dependency installation beyond tooling
 
 ## Retained V1 Reference Files
-
-These V1 design files are kept for reference during G04-G09 implementation:
 
 | Path | Purpose | Delete In |
 |---|---|---|
 | `.planning/design/system/modules/01-08/*.md` | V1 module detailed design | After respective Goal completes |
 | `.planning/sketches/swimlane-visual-redesign/` | Visual design sketches | G11 (Vue design system) |
-
-## Open Items / Risks
-
-| Item | Status | Notes |
-|---|---|---|
-| Git history purge | ✅ done | Backup may be cleaned by OS |
-| V1 source still runs | active | V1 XuguDB code runs until G10 switch |
-| Windows v1.0.5 test | pending | User hasn't re-tested `--child` fix on Windows |
-| `.planning/` directory | partially cleaned | Module designs and sketches remain as reference |

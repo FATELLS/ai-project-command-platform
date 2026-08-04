@@ -6,11 +6,11 @@
 
 ## Current Goal
 
-**G01: Cross-Agent Engineering Governance** — ✅ COMPLETE
+**G02: Baseline Freeze** — ✅ COMPLETE
 
 ## Next Goal
 
-**G02: Baseline Freeze** — not started
+**G03: Workspace Walking Skeleton** — not started
 
 ## Goal Progress
 
@@ -18,7 +18,7 @@
 |---|---|---|---|
 | G00 | Directory lock & migration map | ✅ complete | PROJECT-STRUCTURE.md, MIGRATION-MAP.md written; coverage verified |
 | G01 | Engineering governance | ✅ complete | Constitution, standards, ADRs, AGENTS/README rewrite, .planning migration |
-| G02 | Baseline freeze | ⏳ pending | — |
+| G02 | Baseline freeze | ✅ complete | BASELINE.md: 70 API endpoints, 37 tables, 5 journeys, 9 gaps |
 | G03 | Workspace skeleton | ⏳ pending | — |
 | G04 | PostgreSQL data baseline | ⏳ pending | — |
 | G05 | Fastify platform base | ⏳ pending | — |

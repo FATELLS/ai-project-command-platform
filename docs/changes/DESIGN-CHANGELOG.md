@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-08-04 — G02: Baseline Freeze
+
+**Goal**: G02
+**Status**: ACCEPTED
+
+### Changes
+
+1. **BASELINE.md created** at `docs/architecture/BASELINE.md`
+   - API inventory: 70 endpoints across 14 groups
+   - Database schema: 37 tables, 38 indexes, 18 unique constraints
+   - Core business journeys: 5 key flows
+   - Resource measurements: 8,556 lines of key code, 227 tracked files
+   - Forbidden artifact baseline: 0 tracked secrets/logs/reports
+   - Known gaps: 9 items with V2 resolution plan
+   - V1→V2 schema migration notes (VARCHAR timestamps → TIMESTAMPTZ, CLOB → JSONB, etc.)
+
+### Decisions
+
+| # | Decision | Rationale |
+|---|---|---|
+| D02-1 | Baseline from code analysis, not runtime | macOS can't run XuguDB natively; code analysis is deterministic |
+| D02-2 | API inventory from static analysis | Routes are hand-written in app.mjs, all static |
+| D02-3 | Schema baseline preserves V1 patterns | Composite PKs with project_id pattern retained in V2 |
+
+---
+
 ## 2026-08-04 — G01: Cross-Agent Engineering Governance
 
 **Goal**: G01

@@ -4,6 +4,64 @@
 
 ---
 
+## 2026-08-04 — G01: Cross-Agent Engineering Governance
+
+**Goal**: G01
+**Status**: ACCEPTED
+
+### Changes
+
+1. **Constitution established** at `.specify/memory/constitution.md`
+   - 18 non-negotiable principles (C-01 to C-18) extracted from REFACTOR-PLAN §6
+   - Covers: workflow, modular monolith, PostgreSQL-only, boundary validation, naming, file rules, frontend/backend layering, API contracts, DB naming, testing, log security, dependency/comment discipline, gate automation, review checklist, product invariants
+
+2. **Engineering standards** created in `docs/engineering/`
+   - TESTING-STANDARDS.md: 4-layer testing strategy (unit/integration/contract/e2e), naming, data, coverage
+   - PERFORMANCE-BUDGETS.md: service budget (≤2), RSS (≤256MB), file size (300/500 lines), bundle sizes
+   - SECURITY-STANDARDS.md: auth, project isolation, input validation, key management, log safety, Git security, AI safety
+
+3. **Architecture Decision Records** created in `docs/adr/`
+   - ADR-001: PostgreSQL Replaces XuguDB (context, decision, consequences, supersedes)
+   - ADR-002: Modular Monolith Architecture (structure, rules, enforcement)
+   - ADR-003: Two-Service Operational Budget (compact/external modes, background job handling)
+
+4. **Product documentation migrated** from `.planning/` to `docs/product/`
+   - PRODUCT.md, REQUIREMENTS.md, ROADMAP.md — all updated for PostgreSQL architecture
+   - Old `.planning/` equivalents deleted to eliminate dual canonical sources
+
+5. **Architecture documentation migrated**
+   - SYSTEM.md, TRACEABILITY.md, README.md created in `docs/architecture/`
+   - Legacy architecture and design docs copied for reference
+   - Old `.planning/design/system/` canonical docs deleted
+
+6. **AGENTS.md rewritten** per REFACTOR-PLAN §1.2
+   - New mandatory reading order pointing to V2 docs
+   - Updated product invariants, engineering boundaries, documentation index
+   - Removed all Xugu/container/lifecycle references
+
+7. **README.md rewritten** for V2 architecture
+   - Updated tech stack, refactor status, product boundaries
+   - Removed Xugu install instructions and Docker references
+
+8. **Obsolete documents deleted**
+   - `.planning/PROCESS.md`, `.planning/config.json`, `.planning/HANDOFF.md`, `.planning/STATE.md`, `.planning/DECISIONS.md`
+   - `docs/MIGRATION.md`, `docs/VUE-MIGRATION-PLAN.md`, `docs/ARCHITECTURE.md`, `docs/RESULT.md`
+   - `.planning/design/system/V1-CONSOLIDATION.md`
+   - `docs/ui-full-function-test-2026-08-02.md`
+
+9. **Spec Kit templates** created at `specs/TEMPLATES.md`
+   - Templates for spec.md, plan.md, tasks.md, VERIFICATION.md
+   - Goal workflow documented
+
+### Decisions
+
+| # | Decision | Rationale |
+|---|---|---|
+| D01-1 | Module DESIGN/ADR files kept in `.planning/design/system/modules/` | V1 detailed design reference for G04-G09; will be deleted after those Goals |
+| D01-2 | Sketches kept in `.planning/sketches/` | Visual design reference; not superseded by refactoring |
+
+---
+
 ## 2026-08-04 — G00: Directory Lock and Migration Mapping
 
 **Goal**: G00

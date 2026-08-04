@@ -6,63 +6,75 @@
 
 ## Current Position
 
-**Goal**: G00 complete
-**Next**: G01 — Cross-Agent Engineering Governance
+**Goal**: G01 complete
+**Next**: G02 — Baseline Freeze
 
-## What Was Done in G00
+## What Was Done in G01
 
-1. **Git history purged** of all sensitive files (real employee names, company data, Xugu proprietary content) and large Docker image tarballs
-   - Tool: `git-filter-repo`
-   - Repo: 226MB → 97MB
-   - Force pushed
+1. **Constitution** (`.specify/memory/constitution.md`): 18 non-negotiable engineering principles covering workflow, architecture, naming, testing, security, and automation gates.
 
-2. **REFACTOR-PLAN.md** Node version corrected: all `Node24` → `Node22`
+2. **Engineering standards** (`docs/engineering/`): Testing (4-layer), Performance (budgets), Security (9 sections).
 
-3. **Three deliverables written**:
-   - `docs/architecture/PROJECT-STRUCTURE.md` — locked target directory tree with ownership, responsibilities, forbidden content, dependency direction
-   - `docs/architecture/MIGRATION-MAP.md` — all 218 tracked files mapped to keep/move/replace/delete with target path, owner module, and goal number
-   - `docs/changes/` — DESIGN-CHANGELOG, EXECUTION-STATE, HANDOFF initialized
+3. **ADRs** (`docs/adr/`): ADR-001 PostgreSQL, ADR-002 Modular Monolith, ADR-003 Two-Service Budget.
 
-## Exact Starting Point for G01
+4. **Product docs migrated** to `docs/product/` (PRODUCT.md, REQUIREMENTS.md, ROADMAP.md — all updated for PostgreSQL).
 
-Read the following in order:
+5. **Architecture docs migrated** to `docs/architecture/` (SYSTEM.md, TRACEABILITY.md, README.md).
 
-1. `docs/REFACTOR-PLAN.md` §G01 (Cross-Agent Engineering Governance)
-2. `docs/architecture/PROJECT-STRUCTURE.md` (target structure)
-3. `docs/architecture/MIGRATION-MAP.md` (which files G01 owns)
-4. `docs/changes/EXECUTION-STATE.md` (current state)
+6. **AGENTS.md and README.md rewritten** for V2 architecture.
 
-### G01 Objective (from REFACTOR-PLAN.md)
+7. **Obsolete docs deleted**: PROCESS.md, MIGRATION.md, VUE-MIGRATION-PLAN.md, V1-CONSOLIDATION.md, old architecture/result docs, config.json.
 
-Create engineering governance artifacts:
-- `.specify/memory/constitution.md` — non-negotiable engineering rules
-- `docs/adr/` — Architecture Decision Records (migrated from `.planning/DECISIONS.md`)
-- Rewrite `AGENTS.md` per REFACTOR-PLAN §1.2
-- Rewrite `README.md` for new architecture
-- Move `.planning/` docs to `docs/product/` and `docs/architecture/`
-- Delete obsolete docs (`.planning/PROCESS.md`, `docs/MIGRATION.md`, `docs/VUE-MIGRATION-PLAN.md`)
+8. **Spec Kit templates** (`specs/TEMPLATES.md`): Goal workflow and file templates.
 
-### G01 Allowed
+## Exact Starting Point for G02
 
-- `.specify/` directory creation
-- `docs/adr/` directory creation
-- `docs/product/` directory creation
-- `AGENTS.md`, `README.md` rewrite
-- `.planning/` → `docs/` moves
-- Obsolete doc deletion
+Read the following in order (AGENTS.md mandatory reading order):
 
-### G01 Forbidden
+1. `AGENTS.md`
+2. `docs/REFACTOR-PLAN.md` §G02
+3. `.specify/memory/constitution.md`
+4. `docs/architecture/PROJECT-STRUCTURE.md`
+5. `docs/architecture/MIGRATION-MAP.md`
+6. `docs/changes/EXECUTION-STATE.md` (this file's companion)
+7. `docs/changes/DESIGN-CHANGELOG.md` (latest entries)
 
-- Any source code modification (no `.mjs`/`.js`/`.ts` files)
-- No `apps/` or `packages/` creation
-- No database changes
-- No dependency changes
+### G02 Objective (from REFACTOR-PLAN.md)
+
+Freeze current V1 behavior as the regression baseline:
+- Record current API surface (all routes, request/response shapes)
+- Record current UI flows (screens, transitions, validations)
+- Establish performance baseline (memory, response times)
+- Create snapshot tests for critical paths
+- This baseline is the parity target for G10 (backend switch) and G16 (frontend switch)
+
+### G02 Allowed
+
+- `tests/baseline/` directory creation
+- Baseline snapshot/recording files
+- Documentation of current behavior
+
+### G02 Forbidden
+
+- Any source code modification
+- Any dependency changes
+- Any database changes
+- Any UI changes
+
+## Retained V1 Reference Files
+
+These V1 design files are kept for reference during G04-G09 implementation:
+
+| Path | Purpose | Delete In |
+|---|---|---|
+| `.planning/design/system/modules/01-08/*.md` | V1 module detailed design | After respective Goal completes |
+| `.planning/sketches/swimlane-visual-redesign/` | Visual design sketches | G11 (Vue design system) |
 
 ## Open Items / Risks
 
 | Item | Status | Notes |
 |---|---|---|
-| Git history purge | ✅ done | Backup at `/tmp/aicp-git-backup-*` (may be cleaned by OS) |
-| `.specify/` via CLI | blocked | Use manual creation; `specify init` network blocked |
+| Git history purge | ✅ done | Backup may be cleaned by OS |
+| V1 source still runs | active | V1 XuguDB code runs until G10 switch |
 | Windows v1.0.5 test | pending | User hasn't re-tested `--child` fix on Windows |
-| Vue migration plan doc | will be deleted in G01 | Superseded by REFACTOR-PLAN G11-G16 |
+| `.planning/` directory | partially cleaned | Module designs and sketches remain as reference |

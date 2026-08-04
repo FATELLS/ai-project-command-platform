@@ -1,19 +1,21 @@
-# V1.0 Requirements
+# V2.0 Requirements
+
+> Migrated from `.planning/REQUIREMENTS.md`. Updated for PostgreSQL architecture.
 
 ## 产品与项目
 
 - **PROJ-01** 平台必须管理多个项目，每个项目包含多个团队或作战单元。
 - **PROJ-02** 项目 ID、卡片 external ID 和版本 ID 必须稳定。
-- **PROJ-03** 总览、路线图、作战单元、甘特、健康和资料工作区必须由固定 renderer 提供。
-- **PROJ-04** `xugu-agentic-group` 导入导出必须语义等价。
+- **PROJ-03** 总览、路线图、作战单元、甘特、健康和资料工作区必须由固定 Vue 视图提供。
+- **PROJ-04** `xugu-agentic-group` 导入导出必须语义等价（作为业务 ID，不依赖 Xugu 数据库）。
 
 ## 数据
 
-- **DATA-01** 虚谷是唯一数据库后端。
+- **DATA-01** PostgreSQL 是唯一数据库后端。
 - **DATA-02** `project_cards` 与 `project_card_links` 是唯一项目图读写模型。
-- **DATA-03** 所有业务查询与写入必须使用参数化 SQL 和明确事务。
+- **DATA-03** 所有业务查询与写入必须使用参数化 SQL（Kysely）和明确事务。
 - **DATA-04** 所有项目数据必须按 `projectId` 隔离并由数据库关系与服务权限共同保护。
-- **DATA-05** UTF-8 中文、CLOB、空值、数值和日期必须无损往返。
+- **DATA-05** UTF-8 中文、JSONB、空值、数值和日期必须无损往返。
 
 ## 材料与 AI
 
@@ -40,17 +42,17 @@
 
 ## 运行与发布
 
-- **OPS-01** managed 模式必须按数据库后应用启动、按应用后数据库停止。
-- **OPS-02** external 模式不得停止共享虚谷实例。
-- **OPS-03** 首次冷启动等待上限至少 420 秒，失败时不宣称健康。
-- **OPS-04** 冷备份必须可校验；恢复前必须保留当前 volume。
-- **REL-01** portable 包必须包含虚谷镜像、原生驱动和 Node runtime。
+- **OPS-01** 应用启动时连接 PostgreSQL，失败则不宣称健康。
+- **OPS-02** compact 模式：app + PostgreSQL 两个服务；external DB 模式：仅 app。
+- **OPS-03** 背景任务（材料提取、AI 生成）在进程内运行，不引入外部 worker。
+- **OPS-04** 冷备份必须可校验（pg_dump）；恢复前必须保留当前数据库。
+- **REL-01** portable 包必须包含 Node runtime（PostgreSQL 由系统安装或 bundled）。
 - **REL-02** 发布包不得含项目数据、材料、密钥、日志、测试或规划文档。
-- **REL-03** V1 只发布已验证的 ARM64 目标。
+- **REL-03** 发布目标：Linux ARM64/x86_64、Windows amd64、macOS Apple Silicon。
 
 ## 验证
 
-- **TEST-01** 数据库集成必须使用隔离虚谷容器、端口和 volume。
-- **TEST-02** UI 全功能测试必须通过真实 server、虚谷和 Chromium 执行。
+- **TEST-01** 数据库集成必须使用隔离 PostgreSQL 实例、独立数据库。
+- **TEST-02** UI 全功能测试必须通过真实 server、PostgreSQL 和 Chromium 执行。
 - **TEST-03** 覆盖认证、角色、跨项目隔离、材料、生成、审核、发布、回滚、异常输入和响应式。
 - **TEST-04** 代码门禁必须拒绝第二数据库、第二迁移树和不兼容 SQL 方言残留。

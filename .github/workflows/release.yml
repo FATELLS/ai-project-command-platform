@@ -24,7 +24,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install libaio (Xugu native runtime dependency)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libaio1
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libaio1t64 || sudo apt-get install -y -qq libaio1
       - name: Download Node.js runtime
         run: |
           curl -fsSL "https://nodejs.org/dist/v${NODE_RUNTIME_VERSION}/node-v${NODE_RUNTIME_VERSION}-linux-arm64.tar.xz" -o "$RUNNER_TEMP/node.tar.xz"

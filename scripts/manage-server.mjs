@@ -184,6 +184,7 @@ async function startNativeXugu() {
   console.log(`  虚谷原生服务已启动（PID ${child.pid}，监听 ${XUGU_PORT}）。`);
   console.log(`  工作目录: ${xuguDataDir}`);
   // 等待虚谷端口可连接（最多 30 秒），避免 server.mjs 在数据库初始化完成前尝试连接
+  const xuguHost = setting("XUGU_HOST", "127.0.0.1");
   const xuguReady = await waitUntil(async () => {
     try {
       const net = await import("node:net");
@@ -193,7 +194,7 @@ async function startNativeXugu() {
         socket.once("connect", () => { socket.destroy(); resolveCheck(true); });
         socket.once("error", () => { socket.destroy(); resolveCheck(false); });
         socket.once("timeout", () => { socket.destroy(); resolveCheck(false); });
-        socket.connect(XUGU_PORT, XUGU_HOST);
+        socket.connect(XUGU_PORT, xuguHost);
       });
     } catch {
       return false;
@@ -201,9 +202,9 @@ async function startNativeXugu() {
   }, 30_000, 1_000);
 
   if (!xuguReady) {
-    console.log(`  ⚠ 虚谷服务已启动但端口 ${XUGU_HOST}:${XUGU_PORT} 30 秒内未就绪，平台将继续尝试连接...`);
+    console.log(`  ⚠ 虚谷服务已启动但端口 ${xuguHost}:${XUGU_PORT} 30 秒内未就绪，平台将继续尝试连接...`);
   } else {
-    console.log(`  虚谷端口 ${XUGU_HOST}:${XUGU_PORT} 已就绪。`);
+    console.log(`  虚谷端口 ${xuguHost}:${XUGU_PORT} 已就绪。`);
   }
   return true;
 }

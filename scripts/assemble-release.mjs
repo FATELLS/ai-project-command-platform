@@ -76,6 +76,14 @@ if (await stat(driverSrc).then(() => true).catch(() => false)) {
   await cp(driverSrc, join(output, "vendor", "xugudb", "nodejs", driverFile));
 }
 
+// Windows: 复制 libcrypto-1_1-x64.dll 到 nodejs 目录，驱动加载时需要
+if (targetOs === "windows") {
+  const dllSrc = join(root, "vendor", "xugudb", "server", "windows", "amd64", "XuguDB", "Server", "BIN", "libcrypto-1_1-x64.dll");
+  if (await stat(dllSrc).then(() => true).catch(() => false)) {
+    await cp(dllSrc, join(output, "vendor", "xugudb", "nodejs", "libcrypto-1_1-x64.dll"));
+  }
+}
+
 // 2) Docker 镜像：Linux/macOS managed 模式需要，Windows native 模式不需要
 const imageArch = target.includes("arm64") ? "arm64" : "amd64";
 const manifestSrc = join(root, "vendor", "xugudb", "image", "manifest.json");

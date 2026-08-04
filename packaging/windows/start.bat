@@ -46,6 +46,9 @@ if not exist "%ENV_FILE%" (
 
 REM ---- Windows native 模式不需要容器 ----
 REM 虚谷 Windows 服务端直接以进程方式运行
+REM 将虚谷 BIN 目录加入 PATH，确保 Node.js 驱动能找到 libcrypto-1_1-x64.dll
+set XUGU_BIN_DIR=%APP_ROOT%\vendor\xugudb\server\windows\amd64\XuguDB\Server\BIN
+if exist "%XUGU_BIN_DIR%" set PATH=%XUGU_BIN_DIR%;%PATH%
 
 if not exist "%APP_ROOT%\data" mkdir "%APP_ROOT%\data"
 

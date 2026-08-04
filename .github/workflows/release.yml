@@ -138,6 +138,46 @@ jobs:
           node scripts/assemble-release.mjs --target windows-amd64 --runtime "$env:RUNNER_TEMP\node\node-v${{ env.NODE_RUNTIME_VERSION }}-win-x64" --output "dist\$name"
           New-Item -ItemType Directory -Path artifacts -Force
           Compress-Archive -Path "dist\$name" -DestinationPath "artifacts\$name.zip"
+      - name: Smoke test (native mode)
+        shell: pwsh
+        run: |
+          $app = "$PWD\dist\ai-project-command-platform-windows-amd64"
+          Set-Location $app
+          $env:HOST = "127.0.0.1"
+          $env:PORT = "4173"
+          $env:PLATFORM_XUGU_LIFECYCLE = "native"
+          $env:PLATFORM_BOOTSTRAP_PASSWORD = "release-smoke-password"
+          $env:PLATFORM_DATA_DIR = ".\data"
+          # Add Xugu BIN dir to PATH for libcrypto DLL
+          $xuguBin = "$app\vendor\xugudb\server\windows\amd64\XuguDB\Server\BIN"
+          if (Test-Path $xuguBin) { $env:PATH = "$xuguBin;$env:PATH" }
+          # Start the platform
+          Start-Process -FilePath "$app\runtime\bin\node.exe" -ArgumentList "scripts\manage-server.mjs","start" -WorkingDirectory $app -NoNewWindow -PassThru | Wait-Process
+          Write-Host "=== Waiting for app to start ==="
+          $ok = $false
+          for ($i = 1; $i -le 90; $i++) {
+            try {
+              $resp = Invoke-WebRequest -Uri "http://127.0.0.1:4173/health" -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+              if ($resp.StatusCode -eq 200) {
+                Write-Host "Health check passed after ${i}s"
+                $ok = $true
+                break
+              }
+            } catch { }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ok) {
+            Write-Host "=== Health check FAILED after 180s ==="
+            Write-Host "=== app.log ==="
+            if (Test-Path "$app\app.log") { Get-Content "$app\app.log" -Tail 50 }
+            Write-Host "=== xugu-server.log ==="
+            if (Test-Path "$app\xugu-server.log") { Get-Content "$app\xugu-server.log" -Tail 50 }
+            Write-Host "=== .env.local ==="
+            if (Test-Path "$app\.env.local") { Get-Content "$app\.env.local" }
+            exit 1
+          }
+          # Stop the platform
+          & "$app\runtime\bin\node.exe" scripts\manage-server.mjs stop
       - uses: actions/upload-artifact@v4
         with:
           name: windows-amd64

@@ -179,6 +179,8 @@ function startNativeXugu() {
   child.unref();
   writeNativePid(child.pid);
   console.log(`  虚谷原生服务已启动（PID ${child.pid}，监听 ${XUGU_PORT}）。`);
+  console.log(`  工作目录: ${xuguDataDir}`);
+  console.log(`  二进制: ${binary}`);
   return true;
 }
 

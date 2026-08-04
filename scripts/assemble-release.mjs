@@ -30,8 +30,20 @@ if (!validTargets.includes(target) || !runtimeDirectory || !outputDirectory) {
 
 const output = resolve(outputDirectory);
 const runtime = resolve(runtimeDirectory);
-const runtimeNode = join(runtime, "bin", "node");
-await stat(runtimeNode);
+
+// Node.js 官方包目录结构差异：
+//   Linux/macOS: node-vXX-linux-arm64/bin/node
+//   Windows:     node-vXX-win-x64/node.exe   (无 bin/ 子目录)
+const runtimeNodeUnix = join(runtime, "bin", "node");
+const runtimeNodeWin = join(runtime, "node.exe");
+let runtimeNode;
+if (await stat(runtimeNodeUnix).then(() => true).catch(() => false)) {
+  runtimeNode = runtimeNodeUnix;
+} else if (await stat(runtimeNodeWin).then(() => true).catch(() => false)) {
+  runtimeNode = runtimeNodeWin;
+} else {
+  throw new Error(`Node.js binary not found at ${runtimeNodeUnix} or ${runtimeNodeWin}`);
+}
 
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
@@ -97,8 +109,31 @@ if (targetOs === "linux") {
 }
 // macOS 无 native 服务端二进制，不复制 server 目录
 
-// ── 复制 Node.js runtime ─────────────────────────────────────
-await cp(runtime, join(output, "runtime"), { recursive: true, dereference: false, verbatimSymlinks: true });
+// ── 复制 Node.js runtime（统一为 runtime/bin/node 结构）──────────
+// Windows 官方包是 node-vXX-win-x64/node.exe，Linux/macOS 是 node-vXX-xxx/bin/node
+// 统一输出为 output/runtime/bin/node(.exe)
+await mkdir(join(output, "runtime", "bin"), { recursive: true });
+if (target.startsWith("windows")) {
+  // Windows: node.exe 直接在根目录
+  await cp(join(runtime, "node.exe"), join(output, "runtime", "bin", "node.exe"));
+} else {
+  // Linux/macOS: node 在 bin/ 下
+  await cp(join(runtime, "bin", "node"), join(output, "runtime", "bin", "node"));
+  // 复制 npm 相关文件（npm ci 需要）
+  for (const extra of ["npm", "npx", "corepack"]) {
+    const extraPath = join(runtime, "bin", extra);
+    if (await stat(extraPath).then(() => true).catch(() => false)) {
+      await cp(extraPath, join(output, "runtime", "bin", extra));
+    }
+  }
+  // 复制 lib/ 和 include/（npm 运行需要）
+  for ( const libDir of ["lib"]) {
+    const libPath = join(runtime, libDir);
+    if (await stat(libPath).then(() => true).catch(() => false)) {
+      await cp(libPath, join(output, "runtime", libDir), { recursive: true });
+    }
+  }
+}
 await mkdir(join(output, "data"), { recursive: true });
 
 // ── 按平台复制启动脚本 ────────────────────────────────────────

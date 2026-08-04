@@ -23,6 +23,8 @@ jobs:
           node-version: "20.19.5"
           cache: npm
       - run: npm ci
+      - name: Install libaio (Xugu native runtime dependency)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libaio1
       - name: Download Node.js runtime
         run: |
           curl -fsSL "https://nodejs.org/dist/v${NODE_RUNTIME_VERSION}/node-v${NODE_RUNTIME_VERSION}-linux-arm64.tar.xz" -o "$RUNNER_TEMP/node.tar.xz"
@@ -30,14 +32,12 @@ jobs:
           tar -xJf "$RUNNER_TEMP/node.tar.xz" -C "$RUNNER_TEMP/node"
       - name: Assemble portable release
         run: |
-          version="$(node -p "require('./package.json').version")"
           name="ai-project-command-platform-linux-arm64"
           node scripts/assemble-release.mjs --target linux-arm64 --runtime "$RUNNER_TEMP/node/node-v${NODE_RUNTIME_VERSION}-linux-arm64" --output "dist/$name"
           mkdir -p artifacts
           tar -czf "artifacts/${name}.tar.gz" -C dist "$name"
       - name: Smoke test (native mode)
         run: |
-          version="$(node -p "require('./package.json').version")"
           app="$PWD/dist/ai-project-command-platform-linux-arm64"
           cd "$app"
           export HOST=127.0.0.1 PORT=4173 XUGU_PORT=55139
@@ -46,7 +46,7 @@ jobs:
           export PLATFORM_DATA_DIR=./data
           ./start.sh &
           sleep 10
-          curl --fail --retry 20 --retry-delay 2 http://127.0.0.1:4173/health || { echo "Health check failed"; cat app.log || true; exit 1; }
+          curl --fail --retry 30 --retry-delay 2 http://127.0.0.1:4173/health || { echo "=== Health check failed ==="; cat app.log 2>/dev/null || true; cat xugu-server.log 2>/dev/null || true; exit 1; }
           ./stop.sh || true
       - uses: actions/upload-artifact@v4
         with:

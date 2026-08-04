@@ -1,37 +1,41 @@
 {
   "name": "ai-project-command-platform",
-  "version": "1.0.5",
+  "version": "2.0.0-dev",
   "type": "module",
   "private": true,
   "description": "多项目、模板化、AI 辅助更新的项目作战管理平台",
   "license": "UNLICENSED",
   "engines": {
-    "node": ">=20.0 <21"
+    "node": ">=22.0 <23"
   },
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "packages/contracts",
+    "packages/database",
+    "packages/domain",
+    "packages/test-kit"
+  ],
   "scripts": {
-    "start": "node server.mjs",
-    "start:background": "node scripts/manage-server.mjs start",
-    "stop": "node scripts/manage-server.mjs stop",
-    "status": "node scripts/manage-server.mjs status",
-    "restart": "node scripts/manage-server.mjs restart",
-    "migrate": "node scripts/migrate-db.mjs",
-    "import:xugu": "node scripts/import-project.mjs --fixture fixtures/projects/xugu-agentic-group.json --project xugu-agentic-group",
-    "export:xugu": "node scripts/export-project.mjs --project xugu-agentic-group --stdout",
-    "backup": "node scripts/backup-database.mjs",
-    "restore": "node scripts/restore-database.mjs",
-    "verify:code": "node scripts/verify.mjs",
-    "verify": "node scripts/verify.mjs && node --test --test-concurrency=1 test/*.test.mjs && npx playwright test --reporter=list",
-    "test": "node --test --test-concurrency=1 test/*.test.mjs",
-    "test:xugu": "node --test test/xugu-integration.test.mjs",
-    "test:e2e": "npx playwright test --reporter=list",
-    "test:e2e:abnormal": "npx playwright test --config=playwright.abnormal.config.mjs",
-    "e2e:install": "npx playwright install chromium"
-  },
-  "dependencies": {
-    "file-type": "21.3.4",
-    "yauzl": "3.4.0"
-  },
-  "devDependencies": {
-    "@playwright/test": "^1.61.1"
+    "dev": "echo 'Use apps/api or apps/web dev scripts'",
+    "build": "echo 'Use workspace build scripts'",
+    "typecheck": "echo 'TODO: tsc --noEmit for all workspaces'",
+    "lint": "echo 'TODO: eslint .'",
+    "format": "echo 'TODO: prettier --write .'",
+    "verify": "echo 'TODO: composite verify script'",
+    "test": "echo 'TODO: vitest run'",
+    "test:unit": "echo 'TODO: vitest run tests/unit'",
+    "test:integration": "echo 'TODO: vitest run tests/integration'",
+    "test:e2e": "echo 'TODO: playwright test'",
+
+    "v1:start": "node server.mjs",
+    "v1:start:background": "node scripts/manage-server.mjs start",
+    "v1:stop": "node scripts/manage-server.mjs stop",
+    "v1:status": "node scripts/manage-server.mjs status",
+    "v1:restart": "node scripts/manage-server.mjs restart",
+    "v1:migrate": "node scripts/migrate-db.mjs",
+    "v1:test": "node --test --test-concurrency=1 test/*.test.mjs",
+    "v1:test:e2e": "npx playwright test --reporter=list",
+    "v1:verify": "node scripts/verify.mjs && node --test --test-concurrency=1 test/*.test.mjs && npx playwright test --reporter=list"
   }
 }

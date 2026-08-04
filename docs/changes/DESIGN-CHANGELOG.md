@@ -4,6 +4,42 @@
 
 ---
 
+## 2026-08-04 — G03: Workspace Walking Skeleton
+
+**Goal**: G03
+**Status**: ACCEPTED
+
+### Changes
+
+1. **npm workspaces** root configured
+   - 6 workspaces: apps/api, apps/web, packages/{contracts,database,domain,test-kit}
+   - Node 22 engines
+   - V1 scripts preserved under `v1:*` prefix
+
+2. **TypeScript strict** configuration
+   - tsconfig.base.json: strict, noUncheckedIndexedAccess, exactOptionalPropertyTypes, verbatimModuleSyntax
+   - Each workspace has tsconfig.json extending base
+
+3. **Workspace skeletons** created
+   - apps/api: main.ts, build-app.ts skeleton
+   - apps/web: main.ts, index.html skeleton
+   - packages/contracts, database, domain, test-kit: index.ts skeleton
+
+4. **Structure verification** script
+   - `scripts/verify-structure.mjs`: checks 17 required dirs, 9 required files, 4 forbidden dirs
+   - PASS result on clean checkout
+
+### Decisions
+
+| # | Decision | Rationale |
+|---|---|---|
+| D03-1 | V1 scripts under `v1:*` prefix | V1 still runs until G10 backend switch |
+| D03-2 | Skeleton files have TODO markers | Prevent empty layers; each file has a clear purpose |
+| D03-3 | No Nx/Turbo | npm workspaces sufficient; avoid build orchestrator complexity |
+| D03-4 | Structure script in scripts/ (V1 location) | Will move to ops/scripts/ in G17 |
+
+---
+
 ## 2026-08-04 — G02: Baseline Freeze
 
 **Goal**: G02

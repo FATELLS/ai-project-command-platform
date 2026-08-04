@@ -1,0 +1,12 @@
+{
+  "name": "@aicp/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo 'TODO: vite'",
+    "build": "echo 'TODO: vite build'",
+    "typecheck": "echo 'TODO: vue-tsc --noEmit'"
+  },
+  "dependencies": {}
+}

@@ -13,6 +13,7 @@ coverage/
 *.rpm
 *.msi
 *.exe
+!vendor/xugudb/server/**/*.exe
 
 # Local runtime and credentials
 data/*

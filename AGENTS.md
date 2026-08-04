@@ -4,10 +4,10 @@
 
 ## 当前状态
 
-- 当前版本为 `1.0.0`，代码、迁移、测试和发布设计采用单一虚谷数据库后端。
+- 代码、迁移、测试和发布设计采用单一虚谷数据库后端。
 - 平台管理多个项目，每个项目管理多个作战单元或团队。
-- 现有稳定参考应用位于 `../Xugu Agentic Group Schedule/outputs/xugu-ai-transformation-console/`，默认只读。
-- 产品运行栈包括 Node 应用、虚谷 Docker 实例、材料存储、迁移、备份恢复和 portable 发布包。
+- 产品运行栈包括 Node 应用、虚谷实例（native/managed/external 三种生命周期模式）、材料存储、迁移、备份恢复和 portable 发布包。
+- 三种发布模式：Linux/Windows 零容器 native（虚谷二进制直跑），macOS 容器联动 managed，外部共享实例 external。
 
 ## 项目记忆
 
@@ -31,8 +31,10 @@
 - 固定模块 renderer 负责页面；项目差异通过数据、模板、术语和主题表达。
 - `xugu-agentic-group` 是虚谷项目的稳定 ID，路线、任务、甘特和成果不得丢失。
 - 项目、材料、证据、问答、生成任务、审核和权限必须按 `projectId` 隔离。
-- 默认生命周期由平台管理器按“虚谷后应用”启动、按“应用后虚谷”停止；外部共享实例必须显式配置为 `external`，平台不得误停。
+- 默认生命周期由平台管理器按"虚谷后应用"启动、按"应用后虚谷"停止；外部共享实例必须显式配置为 `external`，平台不得误停。
+- 容器 CLI 通过 `CONTAINER_CLI` 环境变量配置（docker/podman/nerdctl），不得硬编码。
 - 配置只经过 `src/config/local-config.mjs`；密钥只存未跟踪配置或运行数据库，API 响应、日志和诊断必须脱敏。
+- 代码中不得硬编码供应商特定的 URL、模型名称、域名或端点路径；所有 AI 服务配置必须通过用户填写。
 
 ## 工作生命周期
 

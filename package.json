@@ -1,6 +1,6 @@
 {
   "name": "ai-project-command-platform",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "type": "module",
   "private": true,
   "description": "多项目、模板化、AI 辅助更新的项目作战管理平台",

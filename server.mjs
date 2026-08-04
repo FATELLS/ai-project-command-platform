@@ -24,7 +24,7 @@ import { validateProviderConfig } from "./src/ai/providers/openai-compatible-pro
 const host = process.env.HOST || "127.0.0.1";
 const port = Number(process.env.PORT || 4173);
 async function connectDatabase() {
-  const timeoutMs = Number(process.env.XUGU_CONNECT_TIMEOUT_MS || 420_000);
+  const timeoutMs = Number(process.env.XUGU_CONNECT_TIMEOUT_MS || 60_000);
   const deadline = Date.now() + timeoutMs;
   while (true) {
     try {

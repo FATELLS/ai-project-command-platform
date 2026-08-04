@@ -156,7 +156,7 @@ function removeNativePidFile() {
   rmSync(xuguNativePidFile, { force: true });
 }
 
-function startNativeXugu() {
+async function startNativeXugu() {
   const existingPid = readNativePid();
   if (existingPid && processIsAlive(existingPid)) {
     console.log(`  虚谷原生服务已在运行（PID ${existingPid}）。`);
@@ -170,9 +170,10 @@ function startNativeXugu() {
   mkdirSync(xuguDataDir, { recursive: true });
   mkdirSync(dirname(xuguNativeLogFile), { recursive: true });
   const logFd = openSync(xuguNativeLogFile, "a");
-  // 使用 --service 模式启动：虚谷自身以后台服务方式运行，
-  // 关闭终端不影响数据库。日志通过 stdio 重定向到文件。
-  const child = spawn(binary, ["--service"], {
+  // 使用 --child 模式 + detached 进程管理：
+  // --child 是虚谷官方 startdb 脚本和 Dockerfile 使用的标准模式，
+  // 配合 detached:true + unref() 实现后台运行（终端关闭不影响）。
+  const child = spawn(binary, ["--child"], {
     cwd: xuguDataDir,
     detached: true,
     stdio: ["ignore", logFd, logFd]
@@ -180,9 +181,30 @@ function startNativeXugu() {
   closeSync(logFd);
   child.unref();
   writeNativePid(child.pid);
-  console.log(`  虚谷原生服务已启动（PID ${child.pid}，监听 ${XUGU_PORT}，service 模式）。`);
+  console.log(`  虚谷原生服务已启动（PID ${child.pid}，监听 ${XUGU_PORT}）。`);
   console.log(`  工作目录: ${xuguDataDir}`);
-  console.log(`  二进制: ${binary}`);
+  // 等待虚谷端口可连接（最多 30 秒），避免 server.mjs 在数据库初始化完成前尝试连接
+  const xuguReady = await waitUntil(async () => {
+    try {
+      const net = await import("node:net");
+      return new Promise((resolveCheck) => {
+        const socket = new net.Socket();
+        socket.setTimeout(1000);
+        socket.once("connect", () => { socket.destroy(); resolveCheck(true); });
+        socket.once("error", () => { socket.destroy(); resolveCheck(false); });
+        socket.once("timeout", () => { socket.destroy(); resolveCheck(false); });
+        socket.connect(XUGU_PORT, XUGU_HOST);
+      });
+    } catch {
+      return false;
+    }
+  }, 30_000, 1_000);
+
+  if (!xuguReady) {
+    console.log(`  ⚠ 虚谷服务已启动但端口 ${XUGU_HOST}:${XUGU_PORT} 30 秒内未就绪，平台将继续尝试连接...`);
+  } else {
+    console.log(`  虚谷端口 ${XUGU_HOST}:${XUGU_PORT} 已就绪。`);
+  }
   return true;
 }
 
@@ -409,7 +431,7 @@ async function start() {
   const ready = await waitUntil(async () => {
     if (!processIsAlive(child.pid)) return true;
     return healthIsReady();
-  }, 420_000);
+  }, 90_000);
 
   if (!ready || !processIsAlive(child.pid) || !(await healthIsReady())) {
     if (processIsAlive(child.pid)) process.kill(child.pid, "SIGTERM");

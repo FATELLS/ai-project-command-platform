@@ -24,7 +24,13 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install libaio (Xugu native runtime dependency)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libaio1t64 || sudo apt-get install -y -qq libaio1
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libaio1t64 || sudo apt-get install -y -qq libaio1
+          # Ubuntu 24.04 renames libaio.so.1 to libaio.so.1t64 — create symlink
+          if [ -f /usr/lib/aarch64-linux-gnu/libaio.so.1t64 ] && [ ! -f /usr/lib/aarch64-linux-gnu/libaio.so.1 ]; then
+            sudo ln -s /usr/lib/aarch64-linux-gnu/libaio.so.1t64 /usr/lib/aarch64-linux-gnu/libaio.so.1
+          fi
       - name: Download Node.js runtime
         run: |
           curl -fsSL "https://nodejs.org/dist/v${NODE_RUNTIME_VERSION}/node-v${NODE_RUNTIME_VERSION}-linux-arm64.tar.xz" -o "$RUNNER_TEMP/node.tar.xz"

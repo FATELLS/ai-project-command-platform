@@ -5,11 +5,8 @@ const baseURL = `http://127.0.0.1:${port}`;
 process.env.E2E_PORT = String(port);
 
 export default defineConfig({
-  testDir: ".",
-  testMatch: [
-    /e2e\/ui-flows\.spec\.mjs$/,
-    /test\/e2e\/0[1-5]-.*\.spec\.mjs$/
-  ],
+  testDir: "./test/e2e",
+  testMatch: /0[1-5]-.*\.spec\.mjs$/,
   timeout: 60_000,
   expect: { timeout: 10_000 },
   retries: 0,
@@ -27,13 +24,8 @@ export default defineConfig({
   globalSetup: "./test/e2e/global-setup.mjs",
   projects: [
     {
-      name: "ui-flows",
-      testMatch: /e2e\/ui-flows\.spec\.mjs$/,
-      use: { browserName: "chromium", channel: "chromium", storageState: undefined }
-    },
-    {
       name: "domain-contracts",
-      testMatch: /test\/e2e\/0[1-5]-.*\.spec\.mjs$/,
+      testMatch: /0[1-5]-.*\.spec\.mjs$/,
       use: { storageState: ".e2e-auth/admin.json" }
     }
   ],

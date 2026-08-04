@@ -60,14 +60,31 @@ jobs:
         run: |
           app="$PWD/dist/ai-project-command-platform-linux-arm64"
           cd "$app"
-          export HOST=127.0.0.1 PORT=4173 XUGU_PORT=55139
+          export HOST=127.0.0.1 PORT=4173
           export PLATFORM_XUGU_LIFECYCLE=native
           export PLATFORM_BOOTSTRAP_PASSWORD=release-smoke-password
           export PLATFORM_DATA_DIR=./data
-          ./start.sh &
-          sleep 10
-          curl --fail --retry 30 --retry-delay 2 http://127.0.0.1:4173/health || { echo "=== Health check failed ==="; cat app.log 2>/dev/null || true; cat xugu-server.log 2>/dev/null || true; exit 1; }
+          ./start.sh
+          echo "=== Waiting for app to start ==="
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:4173/health >/dev/null 2>&1; then
+              echo "Health check passed after ${i}s"
+              ./stop.sh || true
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "=== Health check FAILED after 120s ==="
+          echo "=== app.log ==="
+          cat app.log 2>/dev/null || echo "(no app.log)"
+          echo "=== xugu-server.log ==="
+          cat xugu-server.log 2>/dev/null || echo "(no xugu-server.log)"
+          echo "=== .env.local ==="
+          cat .env.local 2>/dev/null || echo "(no .env.local)"
+          echo "=== running processes ==="
+          ps aux | grep -E "xugu|node" | grep -v grep || true
           ./stop.sh || true
+          exit 1
       - uses: actions/upload-artifact@v4
         with:
           name: linux-arm64

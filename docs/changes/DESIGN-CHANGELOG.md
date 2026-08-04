@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-08-04 — G04: PostgreSQL Data Baseline
+
+**Goal**: G04
+**Status**: ACCEPTED
+
+### Design Decisions
+
+- **D04-1**: 37 tables rebuilt with PG-native types (TIMESTAMPTZ, JSONB, BOOLEAN, GENERATED ALWAYS AS IDENTITY)
+- **D04-2**: All 70+ V1-skipped CHECK constraints recovered and active
+- **D04-3**: Deferred FKs for circular project↔version pointer dependencies
+- **D04-4**: Partial unique indexes where NULLs are semantically valid (login_name, parent_id)
+- **D04-5**: No V1 data migration — fresh start with sanitized fixtures only
+- **D04-6**: Kysely types generated for all 37 tables; transaction primitive established
+- **D04-7**: Migration runner with checksum tracking (_migrations table)
+- **D04-8**: ADR-004 documents schema design principles
+
+### Evidence
+
+- `packages/database/src/migrations/0001_create_baseline_schema.sql` — 37 tables, 50+ CHECK, 45 FK, 38 indexes
+- `packages/database/src/types/db.ts` — Kysely Database interface covering all 37 tables
+- `packages/database/src/client/create-client.ts` — connection pool factory
+- `packages/database/src/client/transaction.ts` — withTransaction / withSavepoint
+- `packages/database/src/migrations/run-migration.mjs` — checksum-tracked migration runner
+- `tests/fixtures/seed-baseline.sql` — 3 users, 1 project, 9 modules, 8 cards, 3 settings
+- `ops/compose.yaml` — PostgreSQL 18 Alpine service
+- `docs/adr/ADR-004-baseline-schema-design.md`
+
+---
+
 ## 2026-08-04 — G03: Workspace Walking Skeleton
 
 **Goal**: G03

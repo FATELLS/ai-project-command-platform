@@ -19,3 +19,5 @@
 | [ADR-001](../adr/ADR-001-postgresql-replaces-xugu.md) | PostgreSQL Replaces XuguDB | Accepted |
 | [ADR-002](../adr/ADR-002-modular-monolith.md) | Modular Monolith Architecture | Accepted |
 | [ADR-003](../adr/ADR-003-two-service-operational-budget.md) | Two-Service Operational Budget | Accepted |
+| [ADR-004](../adr/ADR-004-baseline-schema-design.md) | Baseline Schema Design Principles | Accepted |
+| [ADR-003](../adr/ADR-003-two-service-operational-budget.md) | Two-Service Operational Budget | Accepted |

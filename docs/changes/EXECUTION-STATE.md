@@ -6,11 +6,11 @@
 
 ## Current Goal
 
-**G03: Workspace Walking Skeleton** — ✅ COMPLETE
+**G04: PostgreSQL Data Baseline** — ✅ COMPLETE
 
 ## Next Goal
 
-**G04: PostgreSQL Data Baseline** — not started
+**G05: Fastify Platform Base** — not started
 
 ## Goal Progress
 
@@ -20,7 +20,7 @@
 | G01 | Engineering governance | ✅ complete | Constitution, standards, ADRs, AGENTS/README rewrite, .planning migration |
 | G02 | Baseline freeze | ✅ complete | BASELINE.md: 69 API endpoints, 37 tables, 5 journeys, 9 gaps |
 | G03 | Workspace skeleton | ✅ complete | 6 workspaces, TS strict, structure verify PASS |
-| G04 | PostgreSQL data baseline | ⏳ pending | — |
+| G04 | PostgreSQL data baseline | ✅ complete | 37 tables, Kysely client, migration runner, fixtures, compose.yaml |
 | G05 | Fastify platform base | ⏳ pending | — |
 | G06 | Identity & projects module | ⏳ pending | — |
 | G07 | Project graph module | ⏳ pending | — |
@@ -50,6 +50,14 @@
 | ADR-001 (PostgreSQL) | `docs/adr/ADR-001-postgresql-replaces-xugu.md` | ✅ accepted |
 | ADR-002 (Modular monolith) | `docs/adr/ADR-002-modular-monolith.md` | ✅ accepted |
 | ADR-003 (Two-service budget) | `docs/adr/ADR-003-two-service-operational-budget.md` | ✅ accepted |
+| ADR-004 (Schema design) | `docs/adr/ADR-004-baseline-schema-design.md` | ✅ accepted |
+| PG baseline schema | `packages/database/src/migrations/0001_create_baseline_schema.sql` | ✅ written (37 tables) |
+| Kysely types | `packages/database/src/types/db.ts` | ✅ written |
+| Kysely client | `packages/database/src/client/create-client.ts` | ✅ written |
+| Transaction primitive | `packages/database/src/client/transaction.ts` | ✅ written |
+| Migration runner | `packages/database/src/migrations/run-migration.mjs` | ✅ written |
+| Sanitized fixtures | `tests/fixtures/seed-baseline.sql` | ✅ written |
+| Docker Compose | `ops/compose.yaml` | ✅ written (PG 18) |
 | Product docs | `docs/product/PRODUCT.md`, `REQUIREMENTS.md`, `ROADMAP.md` | ✅ migrated |
 | System spec | `docs/architecture/SYSTEM.md` | ✅ migrated |
 | Traceability | `docs/architecture/TRACEABILITY.md` | ✅ migrated |

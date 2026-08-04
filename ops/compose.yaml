@@ -1,0 +1,26 @@
+# PostgreSQL 18 for AI Project Command Platform V2
+# Usage: docker compose -f ops/compose.yaml up -d
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: aicp-postgres
+    environment:
+      POSTGRES_DB: ${PGDATABASE:-aicp}
+      POSTGRES_USER: ${PGUSER:-aicp}
+      POSTGRES_PASSWORD: ${PGPASSWORD:-aicp_dev_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "${PGPORT:-5432}:5432"
+    volumes:
+      - aicp_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-aicp} -d ${PGDATABASE:-aicp}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  aicp_pg_data:
+    driver: local

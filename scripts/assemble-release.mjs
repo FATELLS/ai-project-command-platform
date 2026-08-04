@@ -77,7 +77,7 @@ if (await stat(driverSrc).then(() => true).catch(() => false)) {
 }
 
 // Windows: 复制 libcrypto-1_1-x64.dll 到 nodejs 目录，驱动加载时需要
-if (targetOs === "windows") {
+if (target.startsWith("windows")) {
   const dllSrc = join(root, "vendor", "xugudb", "server", "windows", "amd64", "XuguDB", "Server", "BIN", "libcrypto-1_1-x64.dll");
   if (await stat(dllSrc).then(() => true).catch(() => false)) {
     await cp(dllSrc, join(output, "vendor", "xugudb", "nodejs", "libcrypto-1_1-x64.dll"));

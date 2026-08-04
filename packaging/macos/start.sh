@@ -16,11 +16,15 @@ FIRST_RUN_PASSWORD=""
 if [[ ! -f "$ENV_FILE" ]]; then
   FIRST_RUN_PASSWORD="$(od -An -N18 -tx1 /dev/urandom | tr -d ' \n')"
   umask 077
+
+  # macOS 需要容器运行时（虚谷无 macOS 版）
+  LIFECYCLE="${PLATFORM_XUGU_LIFECYCLE:-managed}"
+
   printf '%s\n' \
     "HOST=127.0.0.1" \
     "PORT=4173" \
     "PLATFORM_DATA_DIR=./data" \
-    "PLATFORM_XUGU_LIFECYCLE=managed" \
+    "PLATFORM_XUGU_LIFECYCLE=$LIFECYCLE" \
     "XUGU_CONTAINER=ai-project-command-platform-xugu" \
     "XUGU_VOLUME=ai-project-command-platform-xugu-data" \
     "XUGU_PORT=5138" \

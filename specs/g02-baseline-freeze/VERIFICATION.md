@@ -6,7 +6,7 @@
 
 | Criterion | Evidence | Status |
 |---|---|---|
-| BASELINE.md with API inventory | `docs/architecture/BASELINE.md` §2 — 70 endpoints | ✅ |
+| BASELINE.md with API inventory | `docs/architecture/BASELINE.md` §2 — 69 endpoints | ✅ |
 | Database schema baseline | BASELINE.md §3 — 37 tables, 38 indexes, 18 unique constraints | ✅ |
 | Core business journeys | BASELINE.md §4 — 5 journeys | ✅ |
 | Resource measurement | BASELINE.md §1 — code sizes, tracked files | ✅ |

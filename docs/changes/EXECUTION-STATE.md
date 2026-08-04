@@ -18,7 +18,7 @@
 |---|---|---|---|
 | G00 | Directory lock & migration map | ✅ complete | PROJECT-STRUCTURE.md, MIGRATION-MAP.md written; coverage verified |
 | G01 | Engineering governance | ✅ complete | Constitution, standards, ADRs, AGENTS/README rewrite, .planning migration |
-| G02 | Baseline freeze | ✅ complete | BASELINE.md: 70 API endpoints, 37 tables, 5 journeys, 9 gaps |
+| G02 | Baseline freeze | ✅ complete | BASELINE.md: 69 API endpoints, 37 tables, 5 journeys, 9 gaps |
 | G03 | Workspace skeleton | ✅ complete | 6 workspaces, TS strict, structure verify PASS |
 | G04 | PostgreSQL data baseline | ⏳ pending | — |
 | G05 | Fastify platform base | ⏳ pending | — |

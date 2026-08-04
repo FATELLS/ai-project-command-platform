@@ -48,7 +48,7 @@
 ### Changes
 
 1. **BASELINE.md created** at `docs/architecture/BASELINE.md`
-   - API inventory: 70 endpoints across 14 groups
+   - API inventory: 69 endpoints across 14 groups
    - Database schema: 37 tables, 38 indexes, 18 unique constraints
    - Core business journeys: 5 key flows
    - Resource measurements: 8,556 lines of key code, 227 tracked files

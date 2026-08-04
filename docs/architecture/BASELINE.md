@@ -4,6 +4,7 @@
 > **Purpose**: Regression target for all subsequent Goals. This is the frozen snapshot of V1 behavior.
 > **Date**: 2026-08-04
 > **Environment**: macOS (Apple Silicon), Node 22.22.2
+> **Snapshot note**: File counts reflect the tracked set at G02 commit time. Subsequent Goals added V2 skeleton files.
 
 ---
 
@@ -16,7 +17,7 @@
 | `public/modules/shared.js` | 211 | DOM utilities |
 | `public/styles.css` | 2,665 | Global styles |
 | `server.mjs` | 164 | Entry point |
-| `src/http/app.mjs` | 704 | HTTP routing (70 API endpoints) |
+| `src/http/app.mjs` | 704 | HTTP routing (69 API endpoints) |
 | **Total key files** | **8,556** | |
 
 | Directory | Size |
@@ -28,7 +29,7 @@
 
 ## 2. API Surface Inventory
 
-**Total API endpoints**: 70 (excluding static files)
+**Total API endpoints**: 69 (excluding static files)
 
 ### Authentication Levels
 

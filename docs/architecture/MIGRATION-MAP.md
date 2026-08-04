@@ -356,9 +356,11 @@ All 24 vendor files are **delete** in G10.
 
 ## Coverage Verification
 
+> **Snapshot note**: The 218-file count reflects the tracked set at G00 commit time. G01–G03 subsequently added V2 structural files (apps/, packages/, specs/, docs/) and removed obsolete files. V2-native files are already in their final target locations and do not require migration mapping.
+
 | Metric | Value |
 |---|---|
-| Total tracked files | 218 |
+| Total tracked files (G00 snapshot) | 218 |
 | Total mapped entries | 218 |
 | Unmapped files | **0** |
 | Duplicate mappings | **0** |

@@ -26,6 +26,6 @@
 - Result: `docs/changes/` three files initialized
 
 ## T006: User confirmation
-- Status: pending
+- Status: ✅ done
 - Owner: user
-- Action: 确认目录命名和映射方案，解锁 G01
+- Result: User confirmed ("可以，先清洗然后开干"), G01 unlocked
